@@ -18,11 +18,16 @@ export interface UIState {
   activeTab: 'graph' | 'editor';
   kernelConfig: KernelConfig;
   apiKey: string;
+  editingFilePath: string | null;
+  editorDirty: boolean;
   setSelectedAgent: (id: string | null) => void;
   setSelectedFile: (path: string | null) => void;
   setActiveTab: (tab: 'graph' | 'editor') => void;
   setKernelConfig: (config: Partial<KernelConfig>) => void;
   setApiKey: (key: string) => void;
+  setEditingFile: (path: string | null) => void;
+  setEditorDirty: (dirty: boolean) => void;
+  openFileInEditor: (path: string) => void;
 }
 
 export const uiStore = createStore<UIState>((set) => ({
@@ -31,11 +36,16 @@ export const uiStore = createStore<UIState>((set) => ({
   activeTab: 'graph',
   kernelConfig: DEFAULT_KERNEL_CONFIG,
   apiKey: import.meta.env.VITE_GEMINI_API_KEY ?? '',
+  editingFilePath: null,
+  editorDirty: false,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setKernelConfig: (partial) => set((s) => ({ kernelConfig: { ...s.kernelConfig, ...partial } })),
   setApiKey: (key) => set({ apiKey: key }),
+  setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
+  setEditorDirty: (dirty) => set({ editorDirty: dirty }),
+  openFileInEditor: (path) => set({ editingFilePath: path, editorDirty: false, activeTab: 'editor' }),
 }));
 
 // React hooks
