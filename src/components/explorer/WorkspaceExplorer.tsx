@@ -1,12 +1,15 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useVFS, useAgentRegistry, useUI, vfsStore, agentRegistry } from '../../stores/use-stores';
 
 export function WorkspaceExplorer() {
-  const allPaths = useVFS((s) => [...s.files.keys()].sort());
+  const filesMap = useVFS((s) => s.files);
+  const allPaths = useMemo(() => [...filesMap.keys()].sort(), [filesMap]);
   const agents = useAgentRegistry((s) => s.agents);
   const selectedFile = useUI((s) => s.selectedFilePath);
   const setSelectedFile = useUI((s) => s.setSelectedFile);
   const setSelectedAgent = useUI((s) => s.setSelectedAgent);
+  const openFileInEditor = useUI((s) => s.openFileInEditor);
+  const editingFilePath = useUI((s) => s.editingFilePath);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -45,6 +48,7 @@ export function WorkspaceExplorer() {
     } else {
       setSelectedFile(path);
     }
+    openFileInEditor(path);
   };
 
   return (
@@ -76,7 +80,7 @@ export function WorkspaceExplorer() {
           {paths.map((path) => {
             const filename = path.split('/').pop() ?? path;
             const isAgent = path.startsWith('agents/');
-            const isSelected = path === selectedFile;
+            const isSelected = path === selectedFile || path === editingFilePath;
             const agentStatus = isAgent && agents.has(path) ? 'idle' : undefined;
 
             return (
