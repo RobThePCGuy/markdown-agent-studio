@@ -4,6 +4,7 @@ import { createVFSStore, type VFSState } from './vfs-store';
 import { createAgentRegistry, type AgentRegistryState } from './agent-registry';
 import { createEventLog, type EventLogState } from './event-log';
 import { createSessionStore, type SessionStoreState } from './session-store';
+import { createProjectStore, type ProjectState } from './project-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 
@@ -12,6 +13,7 @@ export const vfsStore = createVFSStore();
 export const agentRegistry = createAgentRegistry();
 export const eventLogStore = createEventLog();
 export const sessionStore = createSessionStore();
+export const projectStore = createProjectStore();
 
 // UI state store
 export interface UIState {
@@ -92,4 +94,8 @@ export function useUI<T>(selector: (state: UIState) => T): T {
 
 export function useSessionStore<T>(selector: (state: SessionStoreState) => T): T {
   return useStore(sessionStore, selector);
+}
+
+export function useProjectStore<T>(selector: (state: ProjectState) => T): T {
+  return useStore(projectStore, selector);
 }
