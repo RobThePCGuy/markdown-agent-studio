@@ -11,7 +11,7 @@ export interface AgentDiagnostic {
   severity: DiagnosticSeverity;
 }
 
-const KNOWN_MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+const KNOWN_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
 
 export function validateAgentContent(content: string, isAgent = true): AgentDiagnostic[] {
   if (!isAgent) return [];
@@ -91,6 +91,71 @@ export function validateAgentContent(content: string, isAgent = true): AgentDiag
       message: 'Agent has no system prompt instructions',
       severity: 'warning',
     });
+  }
+
+  // Validate custom tool definitions
+  if (Array.isArray(fm.tools)) {
+    for (const tool of fm.tools) {
+      if (typeof tool !== 'object' || tool === null) continue;
+      const t = tool as Record<string, unknown>;
+
+      const toolLabel = typeof t.name === 'string' ? `tool '${t.name}'` : 'tool entry';
+
+      if (typeof t.name !== 'string' || t.name.trim() === '') {
+        diagnostics.push({
+          startLine: closingDelimiterLine || 2,
+          endLine: closingDelimiterLine || 2,
+          startCol: 1,
+          endCol: 4,
+          message: `Custom tool is missing required field: name`,
+          severity: 'warning',
+        });
+      }
+
+      if (typeof t.description !== 'string' || t.description.trim() === '') {
+        diagnostics.push({
+          startLine: closingDelimiterLine || 2,
+          endLine: closingDelimiterLine || 2,
+          startCol: 1,
+          endCol: 4,
+          message: `Custom ${toolLabel} is missing required field: description`,
+          severity: 'warning',
+        });
+      }
+
+      if (typeof t.prompt !== 'string' || t.prompt.trim() === '') {
+        diagnostics.push({
+          startLine: closingDelimiterLine || 2,
+          endLine: closingDelimiterLine || 2,
+          startCol: 1,
+          endCol: 4,
+          message: `Custom ${toolLabel} is missing required field: prompt`,
+          severity: 'warning',
+        });
+      }
+
+      // Check template variable mismatches
+      if (typeof t.prompt === 'string') {
+        const templateVars = [...t.prompt.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]);
+        const paramKeys =
+          typeof t.parameters === 'object' && t.parameters !== null
+            ? Object.keys(t.parameters as Record<string, unknown>)
+            : [];
+
+        for (const varName of templateVars) {
+          if (!paramKeys.includes(varName)) {
+            diagnostics.push({
+              startLine: closingDelimiterLine || 2,
+              endLine: closingDelimiterLine || 2,
+              startCol: 1,
+              endCol: 4,
+              message: `Custom ${toolLabel} prompt references '{{${varName}}}' but no parameter '${varName}' is defined`,
+              severity: 'info',
+            });
+          }
+        }
+      }
+    }
   }
 
   return diagnostics;

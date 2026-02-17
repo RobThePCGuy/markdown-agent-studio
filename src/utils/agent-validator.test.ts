@@ -51,7 +51,7 @@ describe('validateAgentContent', () => {
   });
 
   it('accepts known models without info diagnostic', () => {
-    const content = '---\nname: "Test"\nmodel: "gemini-1.5-pro"\n---\n\nBody.';
+    const content = '---\nname: "Test"\nmodel: "gemini-2.5-pro"\n---\n\nBody.';
     const diags = validateAgentContent(content);
     expect(diags.find((d) => d.message.includes('Unknown model'))).toBeUndefined();
   });
@@ -59,5 +59,60 @@ describe('validateAgentContent', () => {
   it('returns empty array for non-agent files (no validation)', () => {
     const diags = validateAgentContent('', false);
     expect(diags).toHaveLength(0);
+  });
+
+  it('validates well-formed custom tools produce no additional diagnostics', () => {
+    const content = `---
+name: "Agent"
+tools:
+  - name: summarize
+    description: Summarize text
+    parameters:
+      text:
+        type: string
+        description: The text
+    prompt: "Summarize: {{text}}"
+---
+
+Do stuff.`;
+
+    const diagnostics = validateAgentContent(content);
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it('warns when custom tool is missing required fields', () => {
+    const content = `---
+name: "Agent"
+tools:
+  - name: bad_tool
+---
+
+Do stuff.`;
+
+    const diagnostics = validateAgentContent(content);
+    const toolDiags = diagnostics.filter((d) => d.message.toLowerCase().includes('tool'));
+    expect(toolDiags.length).toBeGreaterThan(0);
+    expect(toolDiags[0].severity).toBe('warning');
+  });
+
+  it('warns when custom tool prompt references undefined parameter', () => {
+    const content = `---
+name: "Agent"
+tools:
+  - name: my_tool
+    description: A tool
+    parameters:
+      input:
+        type: string
+        description: Input
+    prompt: "Do something with {{unknown_param}}"
+---
+
+Do stuff.`;
+
+    const diagnostics = validateAgentContent(content);
+    const mismatch = diagnostics.filter((d) => d.message.includes('unknown_param'));
+    expect(mismatch.length).toBeGreaterThan(0);
+    expect(mismatch[0].severity).toBe('info');
   });
 });
