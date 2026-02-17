@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useKernel } from '../../hooks/useKernel';
-import { useAgentRegistry } from '../../stores/use-stores';
+import { useAgentRegistry, uiStore } from '../../stores/use-stores';
 
 export function TopBar() {
-  const agents = useAgentRegistry((s) => [...s.agents.values()]);
+  const agentsMap = useAgentRegistry((s) => s.agents);
+  const agents = useMemo(() => [...agentsMap.values()], [agentsMap]);
   const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount } = useKernel();
   const [selectedAgent, setSelectedAgent] = useState('');
   const [kickoffPrompt, setKickoffPrompt] = useState('');
@@ -73,6 +74,22 @@ export function TopBar() {
         {isRunning ? `${activeCount} active, ${queueCount} queued, ` : ''}
         {Math.round(totalTokens / 1000)}K tokens
       </span>
+
+      <button
+        onClick={() => uiStore.getState().setSettingsOpen(true)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#6c7086',
+          fontSize: 16,
+          cursor: 'pointer',
+          padding: '4px 8px',
+          marginLeft: 4,
+        }}
+        title="Settings"
+      >
+        &#9881;
+      </button>
     </div>
   );
 }
