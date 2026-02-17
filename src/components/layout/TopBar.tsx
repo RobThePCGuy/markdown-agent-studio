@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useKernel } from '../../hooks/useKernel';
-import { useAgentRegistry, uiStore } from '../../stores/use-stores';
+import { useAgentRegistry, useProjectStore, diskSync, uiStore } from '../../stores/use-stores';
 
 export function TopBar() {
   const agentsMap = useAgentRegistry((s) => s.agents);
@@ -8,6 +8,24 @@ export function TopBar() {
   const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount } = useKernel();
   const [selectedAgent, setSelectedAgent] = useState('');
   const [kickoffPrompt, setKickoffPrompt] = useState('');
+
+  const projectName = useProjectStore((s) => s.projectName);
+  const syncStatus = useProjectStore((s) => s.syncStatus);
+
+  const handleOpenProject = async () => {
+    if (projectName) {
+      diskSync.stop();
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await diskSync.start(handle);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Failed to open project:', err);
+      }
+    }
+  };
 
   const handleRun = () => {
     const agentPath = selectedAgent || agents[0]?.path;
@@ -74,6 +92,33 @@ export function TopBar() {
         {isRunning ? `${activeCount} active, ${queueCount} queued, ` : ''}
         {Math.round(totalTokens / 1000)}K tokens
       </span>
+
+      <button
+        onClick={handleOpenProject}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: projectName ? '#a6e3a1' : '#6c7086',
+          fontSize: 13,
+          cursor: 'pointer',
+          padding: '4px 8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+        title={projectName ? `Project: ${projectName} (click to disconnect)` : 'Open project folder'}
+      >
+        {syncStatus === 'syncing' && (
+          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#89b4fa' }} />
+        )}
+        {syncStatus === 'connected' && (
+          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#a6e3a1' }} />
+        )}
+        {syncStatus === 'error' && (
+          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f38ba8' }} />
+        )}
+        {projectName ? projectName : '\u{1F4C1}'}
+      </button>
 
       <button
         onClick={() => uiStore.getState().setSettingsOpen(true)}
