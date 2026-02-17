@@ -20,6 +20,7 @@ export interface UIState {
   apiKey: string;
   editingFilePath: string | null;
   editorDirty: boolean;
+  settingsOpen: boolean;
   setSelectedAgent: (id: string | null) => void;
   setSelectedFile: (path: string | null) => void;
   setActiveTab: (tab: 'graph' | 'editor') => void;
@@ -28,6 +29,7 @@ export interface UIState {
   setEditingFile: (path: string | null) => void;
   setEditorDirty: (dirty: boolean) => void;
   openFileInEditor: (path: string) => void;
+  setSettingsOpen: (open: boolean) => void;
 }
 
 export const uiStore = createStore<UIState>((set) => ({
@@ -38,6 +40,7 @@ export const uiStore = createStore<UIState>((set) => ({
   apiKey: import.meta.env.VITE_GEMINI_API_KEY ?? '',
   editingFilePath: null,
   editorDirty: false,
+  settingsOpen: false,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -46,6 +49,7 @@ export const uiStore = createStore<UIState>((set) => ({
   setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
   setEditorDirty: (dirty) => set({ editorDirty: dirty }),
   openFileInEditor: (path) => set({ editingFilePath: path, editorDirty: false, activeTab: 'editor' }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
 }));
 
 // React hooks
