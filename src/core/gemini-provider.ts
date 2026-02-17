@@ -1,77 +1,14 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { GenerateContentStreamResult, Tool } from '@google/generative-ai';
+import type { GenerateContentStreamResult, Tool, ChatSession } from '@google/generative-ai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
-
-type GeminiPart = { text: string } | { functionCall: { name: string; args: Record<string, unknown> } } | { functionResponse: { name: string; response: { result: string } } };
-type GeminiMessage = { role: 'user' | 'model'; parts: GeminiPart[] };
 
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenerativeAI;
   private activeStreams = new Map<string, AbortController>();
+  private activeChats = new Map<string, ChatSession>();
 
   constructor(apiKey: string) {
     this.client = new GoogleGenerativeAI(apiKey);
-  }
-
-  /** Convert kernel history (user/model/tool messages) to Gemini format with functionCall/functionResponse pairs. */
-  private convertHistory(history: Message[]): GeminiMessage[] {
-    const result: GeminiMessage[] = [];
-    let i = 0;
-
-    while (i < history.length) {
-      const msg = history[i];
-
-      if (msg.role === 'user') {
-        result.push({ role: 'user', parts: [{ text: msg.content }] });
-        i++;
-      } else if (msg.role === 'model') {
-        const parts: GeminiPart[] = [];
-        if (msg.content) parts.push({ text: msg.content });
-        i++;
-
-        // Check if followed by tool messages (function calls from this model turn)
-        if (i < history.length && history[i].role === 'tool') {
-          const toolMsgs: Message[] = [];
-          while (i < history.length && history[i].role === 'tool') {
-            toolMsgs.push(history[i]);
-            i++;
-          }
-          for (const t of toolMsgs) {
-            parts.push({ functionCall: { name: t.toolCall!.name, args: t.toolCall!.args } });
-          }
-          result.push({ role: 'model', parts });
-          result.push({
-            role: 'user',
-            parts: toolMsgs.map(t => ({
-              functionResponse: { name: t.toolCall!.name, response: { result: t.content } },
-            })),
-          });
-        } else if (parts.length > 0) {
-          result.push({ role: 'model', parts });
-        }
-      } else if (msg.role === 'tool') {
-        // Tool messages without a preceding model message (model emitted only function calls, no text)
-        const toolMsgs: Message[] = [];
-        while (i < history.length && history[i].role === 'tool') {
-          toolMsgs.push(history[i]);
-          i++;
-        }
-        result.push({
-          role: 'model',
-          parts: toolMsgs.map(t => ({
-            functionCall: { name: t.toolCall!.name, args: t.toolCall!.args },
-          })),
-        });
-        result.push({
-          role: 'user',
-          parts: toolMsgs.map(t => ({
-            functionResponse: { name: t.toolCall!.name, response: { result: t.content } },
-          })),
-        });
-      }
-    }
-
-    return result;
   }
 
   async *chat(
@@ -96,21 +33,49 @@ export class GeminiProvider implements AIProvider {
         })),
       }] : undefined;
 
-      const geminiHistory = this.convertHistory(history);
+      // Reuse existing ChatSession if available (follow-up turn after tool calls).
+      // The ChatSession internally tracks all history including thought signatures,
+      // so we never have to reconstruct function call parts manually.
+      let chat = this.activeChats.get(config.sessionId);
+      let messageParts: any[];
 
-      const lastMsg = geminiHistory.pop();
-      if (!lastMsg) {
-        yield { type: 'error', error: 'No input message' };
-        return;
+      if (chat) {
+        // Follow-up call: send function responses from the trailing tool messages
+        const toolMsgs: Message[] = [];
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (history[i].role === 'tool') toolMsgs.unshift(history[i]);
+          else break;
+        }
+        messageParts = toolMsgs.map(t => ({
+          functionResponse: { name: t.toolCall!.name, response: { result: t.content } },
+        }));
+      } else {
+        // First call: create new ChatSession with initial history
+        const geminiHistory = history
+          .filter((m) => m.role !== 'tool')
+          .map((m) => ({
+            role: m.role === 'model' ? 'model' as const : 'user' as const,
+            parts: [{ text: m.content }],
+          }));
+
+        const lastMsg = geminiHistory.pop();
+        if (!lastMsg) {
+          yield { type: 'error', error: 'No input message' };
+          return;
+        }
+
+        chat = model.startChat({
+          history: geminiHistory,
+          tools: geminiTools,
+        });
+        messageParts = lastMsg.parts;
       }
 
-      const chat = model.startChat({
-        history: geminiHistory,
-        tools: geminiTools,
-      });
+      // Store the ChatSession for potential follow-up turns
+      this.activeChats.set(config.sessionId, chat);
 
       const result: GenerateContentStreamResult = await chat.sendMessageStream(
-        lastMsg.parts as any,
+        messageParts,
         { signal: controller.signal }
       );
 
@@ -133,7 +98,7 @@ export class GeminiProvider implements AIProvider {
             yield {
               type: 'tool_call',
               toolCall: {
-                id: `tc-${Date.now()}`,
+                id: `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 name: part.functionCall.name,
                 args: (part.functionCall.args ?? {}) as Record<string, unknown>,
               },
@@ -164,5 +129,11 @@ export class GeminiProvider implements AIProvider {
       controller.abort();
       this.activeStreams.delete(sessionId);
     }
+    this.activeChats.delete(sessionId);
+  }
+
+  /** Clean up a completed session's ChatSession reference. */
+  endSession(sessionId: string): void {
+    this.activeChats.delete(sessionId);
   }
 }
