@@ -39,6 +39,7 @@ export interface KernelConfig {
   maxDepth: number;
   maxFanout: number;
   tokenBudget: number;
+  model?: string;
 }
 
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
@@ -46,4 +47,5 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxDepth: 5,
   maxFanout: 5,
   tokenBudget: 500000,
+  model: 'gemini-2.0-flash',
 };
