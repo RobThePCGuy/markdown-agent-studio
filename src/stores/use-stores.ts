@@ -34,20 +34,39 @@ export interface UIState {
   setSettingsOpen: (open: boolean) => void;
 }
 
+const persistedApiKey = (() => {
+  try { return localStorage.getItem('mas-api-key') ?? import.meta.env.VITE_GEMINI_API_KEY ?? ''; }
+  catch { return import.meta.env.VITE_GEMINI_API_KEY ?? ''; }
+})();
+
+const persistedConfig = (() => {
+  try {
+    const raw = localStorage.getItem('mas-kernel-config');
+    return raw ? { ...DEFAULT_KERNEL_CONFIG, ...JSON.parse(raw) } : DEFAULT_KERNEL_CONFIG;
+  } catch { return DEFAULT_KERNEL_CONFIG; }
+})();
+
 export const uiStore = createStore<UIState>((set) => ({
   selectedAgentId: null,
   selectedFilePath: null,
   activeTab: 'graph',
-  kernelConfig: DEFAULT_KERNEL_CONFIG,
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY ?? '',
+  kernelConfig: persistedConfig,
+  apiKey: persistedApiKey,
   editingFilePath: null,
   editorDirty: false,
   settingsOpen: false,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setKernelConfig: (partial) => set((s) => ({ kernelConfig: { ...s.kernelConfig, ...partial } })),
-  setApiKey: (key) => set({ apiKey: key }),
+  setKernelConfig: (partial) => set((s) => {
+    const next = { ...s.kernelConfig, ...partial };
+    try { localStorage.setItem('mas-kernel-config', JSON.stringify(next)); } catch {}
+    return { kernelConfig: next };
+  }),
+  setApiKey: (key) => {
+    try { localStorage.setItem('mas-api-key', key); } catch {}
+    set({ apiKey: key });
+  },
   setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
   setEditorDirty: (dirty) => set({ editorDirty: dirty }),
   openFileInEditor: (path) => set({ editingFilePath: path, editorDirty: false, activeTab: 'editor' }),
