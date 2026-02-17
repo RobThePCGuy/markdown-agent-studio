@@ -1,7 +1,8 @@
-import type { AIProvider, Activation, AgentSession, KernelConfig, Message, StreamChunk } from '../types';
+import type { AIProvider, Activation, AgentSession, KernelConfig, StreamChunk } from '../types';
 import type { VFSState } from '../stores/vfs-store';
 import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
+import type { SessionStoreState } from '../stores/session-store';
 import { Semaphore } from './semaphore';
 import { ToolHandler } from './tool-handler';
 import { AGENT_TOOLS } from './tools';
@@ -15,6 +16,7 @@ interface KernelDeps {
   registry: Store<AgentRegistryState>;
   eventLog: Store<EventLogState>;
   config: KernelConfig;
+  sessionStore?: Store<SessionStoreState>;
   onSessionUpdate?: (session: AgentSession) => void;
   onStreamChunk?: (agentId: string, chunk: StreamChunk) => void;
 }
@@ -30,7 +32,6 @@ export class Kernel {
   private _completedSessions: AgentSession[] = [];
   private _paused = false;
   private _totalTokens = 0;
-  private _running = false;
   private childCounts = new Map<string, number>();
   private seenHashes = new Set<string>();
 
@@ -68,6 +69,7 @@ export class Kernel {
     for (const session of this.activeSessions.values()) {
       session.controller.abort();
       session.status = 'aborted';
+      this.deps.sessionStore?.getState().closeSession(session.activationId, 'aborted');
     }
     this.activeSessions.clear();
     this.globalController = new AbortController();
@@ -84,7 +86,6 @@ export class Kernel {
   }
 
   async runUntilEmpty(): Promise<void> {
-    this._running = true;
     await this.processQueue();
 
     // Wait for all active sessions to complete
@@ -94,7 +95,6 @@ export class Kernel {
         await this.processQueue();
       }
     }
-    this._running = false;
   }
 
   private async processQueue(): Promise<void> {
@@ -154,6 +154,8 @@ export class Kernel {
 
     this.activeSessions.set(activation.id, session);
     this.deps.onSessionUpdate?.(session);
+    this.deps.sessionStore?.getState().openSession(activation.agentId, activation.id);
+    this.deps.sessionStore?.getState().addUserMessage(activation.id, activation.input);
 
     this.deps.eventLog.getState().append({
       type: 'activation',
@@ -204,6 +206,7 @@ export class Kernel {
         }
 
         this.deps.onStreamChunk?.(activation.agentId, chunk);
+        this.deps.sessionStore?.getState().appendChunk(activation.id, chunk);
 
         switch (chunk.type) {
           case 'text':
@@ -236,6 +239,7 @@ export class Kernel {
               content: result,
               toolCall: record,
             });
+            this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.result);
             madeProgress = true;
 
             // Track child spawns
@@ -303,6 +307,7 @@ export class Kernel {
       this._completedSessions.push(session);
       this.activeSessions.delete(activation.id);
       this.globalController.signal.removeEventListener('abort', onGlobalAbort);
+      this.deps.sessionStore?.getState().closeSession(activation.id, session.status);
       release();
       this.deps.onSessionUpdate?.(session);
 

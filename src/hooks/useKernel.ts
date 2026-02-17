@@ -2,7 +2,7 @@ import { useRef, useCallback, useState } from 'react';
 import { Kernel } from '../core/kernel';
 import { GeminiProvider } from '../core/gemini-provider';
 import { MockAIProvider } from '../core/mock-provider';
-import { vfsStore, agentRegistry, eventLogStore, uiStore } from '../stores/use-stores';
+import { vfsStore, agentRegistry, eventLogStore, sessionStore, uiStore } from '../stores/use-stores';
 import type { KernelConfig } from '../types';
 
 export function useKernel() {
@@ -28,6 +28,7 @@ export function useKernel() {
       registry: agentRegistry,
       eventLog: eventLogStore,
       config,
+      sessionStore,
       onSessionUpdate: () => {
         setTotalTokens(kernel.totalTokens);
         setActiveCount(kernel.activeSessionCount);
