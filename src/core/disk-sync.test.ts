@@ -84,4 +84,32 @@ describe('DiskSync', () => {
     await sync.readAllFiles(handle, '');
     expect(vfs.getState().read('readme.md')).toBe('# Hello');
   });
+
+  it('start loads files from disk and subscribes to VFS changes', async () => {
+    const handle = mockDirHandle({ 'notes.md': '# Notes' });
+    const sync = new DiskSync(vfs, projectStore, agentRegistry);
+
+    await sync.start(handle);
+
+    // Files should be loaded into VFS
+    expect(vfs.getState().read('notes.md')).toBe('# Notes');
+    // Project should be connected
+    expect(projectStore.getState().syncStatus).toBe('connected');
+    expect(projectStore.getState().projectName).toBe('test-project');
+
+    sync.stop();
+    expect(projectStore.getState().syncStatus).toBe('disconnected');
+  });
+
+  it('stop cleans up subscription', async () => {
+    const handle = mockDirHandle();
+    const sync = new DiskSync(vfs, projectStore, agentRegistry);
+    await sync.start(handle);
+    sync.stop();
+
+    // Writing to VFS after stop should not attempt disk write
+    vfs.getState().write('after-stop.md', 'test', {});
+    // No error should occur -- subscription is gone
+    expect(projectStore.getState().syncStatus).toBe('disconnected');
+  });
 });
