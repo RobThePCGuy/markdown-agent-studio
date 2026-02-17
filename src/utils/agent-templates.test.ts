@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BUILT_IN_TEMPLATES, getTemplates } from './agent-templates';
 
 describe('agent-templates', () => {
-  it('exports 5 built-in templates', () => {
-    expect(BUILT_IN_TEMPLATES).toHaveLength(5);
+  it('exports 6 built-in templates', () => {
+    expect(BUILT_IN_TEMPLATES).toHaveLength(6);
   });
 
   it('every built-in has required fields', () => {
@@ -31,7 +31,7 @@ describe('agent-templates', () => {
   it('getTemplates returns built-ins when VFS has no templates', () => {
     const files = new Map();
     const result = getTemplates(files);
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(6);
     expect(result.every((t) => t.builtIn)).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe('agent-templates', () => {
       content: '---\nname: "Custom"\n---\nDo stuff.',
     });
     const result = getTemplates(files);
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(7);
     const custom = result.find((t) => t.id === 'templates/my-agent.md');
     expect(custom).toBeDefined();
     expect(custom!.builtIn).toBe(false);
