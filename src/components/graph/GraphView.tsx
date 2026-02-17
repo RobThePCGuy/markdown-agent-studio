@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -18,9 +18,25 @@ const nodeTypes: NodeTypes = {
 };
 
 export function GraphView() {
-  const { nodes: initialNodes, edges: initialEdges } = useGraphData();
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const { nodes: derivedNodes, edges: derivedEdges } = useGraphData();
+  const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
+
+  // Sync derived data into React Flow state, preserving user-dragged positions
+  useEffect(() => {
+    setNodes((prev) =>
+      derivedNodes.map((dn) => {
+        const existing = prev.find((n) => n.id === dn.id);
+        return existing
+          ? { ...existing, data: dn.data }
+          : dn;
+      })
+    );
+  }, [derivedNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(derivedEdges);
+  }, [derivedEdges, setEdges]);
 
   const onNodeClick = useCallback((_: any, node: any) => {
     uiStore.getState().setSelectedAgent(node.id);
