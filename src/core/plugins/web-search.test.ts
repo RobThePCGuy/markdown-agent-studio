@@ -8,10 +8,18 @@ vi.mock('@google/generative-ai', () => {
       return {
         generateContent: async () => ({
           response: {
-            text: () => JSON.stringify([
-              { title: 'Result 1', url: 'https://example.com/1', snippet: 'First result' },
-              { title: 'Result 2', url: 'https://example.com/2', snippet: 'Second result' },
-            ]),
+            text: () => 'Spain won Euro 2024, defeating England 2-1 in the final.',
+            candidates: [
+              {
+                groundingMetadata: {
+                  webSearchQueries: ['euro 2024 winner'],
+                  groundingChunks: [
+                    { web: { uri: 'https://example.com/1', title: 'UEFA Euro 2024' } },
+                    { web: { uri: 'https://example.com/2', title: 'Sports News' } },
+                  ],
+                },
+              },
+            ],
           },
         }),
       };
@@ -28,12 +36,13 @@ describe('web_search plugin', () => {
     apiKey: 'test-api-key',
   } as unknown as ToolContext;
 
-  it('returns search results as JSON', async () => {
-    const result = await webSearchPlugin.handler({ query: 'test query' }, mockCtx);
+  it('returns summary with grounding sources', async () => {
+    const result = await webSearchPlugin.handler({ query: 'euro 2024 winner' }, mockCtx);
     const parsed = JSON.parse(result);
-    expect(parsed).toHaveLength(2);
-    expect(parsed[0].title).toBe('Result 1');
-    expect(parsed[0].url).toBe('https://example.com/1');
+    expect(parsed.summary).toContain('Spain');
+    expect(parsed.sources).toHaveLength(2);
+    expect(parsed.sources[0].title).toBe('UEFA Euro 2024');
+    expect(parsed.sources[0].url).toBe('https://example.com/1');
   });
 
   it('returns error when no API key', async () => {

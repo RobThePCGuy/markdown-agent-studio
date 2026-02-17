@@ -56,7 +56,7 @@ describe('createCustomToolPlugin', () => {
   });
 
   it('includes model override in spawned agent', async () => {
-    const withModel: CustomToolDef = { ...toolDef, model: 'gemini-2.0-flash-lite' };
+    const withModel: CustomToolDef = { ...toolDef, model: 'gemini-3-flash-preview' };
     const plugin = createCustomToolPlugin(withModel);
     const vfs = createVFSStore();
     const spawnedActivations: any[] = [];
@@ -68,7 +68,7 @@ describe('createCustomToolPlugin', () => {
     await plugin.handler({ text: 'test' }, ctx);
 
     const content = vfs.getState().read(spawnedActivations[0].agentId);
-    expect(content).toContain('model: "gemini-2.0-flash-lite"');
+    expect(content).toContain('model: "gemini-3-flash-preview"');
   });
 
   it('respects depth limits', async () => {

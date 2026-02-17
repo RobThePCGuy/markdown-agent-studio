@@ -2,17 +2,28 @@ import type { ToolPlugin } from '../tool-plugin';
 
 export const spawnAgentPlugin: ToolPlugin = {
   name: 'spawn_agent',
-  description: 'Create a new agent file and activate it with a task.',
+  description:
+    'Create a new agent by writing a markdown file to agents/. ' +
+    'The content should start with YAML frontmatter between --- delimiters ' +
+    '(with at least a "name" field), followed by markdown instructions. ' +
+    'Example: ---\\nname: "Researcher"\\nmodel: "gemini-3-flash-preview"\\n---\\n\\n# MISSION\\n...',
   parameters: {
-    filename: { type: 'string', description: 'Filename for the new agent (under agents/)', required: true },
-    content: { type: 'string', description: 'Markdown content defining the agent', required: true },
-    task: { type: 'string', description: 'Task to assign to the spawned agent', required: true },
+    filename: { type: 'string', description: 'Filename for the new agent, must end in .md, e.g. "researcher.md"', required: true },
+    content: { type: 'string', description: 'Full markdown content with YAML frontmatter', required: true },
+    task: { type: 'string', description: 'The initial task/prompt to give the new agent', required: true },
   },
   async handler(args, ctx) {
     const filename = args.filename as string;
     const content = args.content as string;
     const task = args.task as string;
     const { vfs, registry, eventLog } = ctx;
+
+    // Agent files must be markdown
+    const basename = filename.includes('/') ? filename.split('/').pop()! : filename;
+    if (!basename.endsWith('.md')) {
+      return `Error: Agent files must have a .md extension. Got '${basename}'. Try '${basename.replace(/\.[^.]+$/, '.md')}' instead.`;
+    }
+
     const path = filename.startsWith('agents/') ? filename : `agents/${filename}`;
 
     if (ctx.spawnDepth >= ctx.maxDepth) {

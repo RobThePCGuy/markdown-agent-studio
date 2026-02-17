@@ -119,7 +119,7 @@ export default function SettingsModal() {
     close();
   };
 
-  const model = kernelConfig.model ?? 'gemini-2.0-flash';
+  const model = kernelConfig.model ?? 'gemini-3-flash-preview';
 
   return (
     <div
@@ -201,9 +201,11 @@ export default function SettingsModal() {
               onChange={(e) => uiStore.getState().setKernelConfig({ model: e.target.value })}
               style={selectStyle}
             >
-              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-              <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+              <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash</option>
               <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
             </select>
           </Label>
         </Section>

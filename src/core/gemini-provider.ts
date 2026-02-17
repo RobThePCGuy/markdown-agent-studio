@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { GenerateContentStreamResult } from '@google/generative-ai';
+import type { GenerateContentStreamResult, Tool } from '@google/generative-ai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
 
 export class GeminiProvider implements AIProvider {
@@ -20,15 +20,15 @@ export class GeminiProvider implements AIProvider {
 
     try {
       const model = this.client.getGenerativeModel({
-        model: config.model ?? 'gemini-1.5-pro',
+        model: config.model ?? 'gemini-3-flash-preview',
         systemInstruction: config.systemPrompt,
       });
 
-      const geminiTools = tools.length > 0 ? [{
+      const geminiTools: Tool[] | undefined = tools.length > 0 ? [{
         functionDeclarations: tools.map((t) => ({
           name: t.name,
           description: t.description,
-          parameters: t.parameters,
+          parameters: t.parameters as any,
         })),
       }] : undefined;
 

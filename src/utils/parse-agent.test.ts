@@ -66,7 +66,7 @@ tools:
     prompt: "Summarize: {{text}}"
   - name: translate
     description: Translate text
-    model: gemini-2.0-flash-lite
+    model: gemini-3-flash-preview
     parameters:
       text:
         type: string
@@ -93,7 +93,7 @@ You are a research agent.`;
     expect(profile.customTools![0].model).toBeUndefined();
 
     expect(profile.customTools![1].name).toBe('translate');
-    expect(profile.customTools![1].model).toBe('gemini-2.0-flash-lite');
+    expect(profile.customTools![1].model).toBe('gemini-3-flash-preview');
     expect(profile.customTools![1].resultSchema).toBeDefined();
   });
 

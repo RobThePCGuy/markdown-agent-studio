@@ -3,42 +3,48 @@ import type { ToolPlugin } from '../tool-plugin';
 
 export const webSearchPlugin: ToolPlugin = {
   name: 'web_search',
-  description: 'Search the web using Google Search. Returns an array of results with title, url, and snippet.',
+  description:
+    'Search the web using Google Search. Returns a summary with source URLs.',
   parameters: {
     query: { type: 'string', description: 'Search query', required: true },
-    maxResults: { type: 'number', description: 'Maximum number of results to return (default: 5)' },
   },
   async handler(args, ctx) {
     const query = args.query as string;
-    const maxResults = (args.maxResults as number) ?? 5;
 
     if (!ctx.apiKey) {
-      return 'Error: No API key available for web search.';
+      return 'Error: No API key available for web search. Set your Gemini API key in Settings.';
     }
 
     try {
       const client = new GoogleGenerativeAI(ctx.apiKey);
       const model = client.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3-flash-preview',
+        // googleSearch is the correct tool for Gemini 2.0+; the installed SDK
+        // types only know about googleSearchRetrieval (older models), so we
+        // bypass the type system here.
         tools: [{ googleSearch: {} } as any],
       });
 
-      const result = await model.generateContent(
-        `Search the web for: "${query}". Return ONLY a JSON array of the top ${maxResults} results, each with "title", "url", and "snippet" fields. No other text.`
-      );
-
+      const result = await model.generateContent(query);
+      const candidate = result.response.candidates?.[0];
       const text = result.response.text();
 
-      // Try to extract JSON from the response
-      try {
-        // Handle case where model wraps JSON in markdown code blocks
-        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-        const jsonStr = jsonMatch[1]?.trim() ?? text;
-        const parsed = JSON.parse(jsonStr);
-        return JSON.stringify(Array.isArray(parsed) ? parsed.slice(0, maxResults) : parsed);
-      } catch {
-        return text;
+      // Extract grounding sources from metadata
+      const chunks =
+        (candidate?.groundingMetadata as any)?.groundingChunks ?? [];
+      const sources = chunks
+        .filter((c: any) => c.web)
+        .map((c: any) => ({
+          title: c.web.title ?? '',
+          url: c.web.uri ?? '',
+        }));
+
+      if (sources.length > 0) {
+        return JSON.stringify({ summary: text, sources });
       }
+
+      // Fallback: return the text response if no grounding chunks
+      return text || 'No results found.';
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`;
     }

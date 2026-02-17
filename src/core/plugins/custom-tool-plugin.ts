@@ -41,7 +41,13 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
       }
       frontmatter += '\n---\n\n';
 
-      let systemPrompt = 'You are a tool executor. Complete the following task and return the result.';
+      let systemPrompt =
+        'You are a tool executor. Complete the following task and return the result.\n\n' +
+        'You have access to these tools:\n' +
+        '- vfs_read / vfs_write / vfs_list / vfs_delete: Read, write, list, and delete workspace files\n' +
+        '- web_fetch: Fetch content from a URL\n' +
+        '- web_search: Search the web using Google Search\n' +
+        '- signal_parent: Send a message back to the agent that spawned you';
       if (def.resultSchema) {
         systemPrompt += `\n\nReturn your result as JSON matching this schema:\n${JSON.stringify(def.resultSchema, null, 2)}`;
       }

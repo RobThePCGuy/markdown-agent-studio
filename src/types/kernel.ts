@@ -46,6 +46,6 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxConcurrency: 3,
   maxDepth: 5,
   maxFanout: 5,
-  tokenBudget: 500000,
-  model: 'gemini-2.0-flash',
+  tokenBudget: 1000000,
+  model: 'gemini-3-flash-preview',
 };

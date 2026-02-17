@@ -138,7 +138,7 @@ tools:
     prompt: "Analyze the following content and extract 3-5 key insights:\\n\\n{{content}}"
   - name: fact_check
     description: Verify claims against available information
-    model: gemini-2.0-flash-lite
+    model: gemini-3-flash-preview
     parameters:
       claim:
         type: string

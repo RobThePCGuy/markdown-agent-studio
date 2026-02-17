@@ -23,6 +23,7 @@ export const webFetchPlugin: ToolPlugin = {
     try {
       const response = await fetch(url, {
         headers: { 'Accept': 'text/html,text/plain,application/json' },
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!response.ok) {
