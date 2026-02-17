@@ -1,11 +1,12 @@
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
 
 export class MockAIProvider implements AIProvider {
-  private responses: StreamChunk[];
+  private responseQueue: StreamChunk[][];
+  private callIndex = 0;
   private aborted = new Set<string>();
 
   constructor(responses: StreamChunk[]) {
-    this.responses = responses;
+    this.responseQueue = [responses];
   }
 
   async *chat(
@@ -13,7 +14,12 @@ export class MockAIProvider implements AIProvider {
     _history: Message[],
     _tools: ToolDeclaration[]
   ): AsyncIterable<StreamChunk> {
-    for (const chunk of this.responses) {
+    const responses = this.callIndex < this.responseQueue.length
+      ? this.responseQueue[this.callIndex]
+      : [{ type: 'done' as const, tokenCount: 0 }];
+    this.callIndex++;
+
+    for (const chunk of responses) {
       if (this.aborted.has(config.sessionId)) {
         yield { type: 'error', error: 'Aborted' };
         return;
@@ -28,6 +34,12 @@ export class MockAIProvider implements AIProvider {
   }
 
   setResponses(responses: StreamChunk[]): void {
-    this.responses = responses;
+    this.responseQueue = [responses];
+    this.callIndex = 0;
+  }
+
+  setResponseQueue(queue: StreamChunk[][]): void {
+    this.responseQueue = queue;
+    this.callIndex = 0;
   }
 }

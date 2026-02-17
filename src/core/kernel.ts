@@ -206,102 +206,106 @@ export class Kernel {
     });
 
     try {
-      let textAccumulator = '';
-      let noProgressStrikes = 0;
-      let madeProgress = false;
+      const MAX_AGENT_TURNS = 25;
 
-      const stream = this.deps.aiProvider.chat(
-        { sessionId: activation.id, systemPrompt: profile.systemPrompt, model: profile.model },
-        session.history,
-        sessionRegistry.toToolDefinitions()
-      );
+      for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
+        let textAccumulator = '';
+        let hadToolCalls = false;
 
-      for await (const chunk of stream) {
-        if (controller.signal.aborted) {
-          session.status = 'aborted';
-          break;
-        }
+        const stream = this.deps.aiProvider.chat(
+          { sessionId: activation.id, systemPrompt: profile.systemPrompt, model: profile.model },
+          session.history,
+          sessionRegistry.toToolDefinitions()
+        );
 
-        this.deps.onStreamChunk?.(activation.agentId, chunk);
-        this.deps.sessionStore?.getState().appendChunk(activation.id, chunk);
-
-        switch (chunk.type) {
-          case 'text':
-            textAccumulator += chunk.text ?? '';
-            break;
-
-          case 'tool_call': {
-            if (this._paused) {
-              // Wait for resume between tool calls
-              await this.waitForResume(controller.signal);
-              if (controller.signal.aborted) {
-                session.status = 'aborted';
-                break;
-              }
-            }
-
-            const tc = chunk.toolCall!;
-            const result = await toolHandler.handle(tc.name, tc.args);
-
-            const record = {
-              id: tc.id,
-              name: tc.name,
-              args: tc.args,
-              result,
-              timestamp: Date.now(),
-            };
-            session.toolCalls.push(record);
-            session.history.push({
-              role: 'tool' as const,
-              content: result,
-              toolCall: record,
-            });
-            this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
-            madeProgress = true;
-
-            // Track child spawns
-            if (tc.name === 'spawn_agent') {
-              const count = this.childCounts.get(activation.agentId) ?? 0;
-              this.childCounts.set(activation.agentId, count + 1);
-            }
+        for await (const chunk of stream) {
+          if (controller.signal.aborted) {
+            session.status = 'aborted';
             break;
           }
 
-          case 'done':
-            if (chunk.tokenCount) {
-              session.tokenCount = chunk.tokenCount;
-              this._totalTokens += chunk.tokenCount;
+          this.deps.onStreamChunk?.(activation.agentId, chunk);
+          this.deps.sessionStore?.getState().appendChunk(activation.id, chunk);
+
+          switch (chunk.type) {
+            case 'text':
+              textAccumulator += chunk.text ?? '';
+              break;
+
+            case 'tool_call': {
+              if (this._paused) {
+                await this.waitForResume(controller.signal);
+                if (controller.signal.aborted) {
+                  session.status = 'aborted';
+                  break;
+                }
+              }
+
+              hadToolCalls = true;
+              const tc = chunk.toolCall!;
+              const result = await toolHandler.handle(tc.name, tc.args);
+
+              const record = {
+                id: tc.id,
+                name: tc.name,
+                args: tc.args,
+                result,
+                timestamp: Date.now(),
+              };
+              session.toolCalls.push(record);
+              session.history.push({
+                role: 'tool' as const,
+                content: result,
+                toolCall: record,
+              });
+              this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
+
+              if (tc.name === 'spawn_agent') {
+                const count = this.childCounts.get(activation.agentId) ?? 0;
+                this.childCounts.set(activation.agentId, count + 1);
+              }
+              break;
             }
-            break;
 
-          case 'error':
-            session.status = 'error';
-            this.deps.eventLog.getState().append({
-              type: 'error',
-              agentId: activation.agentId,
-              activationId: activation.id,
-              data: { error: chunk.error },
-            });
-            break;
+            case 'done':
+              if (chunk.tokenCount) {
+                session.tokenCount += chunk.tokenCount;
+                this._totalTokens += chunk.tokenCount;
+              }
+              break;
+
+            case 'error':
+              session.status = 'error';
+              this.deps.eventLog.getState().append({
+                type: 'error',
+                agentId: activation.agentId,
+                activationId: activation.id,
+                data: { error: chunk.error },
+              });
+              break;
+          }
         }
-      }
 
-      if (textAccumulator) {
-        session.history.push({ role: 'model', content: textAccumulator });
+        if (textAccumulator) {
+          session.history.push({ role: 'model', content: textAccumulator });
+        }
+
+        // Exit loop if no tool calls (model finished) or session errored/aborted
+        if (!hadToolCalls || session.status !== 'running') break;
+
+        // Token budget check between turns
+        if (this._totalTokens >= this.deps.config.tokenBudget) {
+          this.deps.eventLog.getState().append({
+            type: 'warning',
+            agentId: activation.agentId,
+            activationId: activation.id,
+            data: { message: 'Token budget exceeded mid-session, stopping' },
+          });
+          break;
+        }
       }
 
       if (session.status === 'running') {
-        if (!madeProgress) {
-          noProgressStrikes++;
-          if (noProgressStrikes >= 2) {
-            this.deps.eventLog.getState().append({
-              type: 'warning',
-              agentId: activation.agentId,
-              activationId: activation.id,
-              data: { message: 'Agent halted: no progress after 2 consecutive steps' },
-            });
-          }
-        }
         session.status = 'completed';
       }
 

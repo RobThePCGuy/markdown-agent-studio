@@ -119,4 +119,41 @@ describe('Kernel', () => {
     await kernel.runUntilEmpty();
     expect(kernel.totalTokens).toBeGreaterThan(0);
   });
+
+  it('loops back to AI after tool calls with results', async () => {
+    // Turn 1: model reads a file via vfs_read
+    // Turn 2: model emits final text response
+    vfs.getState().write('notes.md', '# My Notes', {});
+
+    provider.setResponseQueue([
+      [
+        { type: 'tool_call', toolCall: { id: 'tc-1', name: 'vfs_read', args: { path: 'notes.md' } } },
+        { type: 'done', tokenCount: 50 },
+      ],
+      [
+        { type: 'text', text: 'I read the file, it says My Notes' },
+        { type: 'done', tokenCount: 80 },
+      ],
+    ]);
+
+    kernel.enqueue({
+      agentId: 'agents/writer.md',
+      input: 'Read notes.md and summarize',
+      spawnDepth: 0,
+      priority: 0,
+    });
+
+    await kernel.runUntilEmpty();
+
+    const session = kernel.completedSessions[0];
+    expect(session.status).toBe('completed');
+    // Should have: user message, tool result, model response
+    expect(session.history).toHaveLength(3);
+    expect(session.history[0].role).toBe('user');
+    expect(session.history[1].role).toBe('tool');
+    expect(session.history[2].role).toBe('model');
+    expect(session.history[2].content).toContain('My Notes');
+    // Tokens should accumulate across turns
+    expect(session.tokenCount).toBe(130);
+  });
 });

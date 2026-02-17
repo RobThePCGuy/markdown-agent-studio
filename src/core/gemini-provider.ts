@@ -2,12 +2,76 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { GenerateContentStreamResult, Tool } from '@google/generative-ai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
 
+type GeminiPart = { text: string } | { functionCall: { name: string; args: Record<string, unknown> } } | { functionResponse: { name: string; response: { result: string } } };
+type GeminiMessage = { role: 'user' | 'model'; parts: GeminiPart[] };
+
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenerativeAI;
   private activeStreams = new Map<string, AbortController>();
 
   constructor(apiKey: string) {
     this.client = new GoogleGenerativeAI(apiKey);
+  }
+
+  /** Convert kernel history (user/model/tool messages) to Gemini format with functionCall/functionResponse pairs. */
+  private convertHistory(history: Message[]): GeminiMessage[] {
+    const result: GeminiMessage[] = [];
+    let i = 0;
+
+    while (i < history.length) {
+      const msg = history[i];
+
+      if (msg.role === 'user') {
+        result.push({ role: 'user', parts: [{ text: msg.content }] });
+        i++;
+      } else if (msg.role === 'model') {
+        const parts: GeminiPart[] = [];
+        if (msg.content) parts.push({ text: msg.content });
+        i++;
+
+        // Check if followed by tool messages (function calls from this model turn)
+        if (i < history.length && history[i].role === 'tool') {
+          const toolMsgs: Message[] = [];
+          while (i < history.length && history[i].role === 'tool') {
+            toolMsgs.push(history[i]);
+            i++;
+          }
+          for (const t of toolMsgs) {
+            parts.push({ functionCall: { name: t.toolCall!.name, args: t.toolCall!.args } });
+          }
+          result.push({ role: 'model', parts });
+          result.push({
+            role: 'user',
+            parts: toolMsgs.map(t => ({
+              functionResponse: { name: t.toolCall!.name, response: { result: t.content } },
+            })),
+          });
+        } else if (parts.length > 0) {
+          result.push({ role: 'model', parts });
+        }
+      } else if (msg.role === 'tool') {
+        // Tool messages without a preceding model message (model emitted only function calls, no text)
+        const toolMsgs: Message[] = [];
+        while (i < history.length && history[i].role === 'tool') {
+          toolMsgs.push(history[i]);
+          i++;
+        }
+        result.push({
+          role: 'model',
+          parts: toolMsgs.map(t => ({
+            functionCall: { name: t.toolCall!.name, args: t.toolCall!.args },
+          })),
+        });
+        result.push({
+          role: 'user',
+          parts: toolMsgs.map(t => ({
+            functionResponse: { name: t.toolCall!.name, response: { result: t.content } },
+          })),
+        });
+      }
+    }
+
+    return result;
   }
 
   async *chat(
@@ -32,15 +96,10 @@ export class GeminiProvider implements AIProvider {
         })),
       }] : undefined;
 
-      const geminiHistory = history
-        .filter((m) => m.role !== 'tool')
-        .map((m) => ({
-          role: m.role === 'model' ? 'model' as const : 'user' as const,
-          parts: [{ text: m.content }],
-        }));
+      const geminiHistory = this.convertHistory(history);
 
-      const lastUserMsg = geminiHistory.pop();
-      if (!lastUserMsg) {
+      const lastMsg = geminiHistory.pop();
+      if (!lastMsg) {
         yield { type: 'error', error: 'No input message' };
         return;
       }
@@ -51,7 +110,7 @@ export class GeminiProvider implements AIProvider {
       });
 
       const result: GenerateContentStreamResult = await chat.sendMessageStream(
-        lastUserMsg.parts,
+        lastMsg.parts as any,
         { signal: controller.signal }
       );
 
