@@ -16,7 +16,7 @@ export const webFetchPlugin: ToolPlugin = {
     url: { type: 'string', description: 'The URL to fetch', required: true },
     maxLength: { type: 'number', description: 'Maximum characters to return (default: 50000)' },
   },
-  async handler(args) {
+  async handler(args, _ctx) {
     const url = args.url as string;
     const maxLength = (args.maxLength as number) ?? 50000;
 
