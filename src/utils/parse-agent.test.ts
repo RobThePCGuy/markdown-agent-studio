@@ -52,4 +52,80 @@ Prompt.`;
     expect(result.contentHash).toBeTruthy();
     expect(typeof result.contentHash).toBe('string');
   });
+
+  it('parses custom tool definitions from frontmatter', () => {
+    const content = `---
+name: "Research Agent"
+tools:
+  - name: summarize
+    description: Summarize text
+    parameters:
+      text:
+        type: string
+        description: The text to summarize
+    prompt: "Summarize: {{text}}"
+  - name: translate
+    description: Translate text
+    model: gemini-2.0-flash-lite
+    parameters:
+      text:
+        type: string
+        description: Text to translate
+      language:
+        type: string
+        description: Target language
+    prompt: "Translate to {{language}}: {{text}}"
+    result_schema:
+      type: object
+      properties:
+        translated:
+          type: string
+---
+
+You are a research agent.`;
+
+    const profile = parseAgentFile('agents/research.md', content);
+    expect(profile.customTools).toHaveLength(2);
+
+    expect(profile.customTools![0].name).toBe('summarize');
+    expect(profile.customTools![0].parameters.text.type).toBe('string');
+    expect(profile.customTools![0].prompt).toBe('Summarize: {{text}}');
+    expect(profile.customTools![0].model).toBeUndefined();
+
+    expect(profile.customTools![1].name).toBe('translate');
+    expect(profile.customTools![1].model).toBe('gemini-2.0-flash-lite');
+    expect(profile.customTools![1].resultSchema).toBeDefined();
+  });
+
+  it('returns undefined customTools when no tools in frontmatter', () => {
+    const content = `---
+name: "Simple Agent"
+---
+
+Just do stuff.`;
+
+    const profile = parseAgentFile('agents/simple.md', content);
+    expect(profile.customTools).toBeUndefined();
+  });
+
+  it('skips invalid tool definitions gracefully', () => {
+    const content = `---
+name: "Agent"
+tools:
+  - name: valid_tool
+    description: A valid tool
+    parameters:
+      input:
+        type: string
+        description: Input
+    prompt: "Do: {{input}}"
+  - bad_entry: true
+---
+
+Instructions.`;
+
+    const profile = parseAgentFile('agents/agent.md', content);
+    expect(profile.customTools).toHaveLength(1);
+    expect(profile.customTools![0].name).toBe('valid_tool');
+  });
 });
