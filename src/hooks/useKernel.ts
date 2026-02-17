@@ -25,10 +25,11 @@ export function useKernel() {
     const kernel = new Kernel({
       aiProvider: provider,
       vfs: vfsStore,
-      registry: agentRegistry,
+      agentRegistry: agentRegistry,
       eventLog: eventLogStore,
       config,
       sessionStore,
+      apiKey,
       onSessionUpdate: () => {
         setTotalTokens(kernel.totalTokens);
         setActiveCount(kernel.activeSessionCount);

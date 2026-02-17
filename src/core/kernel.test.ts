@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Kernel } from './kernel';
 import { MockAIProvider } from './mock-provider';
 import { createVFSStore } from '../stores/vfs-store';
@@ -24,7 +24,7 @@ describe('Kernel', () => {
     kernel = new Kernel({
       aiProvider: provider,
       vfs,
-      registry,
+      agentRegistry: registry,
       eventLog,
       config: { maxConcurrency: 2, maxDepth: 5, maxFanout: 5, tokenBudget: 500000 },
     });
@@ -55,7 +55,7 @@ describe('Kernel', () => {
     ]);
     kernel = new Kernel({
       aiProvider: slowProvider,
-      vfs, registry, eventLog,
+      vfs, agentRegistry: registry, eventLog,
       config: { maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000 },
     });
 

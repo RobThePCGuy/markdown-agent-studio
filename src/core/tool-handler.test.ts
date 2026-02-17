@@ -3,6 +3,7 @@ import { ToolHandler } from './tool-handler';
 import { createVFSStore } from '../stores/vfs-store';
 import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
+import { createBuiltinRegistry } from './plugins';
 
 describe('ToolHandler', () => {
   let handler: ToolHandler;
@@ -18,8 +19,9 @@ describe('ToolHandler', () => {
     spawnedActivations = [];
 
     handler = new ToolHandler({
+      pluginRegistry: createBuiltinRegistry(),
       vfs,
-      registry,
+      agentRegistry: registry,
       eventLog,
       onSpawnActivation: (activation) => spawnedActivations.push(activation),
       currentAgentId: 'agents/writer.md',
@@ -110,7 +112,10 @@ describe('ToolHandler', () => {
 
     it('blocks when depth limit reached', async () => {
       const deepHandler = new ToolHandler({
-        vfs, registry, eventLog,
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
         onSpawnActivation: (a) => spawnedActivations.push(a),
         currentAgentId: 'agents/deep.md',
         currentActivationId: 'act-2',
@@ -128,7 +133,10 @@ describe('ToolHandler', () => {
 
     it('blocks when fanout limit reached', async () => {
       const fullHandler = new ToolHandler({
-        vfs, registry, eventLog,
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
         onSpawnActivation: (a) => spawnedActivations.push(a),
         currentAgentId: 'agents/busy.md',
         currentActivationId: 'act-3',
@@ -155,7 +163,10 @@ describe('ToolHandler', () => {
 
     it('errors when no parent', async () => {
       const rootHandler = new ToolHandler({
-        vfs, registry, eventLog,
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
         onSpawnActivation: (a) => spawnedActivations.push(a),
         currentAgentId: 'agents/root.md',
         currentActivationId: 'act-root',

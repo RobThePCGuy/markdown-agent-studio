@@ -56,7 +56,7 @@ describe('Integration: full agent loop', () => {
     const kernel = new Kernel({
       aiProvider: provider,
       vfs,
-      registry,
+      agentRegistry: registry,
       eventLog,
       config: DEFAULT_KERNEL_CONFIG,
     });

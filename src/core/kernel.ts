@@ -5,7 +5,9 @@ import type { EventLogState } from '../stores/event-log';
 import type { SessionStoreState } from '../stores/session-store';
 import { Semaphore } from './semaphore';
 import { ToolHandler } from './tool-handler';
-import { AGENT_TOOLS } from './tools';
+import { ToolPluginRegistry } from './tool-plugin';
+import { createBuiltinRegistry } from './plugins';
+import { createCustomToolPlugin } from './plugins/custom-tool-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 
 type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
@@ -13,10 +15,12 @@ type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => 
 interface KernelDeps {
   aiProvider: AIProvider;
   vfs: Store<VFSState>;
-  registry: Store<AgentRegistryState>;
+  agentRegistry: Store<AgentRegistryState>;
   eventLog: Store<EventLogState>;
   config: KernelConfig;
   sessionStore?: Store<SessionStoreState>;
+  toolRegistry?: ToolPluginRegistry;
+  apiKey?: string;
   onSessionUpdate?: (session: AgentSession) => void;
   onStreamChunk?: (agentId: string, chunk: StreamChunk) => void;
 }
@@ -39,6 +43,9 @@ export class Kernel {
     this.deps = deps;
     this.semaphore = new Semaphore(deps.config.maxConcurrency);
     this.globalController = new AbortController();
+    if (!this.deps.toolRegistry) {
+      this.deps.toolRegistry = createBuiltinRegistry();
+    }
   }
 
   get isPaused(): boolean { return this._paused; }
@@ -165,7 +172,7 @@ export class Kernel {
       data: { input: activation.input, depth: activation.spawnDepth },
     });
 
-    const profile = this.deps.registry.getState().get(activation.agentId);
+    const profile = this.deps.agentRegistry.getState().get(activation.agentId);
     if (!profile) {
       session.status = 'error';
       this._completedSessions.push(session);
@@ -175,9 +182,17 @@ export class Kernel {
       return;
     }
 
+    // Build per-agent tool list (built-in + custom)
+    let sessionRegistry = this.deps.toolRegistry!;
+    if (profile.customTools && profile.customTools.length > 0) {
+      const customPlugins = profile.customTools.map(createCustomToolPlugin);
+      sessionRegistry = this.deps.toolRegistry!.cloneWith(customPlugins);
+    }
+
     const toolHandler = new ToolHandler({
+      pluginRegistry: sessionRegistry,
       vfs: this.deps.vfs,
-      registry: this.deps.registry,
+      agentRegistry: this.deps.agentRegistry,
       eventLog: this.deps.eventLog,
       onSpawnActivation: (act) => this.enqueue(act),
       currentAgentId: activation.agentId,
@@ -187,6 +202,7 @@ export class Kernel {
       maxDepth: this.deps.config.maxDepth,
       maxFanout: this.deps.config.maxFanout,
       childCount: this.childCounts.get(activation.agentId) ?? 0,
+      apiKey: this.deps.apiKey,
     });
 
     try {
@@ -197,7 +213,7 @@ export class Kernel {
       const stream = this.deps.aiProvider.chat(
         { sessionId: activation.id, systemPrompt: profile.systemPrompt, model: profile.model },
         session.history,
-        AGENT_TOOLS
+        sessionRegistry.toToolDefinitions()
       );
 
       for await (const chunk of stream) {
