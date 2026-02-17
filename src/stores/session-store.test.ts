@@ -104,7 +104,7 @@ describe('Session Store', () => {
   it('adds a tool result message', () => {
     store.getState().openSession('agents/writer.md', 'act-1');
 
-    store.getState().addToolResult('act-1', 'tc-1', 'readFile', 'file contents here');
+    store.getState().addToolResult('act-1', 'tc-1', 'readFile', { path: '/foo.txt' }, 'file contents here');
 
     const session = store.getState().sessions.get('act-1');
     expect(session!.messages).toHaveLength(1);
@@ -114,6 +114,7 @@ describe('Session Store', () => {
     expect(session!.messages[0].toolCall!.id).toBe('tc-1');
     expect(session!.messages[0].toolCall!.name).toBe('readFile');
     expect(session!.messages[0].toolCall!.result).toBe('file contents here');
+    expect(session!.messages[0].toolCall!.args).toEqual({ path: '/foo.txt' });
   });
 
   it('closes a session (sets status and completedAt)', () => {

@@ -80,6 +80,7 @@ export class Kernel {
     if (session) {
       session.controller.abort();
       session.status = 'aborted';
+      this.deps.sessionStore?.getState().closeSession(activationId, 'aborted');
       this._completedSessions.push(session);
       this.activeSessions.delete(activationId);
     }
@@ -239,7 +240,7 @@ export class Kernel {
               content: result,
               toolCall: record,
             });
-            this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.result);
+            this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
             madeProgress = true;
 
             // Track child spawns

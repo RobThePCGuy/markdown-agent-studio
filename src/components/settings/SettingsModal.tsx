@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from 'react';
-import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore } from '../../stores/use-stores';
+import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } from '../../stores/use-stores';
 
 // ---------------------------------------------------------------------------
 // Helper components
@@ -108,6 +108,11 @@ export default function SettingsModal() {
     try {
       // Event log - has a clear() method
       eventLogStore.getState().clear();
+    } catch {
+      // ignore if unavailable
+    }
+    try {
+      sessionStore.getState().clearAll();
     } catch {
       // ignore if unavailable
     }

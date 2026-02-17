@@ -8,7 +8,7 @@ export interface SessionStoreState {
   openSession(agentId: string, activationId: string): void;
   appendChunk(activationId: string, chunk: StreamChunk): void;
   addUserMessage(activationId: string, content: string): void;
-  addToolResult(activationId: string, toolCallId: string, toolName: string, result: string): void;
+  addToolResult(activationId: string, toolCallId: string, toolName: string, args: Record<string, unknown>, result: string): void;
   updateStatus(activationId: string, status: SessionStatus): void;
   closeSession(activationId: string, status: SessionStatus): void;
   getSessionForAgent(agentId: string): LiveSession | undefined;
@@ -148,14 +148,14 @@ export function createSessionStore() {
       });
     },
 
-    addToolResult(activationId: string, toolCallId: string, toolName: string, result: string): void {
+    addToolResult(activationId: string, toolCallId: string, toolName: string, args: Record<string, unknown>, result: string): void {
       const session = get().sessions.get(activationId);
       if (!session) return;
 
       const toolRecord: ToolCallRecord = {
         id: toolCallId,
         name: toolName,
-        args: {},
+        args,
         result,
         timestamp: Date.now(),
       };
