@@ -1,22 +1,42 @@
 import { useMemo } from 'react';
 import { type Node, type Edge } from '@xyflow/react';
-import { useAgentRegistry, useEventLog } from '../stores/use-stores';
+import { useAgentRegistry, useEventLog, useSessionStore } from '../stores/use-stores';
 
 export function useGraphData() {
-  const agents = useAgentRegistry((s) => [...s.agents.values()]);
+  const agentsMap = useAgentRegistry((s) => s.agents);
   const entries = useEventLog((s) => s.entries);
+  const sessions = useSessionStore((s) => s.sessions);
 
   return useMemo(() => {
-    const nodes: Node[] = agents.map((agent, i) => ({
-      id: agent.path,
-      type: 'agentNode',
-      position: { x: i * 200, y: 100 },
-      data: {
-        label: agent.name,
-        path: agent.path,
-        status: 'idle',
-      },
-    }));
+    const agents = [...agentsMap.values()];
+
+    // Build a map of agentId -> most recent session
+    const latestByAgent = new Map<string, { status: string; tokenCount: number; startedAt: number }>();
+    for (const session of sessions.values()) {
+      const existing = latestByAgent.get(session.agentId);
+      if (!existing || session.startedAt > existing.startedAt) {
+        latestByAgent.set(session.agentId, {
+          status: session.status,
+          tokenCount: session.tokenCount,
+          startedAt: session.startedAt,
+        });
+      }
+    }
+
+    const nodes: Node[] = agents.map((agent, i) => {
+      const live = latestByAgent.get(agent.path);
+      return {
+        id: agent.path,
+        type: 'agentNode',
+        position: { x: i * 200, y: 100 },
+        data: {
+          label: agent.name,
+          path: agent.path,
+          status: live?.status ?? 'idle',
+          tokenCount: live?.tokenCount ?? 0,
+        },
+      };
+    });
 
     const edges: Edge[] = [];
     const spawnEvents = entries.filter((e) => e.type === 'spawn');
@@ -34,5 +54,5 @@ export function useGraphData() {
     }
 
     return { nodes, edges };
-  }, [agents, entries]);
+  }, [agentsMap, entries, sessions]);
 }
