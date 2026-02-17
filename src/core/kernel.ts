@@ -286,7 +286,11 @@ export class Kernel {
           }
         }
 
-        if (textAccumulator) {
+        // Only add model text to history when no tool calls were made.
+        // When there are tool calls, the ChatSession tracks the model's text
+        // internally, and adding it here would break the trailing-tool-messages
+        // extraction that the provider uses for function responses.
+        if (textAccumulator && !hadToolCalls) {
           session.history.push({ role: 'model', content: textAccumulator });
         }
 

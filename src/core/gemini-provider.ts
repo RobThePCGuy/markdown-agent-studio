@@ -46,9 +46,11 @@ export class GeminiProvider implements AIProvider {
           if (history[i].role === 'tool') toolMsgs.unshift(history[i]);
           else break;
         }
-        messageParts = toolMsgs.map(t => ({
-          functionResponse: { name: t.toolCall!.name, response: { result: t.content } },
-        }));
+        messageParts = toolMsgs.map(t => {
+          const fr: any = { name: t.toolCall!.name, response: { result: t.content } };
+          if (t.toolCall!.id) fr.id = t.toolCall!.id;
+          return { functionResponse: fr };
+        });
       } else {
         // First call: create new ChatSession with initial history
         const geminiHistory = history
@@ -98,7 +100,7 @@ export class GeminiProvider implements AIProvider {
             yield {
               type: 'tool_call',
               toolCall: {
-                id: `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                id: (part.functionCall as any).id ?? `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 name: part.functionCall.name,
                 args: (part.functionCall.args ?? {}) as Record<string, unknown>,
               },
@@ -110,6 +112,11 @@ export class GeminiProvider implements AIProvider {
           totalTokens = chunk.usageMetadata.totalTokenCount ?? totalTokens;
         }
       }
+
+      // Await the aggregated response so the ChatSession updates its internal
+      // history with the model's turn (including thought signatures) before
+      // we send the next message.
+      await result.response;
 
       yield { type: 'done', tokenCount: totalTokens };
     } catch (err) {
