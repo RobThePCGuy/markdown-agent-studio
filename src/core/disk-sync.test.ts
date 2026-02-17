@@ -29,7 +29,7 @@ function mockDirHandle(files: Record<string, string> = {}): FileSystemDirectoryH
   const handle = {
     kind: 'directory' as const,
     name: 'test-project',
-    getDirectoryHandle: vi.fn(async (name: string, _opts?: { create?: boolean }) => {
+    getDirectoryHandle: vi.fn(async (_name: string, _opts?: { create?: boolean }) => {
       return mockDirHandle({});
     }),
     getFileHandle: vi.fn(async (name: string, _opts?: { create?: boolean }) => {
