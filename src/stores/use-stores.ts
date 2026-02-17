@@ -7,6 +7,7 @@ import { createSessionStore, type SessionStoreState } from './session-store';
 import { createProjectStore, type ProjectState } from './project-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
+import { DiskSync } from '../core/disk-sync';
 
 // Singleton vanilla stores
 export const vfsStore = createVFSStore();
@@ -14,6 +15,7 @@ export const agentRegistry = createAgentRegistry();
 export const eventLogStore = createEventLog();
 export const sessionStore = createSessionStore();
 export const projectStore = createProjectStore();
+export const diskSync = new DiskSync(vfsStore, projectStore, agentRegistry);
 
 // UI state store
 export interface UIState {
