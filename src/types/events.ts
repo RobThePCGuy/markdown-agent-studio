@@ -18,3 +18,13 @@ export interface EventLogEntry {
   activationId: string;
   data: Record<string, unknown>;
 }
+
+export interface ReplayCheckpoint {
+  id: string;
+  eventId: string;
+  timestamp: number;
+  eventType: EventType;
+  agentId: string;
+  activationId: string;
+  files: Record<string, string>;
+}

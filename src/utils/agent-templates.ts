@@ -17,6 +17,20 @@ export const BUILT_IN_TEMPLATES: AgentTemplate[] = [
     builtIn: true,
     content: `---
 name: "My Agent"
+safety_mode: gloves_off
+reads:
+  - "**"
+writes:
+  - "memory/**"
+  - "artifacts/**"
+permissions:
+  spawn_agents: true
+  edit_agents: false
+  delete_files: false
+  web_access: true
+  signal_parent: true
+  custom_tools: true
+gloves_off_triggers: []
 ---
 
 # MISSION
@@ -36,6 +50,21 @@ Describe expected output format.
     builtIn: true,
     content: `---
 name: "Researcher"
+safety_mode: gloves_off
+reads:
+  - "**"
+writes:
+  - "memory/**"
+  - "artifacts/**"
+permissions:
+  spawn_agents: true
+  edit_agents: false
+  delete_files: false
+  web_access: true
+  signal_parent: true
+  custom_tools: true
+gloves_off_triggers:
+  - emergency
 ---
 
 # MISSION
@@ -60,6 +89,19 @@ Write structured markdown with headers, bullet points, and citations to source f
     builtIn: true,
     content: `---
 name: "Writer"
+safety_mode: safe
+reads:
+  - "memory/**"
+  - "artifacts/**"
+writes:
+  - "artifacts/**"
+permissions:
+  spawn_agents: false
+  edit_agents: false
+  delete_files: false
+  web_access: false
+  signal_parent: true
+  custom_tools: false
 ---
 
 # MISSION
@@ -82,6 +124,22 @@ Clear, well-structured prose with appropriate markdown formatting.
     builtIn: true,
     content: `---
 name: "Orchestrator"
+safety_mode: gloves_off
+reads:
+  - "**"
+writes:
+  - "memory/**"
+  - "artifacts/**"
+permissions:
+  spawn_agents: true
+  edit_agents: false
+  delete_files: false
+  web_access: true
+  signal_parent: true
+  custom_tools: true
+gloves_off_triggers:
+  - incident
+  - unblock now
 ---
 
 # MISSION
@@ -106,6 +164,19 @@ A final consolidated artifact that combines all child agent outputs.
     builtIn: true,
     content: `---
 name: "Critic"
+safety_mode: safe
+reads:
+  - "memory/**"
+  - "artifacts/**"
+writes:
+  - "memory/**"
+permissions:
+  spawn_agents: false
+  edit_agents: false
+  delete_files: false
+  web_access: false
+  signal_parent: true
+  custom_tools: false
 ---
 
 # MISSION
@@ -128,6 +199,19 @@ Structured review with sections: Summary, Strengths, Issues, Recommendation (app
     builtIn: true,
     content: `---
 name: "Tool Builder"
+safety_mode: gloves_off
+reads:
+  - "**"
+writes:
+  - "memory/**"
+  - "artifacts/**"
+permissions:
+  spawn_agents: true
+  edit_agents: false
+  delete_files: false
+  web_access: true
+  signal_parent: true
+  custom_tools: true
 tools:
   - name: analyze
     description: Analyze content and extract key insights

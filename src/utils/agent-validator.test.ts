@@ -115,4 +115,63 @@ Do stuff.`;
     expect(mismatch.length).toBeGreaterThan(0);
     expect(mismatch[0].severity).toBe('info');
   });
+
+  it('warns on unknown safety mode', () => {
+    const content = `---
+name: "Agent"
+safety_mode: turbo
+---
+
+Do work.`;
+
+    const diagnostics = validateAgentContent(content);
+    const modeDiag = diagnostics.find((d) => d.message.includes('Unknown safety mode'));
+    expect(modeDiag).toBeDefined();
+    expect(modeDiag!.severity).toBe('warning');
+  });
+
+  it('warns when gloves_off mode is set', () => {
+    const content = `---
+name: "Agent"
+mode: gloves_off
+---
+
+Do work.`;
+
+    const diagnostics = validateAgentContent(content);
+    const glovesDiag = diagnostics.find((d) => d.message.includes('gloves_off'));
+    expect(glovesDiag).toBeDefined();
+    expect(glovesDiag!.severity).toBe('warning');
+  });
+
+  it('warns on invalid permissions object values', () => {
+    const content = `---
+name: "Agent"
+permissions:
+  spawn_agents: yes
+---
+
+Do work.`;
+
+    const diagnostics = validateAgentContent(content);
+    const permDiag = diagnostics.find((d) => d.message.includes('Permission'));
+    expect(permDiag).toBeDefined();
+    expect(permDiag!.severity).toBe('warning');
+  });
+
+  it('warns on non-string read scope entries', () => {
+    const content = `---
+name: "Agent"
+reads:
+  - memory/**
+  - 42
+---
+
+Do work.`;
+
+    const diagnostics = validateAgentContent(content);
+    const readsDiag = diagnostics.find((d) => d.message.includes("'reads'"));
+    expect(readsDiag).toBeDefined();
+    expect(readsDiag!.severity).toBe('warning');
+  });
 });

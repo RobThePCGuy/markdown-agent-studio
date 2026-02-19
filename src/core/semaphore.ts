@@ -2,7 +2,7 @@ export class Semaphore {
   private _available: number;
   private waitQueue: Array<() => void> = [];
 
-  constructor(private max: number) {
+  constructor(max: number) {
     this._available = max;
   }
 

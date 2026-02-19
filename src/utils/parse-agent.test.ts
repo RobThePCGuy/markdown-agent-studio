@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAgentFile } from './parse-agent';
+import { parseAgentFile, resolvePolicyForInput } from './parse-agent';
 
 describe('parseAgentFile', () => {
   it('parses valid frontmatter + body', () => {
@@ -25,6 +25,7 @@ You are a writer.`;
     expect(result.name).toBe('simple');
     expect(result.systemPrompt).toBe(content);
     expect(result.frontmatter).toEqual({});
+    expect(result.policy.mode).toBe('gloves_off');
   });
 
   it('handles malformed YAML gracefully', () => {
@@ -127,5 +128,68 @@ Instructions.`;
     const profile = parseAgentFile('agents/agent.md', content);
     expect(profile.customTools).toHaveLength(1);
     expect(profile.customTools![0].name).toBe('valid_tool');
+  });
+
+  it('parses policy controls from frontmatter', () => {
+    const content = `---
+name: "Controlled"
+safety_mode: safe
+reads:
+  - memory/**
+writes:
+  - artifacts/**
+permissions:
+  spawn_agents: false
+  web_access: false
+gloves_off_triggers:
+  - emergency
+  - hotfix
+---
+
+Do work.`;
+
+    const profile = parseAgentFile('agents/controlled.md', content);
+    expect(profile.policy.mode).toBe('safe');
+    expect(profile.policy.reads).toEqual(['memory/**']);
+    expect(profile.policy.writes).toEqual(['artifacts/**']);
+    expect(profile.policy.permissions.spawnAgents).toBe(false);
+    expect(profile.policy.permissions.webAccess).toBe(false);
+    expect(profile.policy.glovesOffTriggers).toEqual(['emergency', 'hotfix']);
+  });
+
+  it('supports permissions array as an explicit allowlist', () => {
+    const content = `---
+name: "Allowlist"
+safety_mode: safe
+permissions:
+  - spawn_agent
+  - signal_parent
+---
+
+Do work.`;
+
+    const profile = parseAgentFile('agents/allowlist.md', content);
+    expect(profile.policy.permissions.spawnAgents).toBe(true);
+    expect(profile.policy.permissions.signalParent).toBe(true);
+    expect(profile.policy.permissions.webAccess).toBe(false);
+    expect(profile.policy.permissions.deleteFiles).toBe(false);
+  });
+
+  it('escalates to gloves_off when task input matches trigger phrase', () => {
+    const content = `---
+name: "Adaptive"
+safety_mode: safe
+gloves_off_triggers:
+  - incident
+---
+
+Do work.`;
+    const profile = parseAgentFile('agents/adaptive.md', content);
+
+    const resolved = resolvePolicyForInput(profile.policy, 'urgent incident response, ship now');
+    expect(resolved.escalated).toBe(true);
+    expect(resolved.policy.mode).toBe('gloves_off');
+    expect(resolved.trigger).toBe('incident');
+    expect(resolved.policy.permissions.webAccess).toBe(true);
   });
 });

@@ -1,11 +1,20 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { GenerateContentStreamResult, Tool, ChatSession } from '@google/generative-ai';
+import type { GenerateContentStreamResult, Tool } from '@google/generative-ai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
 
+/**
+ * Gemini provider that manages conversation history manually using raw Content
+ * objects and model.generateContentStream() instead of ChatSession.
+ *
+ * This avoids ChatSession's async history-update timing issues and preserves
+ * thought signatures (opaque fields Gemini 3 returns on model Content) by
+ * storing the model's raw response Content and replaying it verbatim.
+ */
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenerativeAI;
   private activeStreams = new Map<string, AbortController>();
-  private activeChats = new Map<string, ChatSession>();
+  /** Raw Gemini Content[] per session - preserves thought signatures exactly. */
+  private sessionContents = new Map<string, any[]>();
 
   constructor(apiKey: string) {
     this.client = new GoogleGenerativeAI(apiKey);
@@ -33,55 +42,52 @@ export class GeminiProvider implements AIProvider {
         })),
       }] : undefined;
 
-      // Reuse existing ChatSession if available (follow-up turn after tool calls).
-      // The ChatSession internally tracks all history including thought signatures,
-      // so we never have to reconstruct function call parts manually.
-      let chat = this.activeChats.get(config.sessionId);
-      let messageParts: any[];
+      let contents: any[];
 
-      if (chat) {
-        // Follow-up call: send function responses from the trailing tool messages
+      if (this.sessionContents.has(config.sessionId)) {
+        // Follow-up turn: retrieve stored contents (includes model's raw
+        // response with thought signatures) and append function responses.
+        contents = [...this.sessionContents.get(config.sessionId)!];
+
+        // Extract trailing tool messages from kernel history
         const toolMsgs: Message[] = [];
         for (let i = history.length - 1; i >= 0; i--) {
           if (history[i].role === 'tool') toolMsgs.unshift(history[i]);
           else break;
         }
-        messageParts = toolMsgs.map(t => {
-          const fr: any = { name: t.toolCall!.name, response: { result: t.content } };
-          if (t.toolCall!.id) fr.id = t.toolCall!.id;
-          return { functionResponse: fr };
-        });
+
+        // Append as a single "function" role Content (matches SDK convention)
+        if (toolMsgs.length > 0) {
+          contents.push({
+            role: 'function',
+            parts: toolMsgs.map(t => ({
+              functionResponse: {
+                name: t.toolCall!.name,
+                response: { result: t.content },
+              },
+            })),
+          });
+        }
       } else {
-        // First call: create new ChatSession with initial history
-        const geminiHistory = history
+        // First call: build contents from kernel history
+        contents = history
           .filter((m) => m.role !== 'tool')
           .map((m) => ({
-            role: m.role === 'model' ? 'model' as const : 'user' as const,
+            role: m.role === 'model' ? 'model' : 'user',
             parts: [{ text: m.content }],
           }));
-
-        const lastMsg = geminiHistory.pop();
-        if (!lastMsg) {
-          yield { type: 'error', error: 'No input message' };
-          return;
-        }
-
-        chat = model.startChat({
-          history: geminiHistory,
-          tools: geminiTools,
-        });
-        messageParts = lastMsg.parts;
       }
 
-      // Store the ChatSession for potential follow-up turns
-      this.activeChats.set(config.sessionId, chat);
-
-      const result: GenerateContentStreamResult = await chat.sendMessageStream(
-        messageParts,
-        { signal: controller.signal }
+      const result: GenerateContentStreamResult = await model.generateContentStream(
+        { contents, tools: geminiTools } as any,
+        { signal: controller.signal },
       );
 
       let totalTokens = 0;
+      // Collect raw parts from stream chunks (not from aggregated response,
+      // which strips thought/thoughtSignature fields via aggregateResponses).
+      const rawModelParts: any[] = [];
+      let modelRole = 'model';
 
       for await (const chunk of result.stream) {
         if (controller.signal.aborted) {
@@ -92,7 +98,15 @@ export class GeminiProvider implements AIProvider {
         const candidate = chunk.candidates?.[0];
         if (!candidate) continue;
 
+        if (candidate.content?.role) {
+          modelRole = candidate.content.role;
+        }
+
         for (const part of candidate.content?.parts ?? []) {
+          // Store the raw part reference - preserves thought, thoughtSignature,
+          // and any other opaque fields from the JSON-parsed SSE data.
+          rawModelParts.push(part);
+
           if (part.text) {
             yield { type: 'text', text: part.text };
           }
@@ -109,14 +123,21 @@ export class GeminiProvider implements AIProvider {
         }
 
         if (chunk.usageMetadata) {
-          totalTokens = chunk.usageMetadata.totalTokenCount ?? totalTokens;
+          // Track output tokens only - totalTokenCount includes input which
+          // grows with history and causes quadratic budget consumption in
+          // agentic loops. candidatesTokenCount is the actual new work.
+          totalTokens = chunk.usageMetadata.candidatesTokenCount ?? totalTokens;
         }
       }
 
-      // Await the aggregated response so the ChatSession updates its internal
-      // history with the model's turn (including thought signatures) before
-      // we send the next message.
-      await result.response;
+      // Build model Content from raw stream parts (preserves thought signatures).
+      // Do NOT use result.response - the SDK's aggregateResponses strips unknown fields.
+      if (rawModelParts.length > 0) {
+        const modelContent = { role: modelRole, parts: rawModelParts };
+        this.sessionContents.set(config.sessionId, [...contents, modelContent]);
+      } else {
+        this.sessionContents.set(config.sessionId, contents);
+      }
 
       yield { type: 'done', tokenCount: totalTokens };
     } catch (err) {
@@ -136,11 +157,11 @@ export class GeminiProvider implements AIProvider {
       controller.abort();
       this.activeStreams.delete(sessionId);
     }
-    this.activeChats.delete(sessionId);
+    this.sessionContents.delete(sessionId);
   }
 
-  /** Clean up a completed session's ChatSession reference. */
+  /** Clean up a completed session's Content history. */
   endSession(sessionId: string): void {
-    this.activeChats.delete(sessionId);
+    this.sessionContents.delete(sessionId);
   }
 }

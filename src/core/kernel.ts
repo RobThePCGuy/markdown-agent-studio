@@ -9,6 +9,18 @@ import { ToolPluginRegistry } from './tool-plugin';
 import { createBuiltinRegistry } from './plugins';
 import { createCustomToolPlugin } from './plugins/custom-tool-plugin';
 import { computeHash } from '../utils/vfs-helpers';
+import { resolvePolicyForInput } from '../utils/parse-agent';
+
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
+const QUOTA_ERROR_PATTERNS = [
+  /quota/i,
+  /rate[\s-]?limit/i,
+  /\b429\b/,
+  /too many requests/i,
+  /resource[_\s-]?exhausted/i,
+  /exceeded.*quota/i,
+];
 
 type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
 
@@ -38,6 +50,8 @@ export class Kernel {
   private _totalTokens = 0;
   private childCounts = new Map<string, number>();
   private seenHashes = new Set<string>();
+  private quotaHaltTriggered = false;
+  private budgetHaltTriggered = false;
 
   constructor(deps: KernelDeps) {
     this.deps = deps;
@@ -67,6 +81,8 @@ export class Kernel {
   pause(): void { this._paused = true; }
   resume(): void {
     this._paused = false;
+    this.quotaHaltTriggered = false;
+    this.budgetHaltTriggered = false;
     this.processQueue();
   }
 
@@ -79,6 +95,9 @@ export class Kernel {
       this.deps.sessionStore?.getState().closeSession(session.activationId, 'aborted');
     }
     this.activeSessions.clear();
+    this.queue = [];
+    this.quotaHaltTriggered = false;
+    this.budgetHaltTriggered = false;
     this.globalController = new AbortController();
   }
 
@@ -96,8 +115,14 @@ export class Kernel {
   async runUntilEmpty(): Promise<void> {
     await this.processQueue();
 
-    // Wait for all active sessions to complete
-    while (this.activeSessions.size > 0 || this.queue.length > 0) {
+    // Wait for all active sessions to complete.
+    // If paused with queued work, return so caller can decide when to resume.
+    while (true) {
+      const hasActive = this.activeSessions.size > 0;
+      const hasQueued = this.queue.length > 0;
+      if (!hasActive && (!hasQueued || this._paused)) {
+        break;
+      }
       await new Promise((r) => setTimeout(r, 10));
       if (!this._paused) {
         await this.processQueue();
@@ -127,14 +152,8 @@ export class Kernel {
 
       // Token budget check
       if (this._totalTokens >= this.deps.config.tokenBudget) {
-        this.deps.eventLog.getState().append({
-          type: 'warning',
-          agentId: activation.agentId,
-          activationId: activation.id,
-          data: { message: 'Token budget exceeded, pausing' },
-        });
         this.queue.unshift(activation);
-        this.pause();
+        this.haltForBudget(activation, 'before-start');
         break;
       }
 
@@ -189,6 +208,20 @@ export class Kernel {
       sessionRegistry = this.deps.toolRegistry!.cloneWith(customPlugins);
     }
 
+    const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
+    if (policyResolution.escalated) {
+      this.deps.eventLog.getState().append({
+        type: 'warning',
+        agentId: activation.agentId,
+        activationId: activation.id,
+        data: {
+          message:
+            `Task input matched frontmatter gloves_off trigger '${policyResolution.trigger}'. ` +
+            'Policy escalated to gloves_off for this activation.',
+        },
+      });
+    }
+
     const toolHandler = new ToolHandler({
       pluginRegistry: sessionRegistry,
       vfs: this.deps.vfs,
@@ -202,7 +235,9 @@ export class Kernel {
       maxDepth: this.deps.config.maxDepth,
       maxFanout: this.deps.config.maxFanout,
       childCount: this.childCounts.get(activation.agentId) ?? 0,
+      policy: policyResolution.policy,
       apiKey: this.deps.apiKey,
+      preferredModel: this.resolvePreferredModel(),
     });
 
     try {
@@ -213,7 +248,11 @@ export class Kernel {
         let hadToolCalls = false;
 
         const stream = this.deps.aiProvider.chat(
-          { sessionId: activation.id, systemPrompt: profile.systemPrompt, model: profile.model },
+          {
+            sessionId: activation.id,
+            systemPrompt: profile.systemPrompt,
+            model: this.resolveSessionModel(profile.model),
+          },
           session.history,
           sessionRegistry.toToolDefinitions()
         );
@@ -276,6 +315,12 @@ export class Kernel {
 
             case 'error':
               session.status = 'error';
+              {
+                const errorMessage = chunk.error ?? 'Unknown stream error';
+                if (this.isQuotaError(errorMessage)) {
+                  this.haltForQuota(activation, errorMessage);
+                }
+              }
               this.deps.eventLog.getState().append({
                 type: 'error',
                 agentId: activation.agentId,
@@ -299,12 +344,7 @@ export class Kernel {
 
         // Token budget check between turns
         if (this._totalTokens >= this.deps.config.tokenBudget) {
-          this.deps.eventLog.getState().append({
-            type: 'warning',
-            agentId: activation.agentId,
-            activationId: activation.id,
-            data: { message: 'Token budget exceeded mid-session, stopping' },
-          });
+          this.haltForBudget(activation, 'mid-session');
           break;
         }
       }
@@ -322,17 +362,22 @@ export class Kernel {
 
     } catch (err) {
       session.status = 'error';
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (this.isQuotaError(errorMessage)) {
+        this.haltForQuota(activation, errorMessage);
+      }
       this.deps.eventLog.getState().append({
         type: 'error',
         agentId: activation.agentId,
         activationId: activation.id,
-        data: { error: err instanceof Error ? err.message : String(err) },
+        data: { error: errorMessage },
       });
     } finally {
       this._completedSessions.push(session);
       this.activeSessions.delete(activation.id);
       this.globalController.signal.removeEventListener('abort', onGlobalAbort);
       this.deps.sessionStore?.getState().closeSession(activation.id, session.status);
+      this.deps.aiProvider.endSession?.(activation.id);
       release();
       this.deps.onSessionUpdate?.(session);
 
@@ -353,6 +398,74 @@ export class Kernel {
         setTimeout(check, 50);
       };
       check();
+    });
+  }
+
+  private resolvePreferredModel(): string {
+    const configured = typeof this.deps.config.model === 'string' ? this.deps.config.model.trim() : '';
+    if (configured && !LEGACY_GEMINI_MODEL.test(configured)) {
+      return configured;
+    }
+    return DEFAULT_MODEL;
+  }
+
+  private resolveSessionModel(profileModel: string | undefined): string {
+    const profile = typeof profileModel === 'string' ? profileModel.trim() : '';
+    if (profile && !LEGACY_GEMINI_MODEL.test(profile)) {
+      return profile;
+    }
+    return this.resolvePreferredModel();
+  }
+
+  private isQuotaError(message: unknown): boolean {
+    if (typeof message !== 'string') return false;
+    return QUOTA_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+  }
+
+  private haltForQuota(activation: Activation, errorMessage: string): void {
+    if (this.quotaHaltTriggered) return;
+    this.quotaHaltTriggered = true;
+    this._paused = true;
+
+    for (const [activationId, active] of this.activeSessions.entries()) {
+      if (activationId !== activation.id) {
+        active.controller.abort();
+      }
+    }
+
+    this.deps.eventLog.getState().append({
+      type: 'warning',
+      agentId: activation.agentId,
+      activationId: activation.id,
+      data: {
+        message:
+          `Quota/rate-limit detected, pausing run and aborting other sessions. ` +
+          `Error: ${errorMessage}`,
+      },
+    });
+  }
+
+  private haltForBudget(activation: Activation, phase: 'before-start' | 'mid-session'): void {
+    if (this.budgetHaltTriggered) return;
+    this.budgetHaltTriggered = true;
+    this._paused = true;
+
+    for (const [activationId, active] of this.activeSessions.entries()) {
+      if (activationId !== activation.id) {
+        active.controller.abort();
+      }
+    }
+
+    const where = phase === 'before-start' ? 'before starting the next activation' : 'during an active session';
+    this.deps.eventLog.getState().append({
+      type: 'warning',
+      agentId: activation.agentId,
+      activationId: activation.id,
+      data: {
+        message:
+          `Token budget reached (${this._totalTokens}/${this.deps.config.tokenBudget}) ${where}. ` +
+          'Run paused and other sessions aborted.',
+      },
     });
   }
 }

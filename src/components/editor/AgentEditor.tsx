@@ -1,9 +1,11 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import Editor, { type OnMount, type Monaco } from '@monaco-editor/react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import { useUI, vfsStore } from '../../stores/use-stores';
+import { useUI, uiStore, vfsStore, agentRegistry } from '../../stores/use-stores';
 import { EditorToolbar } from './EditorToolbar';
 import { validateAgentContent } from '../../utils/agent-validator';
+
+let themeRegistered = false;
 
 export function AgentEditor() {
   const editingFilePath = useUI((s) => s.editingFilePath);
@@ -12,6 +14,13 @@ export function AgentEditor() {
   const monacoRef = useRef<Monaco | null>(null);
   const [content, setContent] = useState('');
   const validateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
+    };
+  }, []);
 
   // Load file content when editingFilePath changes
   useEffect(() => {
@@ -54,27 +63,47 @@ export function AgentEditor() {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
-    // Define Catppuccin-inspired theme
-    monaco.editor.defineTheme('catppuccin-mocha', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6c7086' },
-        { token: 'keyword', foreground: 'cba6f7' },
-        { token: 'string', foreground: 'a6e3a1' },
-        { token: 'number', foreground: 'fab387' },
-        { token: 'type', foreground: '89b4fa' },
-      ],
-      colors: {
-        'editor.background': '#1e1e2e',
-        'editor.foreground': '#cdd6f4',
-        'editor.lineHighlightBackground': '#313244',
-        'editor.selectionBackground': '#45475a',
-        'editorCursor.foreground': '#f5e0dc',
-        'editorGutter.background': '#181825',
+    // Define theme once (Monaco themes are global singletons)
+    if (!themeRegistered) {
+      monaco.editor.defineTheme('catppuccin-mocha', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [
+          { token: 'comment', foreground: '6c7086' },
+          { token: 'keyword', foreground: 'cba6f7' },
+          { token: 'string', foreground: 'a6e3a1' },
+          { token: 'number', foreground: 'fab387' },
+          { token: 'type', foreground: '89b4fa' },
+        ],
+        colors: {
+          'editor.background': '#1e1e2e',
+          'editor.foreground': '#cdd6f4',
+          'editor.lineHighlightBackground': '#313244',
+          'editor.selectionBackground': '#45475a',
+          'editorCursor.foreground': '#f5e0dc',
+          'editorGutter.background': '#181825',
+        },
+      });
+      themeRegistered = true;
+    }
+    monaco.editor.setTheme('catppuccin-mocha');
+
+    // Ctrl+S / Cmd+S to save
+    editor.addAction({
+      id: 'agent-editor-save',
+      label: 'Save File',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      run: (ed) => {
+        const filePath = uiStore.getState().editingFilePath;
+        if (!filePath) return;
+        const value = ed.getValue();
+        vfsStore.getState().write(filePath, value, {});
+        if (filePath.startsWith('agents/')) {
+          agentRegistry.getState().registerFromFile(filePath, value);
+        }
+        uiStore.getState().setEditorDirty(false);
       },
     });
-    monaco.editor.setTheme('catppuccin-mocha');
 
     // Run initial validation
     runValidation(content);

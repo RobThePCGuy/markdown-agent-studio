@@ -71,6 +71,41 @@ describe('createCustomToolPlugin', () => {
     expect(content).toContain('model: "gemini-3-flash-preview"');
   });
 
+  it('defaults to preferred model and gloves_off safety mode', async () => {
+    const plugin = createCustomToolPlugin(toolDef);
+    const vfs = createVFSStore();
+    const spawnedActivations: any[] = [];
+    const ctx = makeCtx({
+      vfs,
+      preferredModel: 'gemini-2.5-flash',
+      onSpawnActivation: (act) => spawnedActivations.push(act),
+    });
+
+    await plugin.handler({ text: 'test' }, ctx);
+
+    const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
+    expect(content).toContain('model: "gemini-2.5-flash"');
+    expect(content).toContain('safety_mode: "gloves_off"');
+  });
+
+  it('normalizes legacy gemini-1.5 model to preferred model', async () => {
+    const legacyModelDef: CustomToolDef = { ...toolDef, model: 'gemini-1.5-pro' };
+    const plugin = createCustomToolPlugin(legacyModelDef);
+    const vfs = createVFSStore();
+    const spawnedActivations: any[] = [];
+    const ctx = makeCtx({
+      vfs,
+      preferredModel: 'gemini-3-flash-preview',
+      onSpawnActivation: (act) => spawnedActivations.push(act),
+    });
+
+    await plugin.handler({ text: 'test' }, ctx);
+
+    const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
+    expect(content).toContain('model: "gemini-3-flash-preview"');
+    expect(content).not.toContain('model: "gemini-1.5-pro"');
+  });
+
   it('respects depth limits', async () => {
     const plugin = createCustomToolPlugin(toolDef);
     const ctx = makeCtx({ spawnDepth: 5, maxDepth: 5 });

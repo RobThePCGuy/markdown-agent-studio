@@ -4,6 +4,7 @@ import { createVFSStore } from '../stores/vfs-store';
 import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
 import { createBuiltinRegistry } from './plugins';
+import type { AgentPolicy } from '../types';
 
 describe('ToolHandler', () => {
   let handler: ToolHandler;
@@ -151,6 +152,35 @@ describe('ToolHandler', () => {
       });
       expect(result).toContain('fanout limit');
     });
+
+    it('normalizes legacy model and defaults safety mode for spawned agents', async () => {
+      const modelAwareHandler = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/writer.md',
+        currentActivationId: 'act-legacy-spawn',
+        parentAgentId: 'agents/orchestrator.md',
+        spawnDepth: 1,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        preferredModel: 'gemini-2.5-flash',
+      });
+
+      await modelAwareHandler.handle('spawn_agent', {
+        filename: 'legacy-helper.md',
+        content: '---\nname: "Legacy Helper"\nmodel: "gemini-1.5-pro"\n---\nHelp out.',
+        task: 'Assist',
+      });
+
+      const content = vfs.getState().read('agents/legacy-helper.md') ?? '';
+      expect(content).toContain('model: gemini-2.5-flash');
+      expect(content).toContain('safety_mode: gloves_off');
+      expect(content).not.toContain('gemini-1.5-pro');
+    });
   });
 
   describe('signal_parent', () => {
@@ -185,6 +215,102 @@ describe('ToolHandler', () => {
     it('returns error for unknown tool name', async () => {
       const result = await handler.handle('unknown_tool', {});
       expect(result).toContain('Unknown tool');
+    });
+  });
+
+  describe('frontmatter policy enforcement', () => {
+    const restrictedPolicy: AgentPolicy = {
+      mode: 'safe',
+      reads: ['memory/**'],
+      writes: ['artifacts/**'],
+      allowedTools: [],
+      blockedTools: [],
+      glovesOffTriggers: [],
+      permissions: {
+        spawnAgents: false,
+        editAgents: false,
+        deleteFiles: false,
+        webAccess: false,
+        signalParent: true,
+        customTools: false,
+      },
+    };
+
+    it('blocks web tools when web access is disabled', async () => {
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-1',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: restrictedPolicy,
+      });
+
+      const result = await restricted.handle('web_search', { query: 'latest AI' });
+      expect(result).toContain('Policy blocked');
+      expect(result).toContain('web_access');
+    });
+
+    it('blocks write outside allowed write scopes', async () => {
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-2',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: restrictedPolicy,
+      });
+
+      const result = await restricted.handle('vfs_write', {
+        path: 'memory/notes.md',
+        content: 'x',
+      });
+      expect(result).toContain('Policy blocked write');
+      expect(vfs.getState().exists('memory/notes.md')).toBe(false);
+    });
+
+    it('bypasses restrictions in gloves_off mode', async () => {
+      const glovesOffPolicy: AgentPolicy = {
+        ...restrictedPolicy,
+        mode: 'gloves_off',
+      };
+
+      const unrestricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/unrestricted.md',
+        currentActivationId: 'act-policy-3',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: glovesOffPolicy,
+      });
+
+      const result = await unrestricted.handle('vfs_write', {
+        path: 'memory/notes.md',
+        content: 'ok',
+      });
+      expect(result).toContain('Written to');
+      expect(vfs.getState().read('memory/notes.md')).toBe('ok');
     });
   });
 });

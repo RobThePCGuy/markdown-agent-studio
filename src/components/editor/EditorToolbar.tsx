@@ -8,8 +8,6 @@ interface EditorToolbarProps {
   onContentChange: (content: string, path: string) => void;
 }
 
-let untitledCounter = 0;
-
 export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) {
   const editingFilePath = useUI((s) => s.editingFilePath);
   const editorDirty = useUI((s) => s.editorDirty);
@@ -38,11 +36,16 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
 
   const handleTemplateSelect = useCallback((template: AgentTemplate) => {
     if (editorDirty && !window.confirm('You have unsaved changes. Discard them?')) return;
-    untitledCounter++;
-    const newPath = `agents/untitled-${untitledCounter}.md`;
+    const existing = [...filesMap.keys()].filter((p) => p.match(/^agents\/untitled-\d+\.md$/));
+    const nextNum = existing.length + 1;
+    const newPath = `agents/untitled-${nextNum}.md`;
+    // Write to VFS first so the editor useEffect finds content when editingFilePath changes
+    vfsStore.getState().write(newPath, template.content, {});
+    agentRegistry.getState().registerFromFile(newPath, template.content);
     onContentChange(template.content, newPath);
     setEditingFile(newPath);
-  }, [editorDirty, onContentChange, setEditingFile]);
+    setEditorDirty(false);
+  }, [editorDirty, onContentChange, setEditingFile, setEditorDirty, filesMap]);
 
   const handlePathSubmit = useCallback(() => {
     if (!pathInput.trim() || !editingFilePath) return;

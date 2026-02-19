@@ -120,6 +120,66 @@ describe('Kernel', () => {
     expect(kernel.totalTokens).toBeGreaterThan(0);
   });
 
+  it('normalizes legacy gemini-1.5 model to configured kernel model', async () => {
+    vfs.getState().write(
+      'agents/legacy.md',
+      '---\nname: "Legacy"\nmodel: "gemini-1.5-pro"\n---\nLegacy agent.',
+      {},
+    );
+    registry.getState().registerFromFile('agents/legacy.md', vfs.getState().read('agents/legacy.md')!);
+
+    const modelProvider = new MockAIProvider([
+      { type: 'text', text: 'ok' },
+      { type: 'done', tokenCount: 10 },
+    ]);
+    kernel = new Kernel({
+      aiProvider: modelProvider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: {
+        maxConcurrency: 1,
+        maxDepth: 5,
+        maxFanout: 5,
+        tokenBudget: 500000,
+        model: 'gemini-2.5-flash',
+      },
+    });
+
+    kernel.enqueue({
+      agentId: 'agents/legacy.md',
+      input: 'Run',
+      spawnDepth: 0,
+      priority: 0,
+    });
+
+    await kernel.runUntilEmpty();
+    expect(modelProvider.seenConfigs[0]?.model).toBe('gemini-2.5-flash');
+  });
+
+  it('pauses queue and returns when quota/rate-limit error is hit', async () => {
+    const quotaProvider = new MockAIProvider([
+      { type: 'error', error: '429 RESOURCE_EXHAUSTED: quota exceeded' },
+    ]);
+    kernel = new Kernel({
+      aiProvider: quotaProvider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: { maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000 },
+    });
+
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'first', spawnDepth: 0, priority: 0 });
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'second', spawnDepth: 0, priority: 1 });
+
+    await kernel.runUntilEmpty();
+
+    expect(kernel.isPaused).toBe(true);
+    expect(kernel.queueLength).toBe(1);
+    expect(kernel.completedSessions).toHaveLength(1);
+    expect(kernel.completedSessions[0].status).toBe('error');
+  });
+
   it('loops back to AI after tool calls with results', async () => {
     // Turn 1: model reads a file via vfs_read
     // Turn 2: model emits final text response

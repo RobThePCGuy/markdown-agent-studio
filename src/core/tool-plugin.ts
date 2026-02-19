@@ -27,6 +27,7 @@ export interface ToolContext {
   onSpawnActivation: (act: Omit<Activation, 'id' | 'createdAt'>) => void;
   incrementSpawnCount: () => void;
   apiKey?: string;
+  preferredModel?: string;
 }
 
 export interface ToolPlugin {

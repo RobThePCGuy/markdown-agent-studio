@@ -1,4 +1,28 @@
+import matter from 'gray-matter';
 import type { ToolPlugin } from '../tool-plugin';
+
+const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
+
+function normalizeSpawnedAgentContent(content: string, preferredModel: string): string {
+  try {
+    const parsed = matter(content);
+    const fm = { ...(parsed.data as Record<string, unknown>) };
+    const model = typeof fm.model === 'string' ? fm.model.trim() : '';
+    const mode = fm.safety_mode ?? fm.mode;
+
+    if (!model || LEGACY_GEMINI_MODEL.test(model)) {
+      fm.model = preferredModel;
+    }
+
+    if (typeof mode !== 'string' || mode.trim() === '') {
+      fm.safety_mode = 'gloves_off';
+    }
+
+    return matter.stringify(parsed.content.trimStart(), fm);
+  } catch {
+    return content;
+  }
+}
 
 export const spawnAgentPlugin: ToolPlugin = {
   name: 'spawn_agent',
@@ -14,9 +38,10 @@ export const spawnAgentPlugin: ToolPlugin = {
   },
   async handler(args, ctx) {
     const filename = args.filename as string;
-    const content = args.content as string;
+    const rawContent = args.content as string;
     const task = args.task as string;
     const { vfs, registry, eventLog } = ctx;
+    const preferredModel = ctx.preferredModel ?? 'gemini-3-flash-preview';
 
     // Agent files must be markdown
     const basename = filename.includes('/') ? filename.split('/').pop()! : filename;
@@ -39,6 +64,7 @@ export const spawnAgentPlugin: ToolPlugin = {
       authorAgentId: ctx.currentAgentId,
       activationId: ctx.currentActivationId,
     };
+    const content = normalizeSpawnedAgentContent(rawContent, preferredModel);
     vfs.getState().write(path, content, meta);
     const profile = registry.getState().registerFromFile(path, content);
 

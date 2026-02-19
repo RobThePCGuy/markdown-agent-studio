@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createEventLog } from './event-log';
+import { createVFSStore } from './vfs-store';
 
 describe('Event Log', () => {
   let log: ReturnType<typeof createEventLog>;
+  let vfs: ReturnType<typeof createVFSStore>;
 
   beforeEach(() => {
-    log = createEventLog();
+    vfs = createVFSStore();
+    log = createEventLog(vfs);
   });
 
   it('appends entries', () => {
@@ -48,5 +51,18 @@ describe('Event Log', () => {
     const json = log.getState().exportJSON();
     const parsed = JSON.parse(json);
     expect(parsed).toHaveLength(1);
+  });
+
+  it('captures replay checkpoints with file snapshots', () => {
+    vfs.getState().write('artifacts/a.md', 'A', {});
+    log.getState().append({ type: 'activation', agentId: 'a', activationId: 'x', data: {} });
+
+    vfs.getState().write('artifacts/b.md', 'B', {});
+    log.getState().append({ type: 'file_change', agentId: 'a', activationId: 'x', data: {} });
+
+    const cps = log.getState().checkpoints;
+    expect(cps).toHaveLength(2);
+    expect(cps[0].files['artifacts/a.md']).toBe('A');
+    expect(cps[1].files['artifacts/b.md']).toBe('B');
   });
 });

@@ -40,4 +40,5 @@ export interface AIProvider {
     tools: ToolDeclaration[]
   ): AsyncIterable<StreamChunk>;
   abort(sessionId: string): Promise<void>;
+  endSession?(sessionId: string): void;
 }

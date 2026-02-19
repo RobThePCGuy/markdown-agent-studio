@@ -72,8 +72,8 @@ export function TemplatePicker({ onSelect }: TemplatePickerProps) {
                 fontSize: 12,
                 color: '#cdd6f4',
               }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#45475a'; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'transparent'; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#45475a'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
             >
               <div style={{ fontWeight: 600 }}>{t.name}</div>
               <div style={{ fontSize: 11, color: '#6c7086' }}>{t.description}</div>
@@ -96,8 +96,8 @@ export function TemplatePicker({ onSelect }: TemplatePickerProps) {
                     fontSize: 12,
                     color: '#cdd6f4',
                   }}
-                  onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#45475a'; }}
-                  onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'transparent'; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#45475a'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <div style={{ fontWeight: 600 }}>{t.name}</div>
                   <div style={{ fontSize: 11, color: '#6c7086' }}>{t.description}</div>

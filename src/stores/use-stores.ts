@@ -12,7 +12,7 @@ import { DiskSync } from '../core/disk-sync';
 // Singleton vanilla stores
 export const vfsStore = createVFSStore();
 export const agentRegistry = createAgentRegistry();
-export const eventLogStore = createEventLog();
+export const eventLogStore = createEventLog(vfsStore);
 export const sessionStore = createSessionStore();
 export const projectStore = createProjectStore();
 export const diskSync = new DiskSync(vfsStore, projectStore, agentRegistry);

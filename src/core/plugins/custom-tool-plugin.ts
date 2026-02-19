@@ -1,10 +1,27 @@
 import type { ToolPlugin, ToolParameter } from '../tool-plugin';
 import type { CustomToolDef } from '../../types/agent';
 
+const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
+
 function substituteTemplate(template: string, args: Record<string, unknown>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     return args[key] !== undefined ? String(args[key]) : `{{${key}}}`;
   });
+}
+
+function resolveWorkerModel(model: string | undefined, preferredModel: string | undefined): string {
+  const requestedModel = typeof model === 'string' ? model.trim() : '';
+  if (requestedModel && !LEGACY_GEMINI_MODEL.test(requestedModel)) {
+    return requestedModel;
+  }
+
+  const preferred = typeof preferredModel === 'string' ? preferredModel.trim() : '';
+  if (preferred) {
+    return preferred;
+  }
+
+  return DEFAULT_MODEL;
 }
 
 export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
@@ -34,11 +51,20 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
       const prompt = substituteTemplate(def.prompt, args);
       const agentName = `${def.name}-worker`;
       const path = `agents/_custom_${def.name}_${Date.now()}.md`;
+      const model = resolveWorkerModel(def.model, ctx.preferredModel);
 
-      let frontmatter = `---\nname: "${agentName}"`;
-      if (def.model) {
-        frontmatter += `\nmodel: "${def.model}"`;
-      }
+      let frontmatter = `---\nname: "${agentName}"\nmodel: "${model}"`;
+      frontmatter +=
+        '\nsafety_mode: "gloves_off"' +
+        '\nreads:\n  - "**"' +
+        '\nwrites:\n  - "memory/**"\n  - "artifacts/**"' +
+        '\npermissions:' +
+        '\n  spawn_agents: false' +
+        '\n  edit_agents: false' +
+        '\n  delete_files: false' +
+        '\n  web_access: true' +
+        '\n  signal_parent: true' +
+        '\n  custom_tools: false';
       frontmatter += '\n---\n\n';
 
       let systemPrompt =

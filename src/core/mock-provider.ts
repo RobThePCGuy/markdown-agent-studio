@@ -4,6 +4,7 @@ export class MockAIProvider implements AIProvider {
   private responseQueue: StreamChunk[][];
   private callIndex = 0;
   private aborted = new Set<string>();
+  readonly seenConfigs: AgentConfig[] = [];
 
   constructor(responses: StreamChunk[]) {
     this.responseQueue = [responses];
@@ -14,6 +15,7 @@ export class MockAIProvider implements AIProvider {
     _history: Message[],
     _tools: ToolDeclaration[]
   ): AsyncIterable<StreamChunk> {
+    this.seenConfigs.push(config);
     const responses = this.callIndex < this.responseQueue.length
       ? this.responseQueue[this.callIndex]
       : [{ type: 'done' as const, tokenCount: 0 }];
