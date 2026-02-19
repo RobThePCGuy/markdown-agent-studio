@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useEventLog } from '../../stores/use-stores';
 import { useKernel } from '../../hooks/useKernel';
+import styles from './EventLogView.module.css';
 
 export function EventLogView() {
   const entries = useEventLog((s) => s.entries);
@@ -21,62 +22,69 @@ export function EventLogView() {
   };
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, opacity: 0.5 }}>
+    <div className={styles.container}>
+      <div className={styles.header}>
         Event Log ({entries.length} entries)
       </div>
-      <div style={{ fontSize: 10.5, color: '#6c7086', marginBottom: 8 }}>
+      <div className={styles.meta}>
         Replay checkpoints: {checkpoints.length}
         {lastReplayEventId ? ` | Last replay: ${lastReplayEventId}` : ''}
       </div>
       {status && (
-        <div style={{ fontSize: 11, color: '#89b4fa', marginBottom: 8 }}>
+        <div className={styles.status}>
           {status}
         </div>
       )}
-      {recent.map((entry) => (
-        <div key={entry.id} style={{
-          fontSize: 11,
-          padding: '4px 8px',
-          borderBottom: '1px solid #313244',
-          fontFamily: 'monospace',
-        }}>
-          <span style={{ color: '#6c7086', marginRight: 8 }}>
-            {new Date(entry.timestamp).toLocaleTimeString()}
-          </span>
-          <span style={{ color: typeColor(entry.type), marginRight: 8 }}>
-            [{entry.type}]
-          </span>
-          <span style={{ opacity: 0.7 }}>{entry.agentId}</span>
-          <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
-            <button
-              onClick={() => handleRestore(entry.id)}
-              style={actionBtn('#313244', '#cdd6f4')}
-            >
-              Restore
-            </button>
-            <button
-              onClick={() => void handleReplay(entry.id)}
-              disabled={isRunning}
-              style={actionBtn(isRunning ? '#45475a' : '#89b4fa', isRunning ? '#6c7086' : '#1e1e2e')}
-            >
-              Replay
-            </button>
-          </div>
-          {entry.data?.error != null && (
-            <div style={{ color: '#f38ba8', marginTop: 2, wordBreak: 'break-word' }}>
-              {String(entry.data.error) as string}
+      <div className={styles.timeline}>
+        {recent.map((entry) => {
+          const color = typeColor(entry.type);
+          return (
+            <div key={entry.id} className={styles.event}>
+              <div
+                className={styles.eventDot}
+                style={{ background: color }}
+              />
+              <span className={styles.eventTime}>
+                {new Date(entry.timestamp).toLocaleTimeString()}
+              </span>
+              <span
+                className={styles.eventType}
+                style={{ color, background: `${color}26` }}
+              >
+                {entry.type}
+              </span>
+              <span className={styles.eventAgent}>{entry.agentId}</span>
+              <div className={styles.eventActions}>
+                <button
+                  className={styles.ghostBtn}
+                  onClick={() => handleRestore(entry.id)}
+                >
+                  Restore
+                </button>
+                <button
+                  className={styles.ghostBtn}
+                  onClick={() => void handleReplay(entry.id)}
+                  disabled={isRunning}
+                >
+                  Replay
+                </button>
+              </div>
+              {entry.data?.error != null && (
+                <div className={styles.eventError}>
+                  {String(entry.data.error) as string}
+                </div>
+              )}
+              {entry.data?.message != null && (
+                <div className={styles.eventMessage}>
+                  {String(entry.data.message) as string}
+                </div>
+              )}
             </div>
-          )}
-          {entry.data?.message != null && (
-            <div style={{ color: '#fab387', marginTop: 2 }}>
-              {String(entry.data.message) as string}
-            </div>
-          )}
-        </div>
-      ))}
+          );
+        })}
+      </div>
       {entries.length === 0 && (
-        <div style={{ opacity: 0.4, fontSize: 12 }}>No events yet. Press Run to start.</div>
+        <div className={styles.empty}>No events yet. Press Run to start.</div>
       )}
     </div>
   );
@@ -91,16 +99,4 @@ function typeColor(type: string): string {
     case 'complete': return '#94e2d5';
     default: return '#cdd6f4';
   }
-}
-
-function actionBtn(bg: string, fg: string): React.CSSProperties {
-  return {
-    background: bg,
-    color: fg,
-    border: 'none',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: 10,
-    cursor: 'pointer',
-  };
 }

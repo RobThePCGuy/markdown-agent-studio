@@ -1,54 +1,6 @@
-import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } from '../../stores/use-stores';
-
-// ---------------------------------------------------------------------------
-// Helper components
-// ---------------------------------------------------------------------------
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: '#89b4fa' }}>
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-function Label({ text, children }: { text: string; children: ReactNode }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-      <span style={{ fontSize: 12, color: '#a6adc8' }}>{text}</span>
-      {children}
-    </label>
-  );
-}
-
-function Divider() {
-  return <hr style={{ border: 'none', borderTop: '1px solid #45475a', margin: '20px 0' }} />;
-}
-
-// ---------------------------------------------------------------------------
-// Shared input styles
-// ---------------------------------------------------------------------------
-
-const inputStyle: CSSProperties = {
-  background: '#1e1e2e',
-  border: '1px solid #45475a',
-  borderRadius: 6,
-  color: '#cdd6f4',
-  padding: '8px 10px',
-  fontSize: 13,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const selectStyle: CSSProperties = {
-  ...inputStyle,
-  cursor: 'pointer',
-};
+import styles from './SettingsModal.module.css';
 
 // ---------------------------------------------------------------------------
 // SettingsModal
@@ -122,44 +74,14 @@ export default function SettingsModal() {
   const model = kernelConfig.model ?? 'gemini-3-flash-preview';
 
   return (
-    <div
-      onClick={handleBackdropClick}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-      }}
-    >
-      <div
-        style={{
-          background: '#313244',
-          borderRadius: 12,
-          width: 480,
-          maxHeight: '85vh',
-          overflowY: 'auto',
-          padding: '24px 28px',
-          position: 'relative',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        }}
-      >
+    <div className={styles.backdrop} onClick={handleBackdropClick}>
+      <div className={styles.modal}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#cdd6f4' }}>Settings</h2>
+        <div className={styles.headerRow}>
+          <h2 className={styles.title}>Settings</h2>
           <button
             onClick={close}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#a6adc8',
-              fontSize: 20,
-              cursor: 'pointer',
-              padding: '0 4px',
-              lineHeight: 1,
-            }}
+            className={styles.closeBtn}
             aria-label="Close settings"
           >
             x
@@ -167,39 +89,35 @@ export default function SettingsModal() {
         </div>
 
         {/* Section 1: API Configuration */}
-        <Section title="API Configuration">
-          <Label text="API Key">
-            <div style={{ display: 'flex', gap: 8 }}>
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>API Configuration</h3>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>API Key</span>
+            <div className={styles.inputRow}>
               <input
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
                 onChange={(e) => uiStore.getState().setApiKey(e.target.value)}
                 placeholder="Enter your Gemini API key"
-                style={{ ...inputStyle, flex: 1 }}
+                className={styles.input}
+                style={{ flex: 1 }}
               />
               <button
                 onClick={() => setShowKey((v) => !v)}
-                style={{
-                  background: '#1e1e2e',
-                  border: '1px solid #45475a',
-                  borderRadius: 6,
-                  color: '#a6adc8',
-                  padding: '8px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
+                className={styles.showKeyBtn}
               >
                 {showKey ? 'Hide' : 'Show'}
               </button>
             </div>
-          </Label>
+          </label>
 
-          <Label text="Model">
+          <label className={styles.label}>
+            <span className={styles.labelText}>Model</span>
             <select
               value={model}
               onChange={(e) => uiStore.getState().setKernelConfig({ model: e.target.value })}
-              style={selectStyle}
+              className={styles.select}
             >
               <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
               <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
@@ -207,101 +125,95 @@ export default function SettingsModal() {
               <option value="gemini-2.5-pro">gemini-2.5-pro</option>
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
             </select>
-          </Label>
-        </Section>
+          </label>
+        </div>
 
-        <Divider />
+        <hr className={styles.divider} />
 
         {/* Section 2: Kernel Limits */}
-        <Section title="Kernel Limits">
-          <Label text="Max Concurrency">
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>Kernel Limits</h3>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Max Concurrency</span>
             <input
               type="number"
               min={1}
               max={10}
               value={kernelConfig.maxConcurrency}
               onChange={(e) => uiStore.getState().setKernelConfig({ maxConcurrency: Number(e.target.value) })}
-              style={inputStyle}
+              className={styles.input}
             />
-          </Label>
+          </label>
 
-          <Label text="Max Depth">
+          <label className={styles.label}>
+            <span className={styles.labelText}>Max Depth</span>
             <input
               type="number"
               min={1}
               max={20}
               value={kernelConfig.maxDepth}
               onChange={(e) => uiStore.getState().setKernelConfig({ maxDepth: Number(e.target.value) })}
-              style={inputStyle}
+              className={styles.input}
             />
-          </Label>
+          </label>
 
-          <Label text="Max Fanout">
+          <label className={styles.label}>
+            <span className={styles.labelText}>Max Fanout</span>
             <input
               type="number"
               min={1}
               max={20}
               value={kernelConfig.maxFanout}
               onChange={(e) => uiStore.getState().setKernelConfig({ maxFanout: Number(e.target.value) })}
-              style={inputStyle}
+              className={styles.input}
             />
-          </Label>
+          </label>
 
-          <Label text="Token Budget">
+          <label className={styles.label}>
+            <span className={styles.labelText}>Token Budget</span>
             <input
               type="number"
               min={50000}
               step={50000}
               value={kernelConfig.tokenBudget}
               onChange={(e) => uiStore.getState().setKernelConfig({ tokenBudget: Number(e.target.value) })}
-              style={inputStyle}
+              className={styles.input}
             />
-          </Label>
-        </Section>
+          </label>
+        </div>
 
-        <Divider />
+        <hr className={styles.divider} />
 
         {/* Section 3: Danger Zone */}
-        <Section title="Danger Zone">
-          <div
-            style={{
-              border: '1px solid #f38ba8',
-              borderRadius: 8,
-              padding: 16,
-            }}
-          >
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#a6adc8' }}>
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>Danger Zone</h3>
+
+          <div className={styles.dangerZone}>
+            <p className={styles.dangerText}>
               This will clear all files, agents, and event logs from the workspace. This action cannot be undone.
             </p>
-            <Label text='Type "CLEAR" to confirm'>
+
+            <label className={styles.label}>
+              <span className={styles.labelText}>Type "CLEAR" to confirm</span>
               <input
                 type="text"
                 placeholder='Type "CLEAR" to confirm'
                 value={clearConfirm}
                 onChange={(e) => setClearConfirm(e.target.value)}
-                style={inputStyle}
+                className={styles.input}
               />
-            </Label>
+            </label>
+
             <button
               disabled={clearConfirm !== 'CLEAR'}
               onClick={handleClearWorkspace}
-              style={{
-                width: '100%',
-                padding: '10px 16px',
-                borderRadius: 6,
-                border: 'none',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: clearConfirm === 'CLEAR' ? 'pointer' : 'not-allowed',
-                background: clearConfirm === 'CLEAR' ? '#f38ba8' : '#45475a',
-                color: clearConfirm === 'CLEAR' ? '#1e1e2e' : '#6c7086',
-                transition: 'background 0.15s, color 0.15s',
-              }}
+              className={styles.dangerBtn}
             >
               Clear Workspace
             </button>
           </div>
-        </Section>
+        </div>
       </div>
     </div>
   );

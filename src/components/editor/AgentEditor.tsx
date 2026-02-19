@@ -4,6 +4,7 @@ import type { editor as monacoEditor } from 'monaco-editor';
 import { useUI, uiStore, vfsStore, agentRegistry } from '../../stores/use-stores';
 import { EditorToolbar } from './EditorToolbar';
 import { validateAgentContent } from '../../utils/agent-validator';
+import styles from './AgentEditor.module.css';
 
 let themeRegistered = false;
 
@@ -78,9 +79,9 @@ export function AgentEditor() {
         colors: {
           'editor.background': '#1e1e2e',
           'editor.foreground': '#cdd6f4',
-          'editor.lineHighlightBackground': '#313244',
+          'editor.lineHighlightBackground': '#33324a',
           'editor.selectionBackground': '#45475a',
-          'editorCursor.foreground': '#f5e0dc',
+          'editorCursor.foreground': '#e0a650',
           'editorGutter.background': '#181825',
         },
       });
@@ -126,9 +127,9 @@ export function AgentEditor() {
   }, [runValidation]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#1e1e2e' }}>
+    <div className={styles.container}>
       <EditorToolbar content={content} onContentChange={handleToolbarContentChange} />
-      <div style={{ flex: 1 }}>
+      <div className={styles.editorArea}>
         {editingFilePath ? (
           <Editor
             height="100%"
@@ -147,14 +148,7 @@ export function AgentEditor() {
             }}
           />
         ) : (
-          <div style={{
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#6c7086',
-            fontSize: 14,
-          }}>
+          <div className={styles.emptyState}>
             Select a file from the workspace or create a new agent from a template.
           </div>
         )}

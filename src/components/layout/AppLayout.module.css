@@ -1,0 +1,31 @@
+.root { height: 100vh; display: flex; flex-direction: column; }
+.content { flex: 1; overflow: hidden; }
+.centerPane { height: 100%; display: flex; flex-direction: column; }
+
+.tabBar {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--depth-3);
+  background: var(--depth-1); height: 36px; align-items: stretch;
+}
+
+.tab {
+  background: transparent; color: var(--text-dim); border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0 var(--space-4); font-size: var(--text-sm);
+  font-weight: var(--weight-semibold); font-family: var(--font-heading);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  display: flex; align-items: center;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active { color: var(--accent-secondary); border-bottom-color: var(--accent-secondary); }
+
+.paneContent { flex: 1; overflow: hidden; }
+
+/* Allotment splitter handle override */
+:global(.sash-container .sash) {
+  transition: background var(--transition-fast) !important;
+}
+:global(.sash-container .sash:hover) {
+  background: rgba(224,166,80,0.4) !important;
+}

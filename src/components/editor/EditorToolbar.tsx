@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useUI, useVFS, vfsStore, agentRegistry } from '../../stores/use-stores';
 import { TemplatePicker } from './TemplatePicker';
 import type { AgentTemplate } from '../../utils/agent-templates';
+import styles from './EditorToolbar.module.css';
 
 interface EditorToolbarProps {
   content: string;
@@ -73,17 +74,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
   const externallyModified = editingFilePath && vfsContent !== null && vfsContent !== undefined && vfsContent !== content && !editorDirty;
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      padding: '4px 8px',
-      borderBottom: '1px solid #313244',
-      background: '#181825',
-      fontSize: 12,
-      color: '#cdd6f4',
-      flexWrap: 'wrap',
-    }}>
+    <div className={styles.toolbar}>
       <TemplatePicker onSelect={handleTemplateSelect} />
 
       {editingFilePath && (
@@ -98,23 +89,15 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
                 value={pathInput}
                 onChange={(e) => setPathInput(e.target.value)}
                 autoFocus
-                style={{
-                  background: '#313244',
-                  color: '#cdd6f4',
-                  border: '1px solid #89b4fa',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  fontSize: 12,
-                  width: 200,
-                }}
+                className={styles.pathInput}
               />
-              <button type="submit" style={smallBtnStyle('#a6e3a1', '#1e1e2e')}>OK</button>
-              <button type="button" onClick={() => setEditingPath(false)} style={smallBtnStyle('#6c7086', '#cdd6f4')}>Cancel</button>
+              <button type="submit" className={`${styles.ghostBtn} ${styles.primary}`}>OK</button>
+              <button type="button" onClick={() => setEditingPath(false)} className={styles.ghostBtn}>Cancel</button>
             </form>
           ) : (
             <span
               onClick={() => { setPathInput(editingFilePath); setEditingPath(true); }}
-              style={{ cursor: 'pointer', color: '#89b4fa', fontFamily: 'monospace', fontSize: 11 }}
+              className={styles.filePath}
               title="Click to rename/move"
             >
               {editingFilePath}
@@ -123,42 +106,31 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
 
           <div style={{ flex: 1 }} />
 
-          {editorDirty && <span style={{ color: '#fab387', fontSize: 11 }}>Unsaved</span>}
+          {editorDirty && <span className={styles.unsaved}>Unsaved</span>}
 
-          <button onClick={handleSave} style={smallBtnStyle('#a6e3a1', '#1e1e2e')}>
+          <button onClick={handleSave} className={`${styles.ghostBtn} ${styles.primary}`}>
             Save
           </button>
-          <button onClick={handleSaveAsTemplate} style={smallBtnStyle('#6c7086', '#cdd6f4')}>
+          <button onClick={handleSaveAsTemplate} className={styles.ghostBtn}>
             Save as Template
           </button>
         </>
       )}
 
       {!editingFilePath && (
-        <span style={{ color: '#6c7086', fontStyle: 'italic' }}>
+        <span className={styles.hint}>
           Select a file or pick a template to start editing
         </span>
       )}
 
       {externallyModified && (
-        <div style={{
-          width: '100%',
-          background: '#fab387',
-          color: '#1e1e2e',
-          padding: '4px 8px',
-          borderRadius: 4,
-          fontSize: 11,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginTop: 4,
-        }}>
+        <div className={styles.externalModified}>
           File changed externally.
           <button
             onClick={() => {
               if (vfsContent) onContentChange(vfsContent, editingFilePath!);
             }}
-            style={{ background: '#1e1e2e', color: '#fab387', border: 'none', borderRadius: 3, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}
+            className={styles.reloadBtn}
           >
             Reload
           </button>
@@ -166,17 +138,4 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
       )}
     </div>
   );
-}
-
-function smallBtnStyle(bg: string, fg: string): React.CSSProperties {
-  return {
-    background: bg,
-    color: fg,
-    border: 'none',
-    borderRadius: 4,
-    padding: '3px 8px',
-    fontSize: 11,
-    fontWeight: 600,
-    cursor: 'pointer',
-  };
 }

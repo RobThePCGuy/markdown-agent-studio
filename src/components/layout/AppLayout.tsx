@@ -7,6 +7,7 @@ import { AgentEditor } from '../editor/AgentEditor';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useUI } from '../../stores/use-stores';
 import SettingsModal from '../settings/SettingsModal';
+import styles from './AppLayout.module.css';
 
 export function AppLayout() {
   const activeTab = useUI((s) => s.activeTab);
@@ -14,35 +15,30 @@ export function AppLayout() {
 
   return (
     <>
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div className={styles.root}>
         <TopBar />
-        <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div className={styles.content}>
           <Allotment>
             <Allotment.Pane preferredSize={250} minSize={180}>
               <WorkspaceExplorer />
             </Allotment.Pane>
             <Allotment.Pane>
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <div style={{
-                  display: 'flex',
-                  gap: 0,
-                  borderBottom: '1px solid #313244',
-                  background: '#181825',
-                }}>
+              <div className={styles.centerPane}>
+                <div className={styles.tabBar}>
                   <button
                     onClick={() => setActiveTab('graph')}
-                    style={tabStyle(activeTab === 'graph')}
+                    className={`${styles.tab}${activeTab === 'graph' ? ` ${styles.active}` : ''}`}
                   >
                     Graph
                   </button>
                   <button
                     onClick={() => setActiveTab('editor')}
-                    style={tabStyle(activeTab === 'editor')}
+                    className={`${styles.tab}${activeTab === 'editor' ? ` ${styles.active}` : ''}`}
                   >
                     Editor
                   </button>
                 </div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div className={styles.paneContent}>
                   {activeTab === 'graph' ? <GraphView /> : <AgentEditor />}
                 </div>
               </div>
@@ -56,17 +52,4 @@ export function AppLayout() {
       <SettingsModal />
     </>
   );
-}
-
-function tabStyle(active: boolean): React.CSSProperties {
-  return {
-    background: active ? '#1e1e2e' : 'transparent',
-    color: active ? '#cdd6f4' : '#6c7086',
-    border: 'none',
-    borderBottom: active ? '2px solid #89b4fa' : '2px solid transparent',
-    padding: '6px 16px',
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: 'pointer',
-  };
 }

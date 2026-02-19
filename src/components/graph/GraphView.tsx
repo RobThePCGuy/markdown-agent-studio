@@ -14,6 +14,7 @@ import { useGraphData } from '../../hooks/useGraphData';
 import { uiStore } from '../../stores/use-stores';
 import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
+import styles from './GraphView.module.css';
 
 const nodeTypes: NodeTypes = {
   agentNode: AgentNode,
@@ -61,7 +62,7 @@ export function GraphView() {
   const errorsCount = events.filter((e) => e.type === 'error').length;
 
   return (
-    <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+    <div className={styles.container}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -75,12 +76,12 @@ export function GraphView() {
         maxZoom={1.6}
         style={{
           background:
-            'radial-gradient(1200px 420px at 25% 8%, rgba(137,180,250,0.11), transparent 50%),' +
-            'radial-gradient(900px 320px at 82% 88%, rgba(249,226,175,0.09), transparent 50%),' +
-            '#11111b',
+            'radial-gradient(ellipse at 50% 50%, rgba(224,166,80,0.06), transparent 70%),' +
+            'radial-gradient(ellipse at 50% 50%, rgba(10,10,20,0.8), transparent),' +
+            '#0a0a14',
         }}
       >
-        <Background color="#313244" gap={22} />
+        <Background variant={"dots" as any} color="#313244" gap={24} size={1} />
         <Controls style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: 8 }} />
         <MiniMap
           nodeColor="#45475a"
@@ -89,114 +90,64 @@ export function GraphView() {
         />
       </ReactFlow>
 
-      <GraphHud
-        totalAgents={agentNodeCount}
-        thinkingCount={thinkingCount}
-        webCount={webCount}
-        runningCount={runningCount}
-        spawnCount={spawnCount}
-        signalCount={signalCount}
-        errorsCount={errorsCount}
-      />
-      <GraphLegend />
+      {/* HUD overlay */}
+      <div className={styles.hud}>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#89b4fa' }} />
+          <span className={styles.hudLabel}>agents</span>
+          <span className={styles.hudValue}>{agentNodeCount}</span>
+        </div>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#a6e3a1' }} />
+          <span className={styles.hudLabel}>running</span>
+          <span className={styles.hudValue}>{runningCount}</span>
+        </div>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#a6e3a1' }} />
+          <span className={styles.hudLabel}>thinking</span>
+          <span className={styles.hudValue}>{thinkingCount}</span>
+        </div>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#74c7ec' }} />
+          <span className={styles.hudLabel}>web</span>
+          <span className={styles.hudValue}>{webCount}</span>
+        </div>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#f9e2af' }} />
+          <span className={styles.hudLabel}>spawns</span>
+          <span className={styles.hudValue}>{spawnCount}</span>
+        </div>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#cba6f7' }} />
+          <span className={styles.hudLabel}>signals</span>
+          <span className={styles.hudValue}>{signalCount}</span>
+        </div>
+        <div className={styles.hudGroup}>
+          <span className={styles.hudDot} style={{ background: '#f38ba8' }} />
+          <span className={styles.hudLabel}>errors</span>
+          <span className={styles.hudValue}>{errorsCount}</span>
+        </div>
+      </div>
+
+      {/* Legend overlay */}
+      <div className={styles.legend}>
+        <span className={styles.legendItem}>
+          <span className={styles.legendLine} style={{ borderTop: '2px dashed #a6e3a1' }} />
+          thinking
+        </span>
+        <span className={styles.legendItem}>
+          <span className={styles.legendLine} style={{ borderTop: '2px dashed #74c7ec' }} />
+          web
+        </span>
+        <span className={styles.legendItem}>
+          <span className={styles.legendLine} style={{ borderTop: '2px dashed #fab387' }} />
+          signal
+        </span>
+        <span className={styles.legendItem}>
+          <span className={styles.legendLine} style={{ borderTop: '2px solid #89b4fa' }} />
+          spawn
+        </span>
+      </div>
     </div>
-  );
-}
-
-function GraphHud(props: {
-  totalAgents: number;
-  thinkingCount: number;
-  webCount: number;
-  runningCount: number;
-  spawnCount: number;
-  signalCount: number;
-  errorsCount: number;
-}) {
-  const { totalAgents, thinkingCount, webCount, runningCount, spawnCount, signalCount, errorsCount } = props;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        display: 'flex',
-        gap: 6,
-        alignItems: 'center',
-        padding: '6px 8px',
-        borderRadius: 10,
-        border: '1px solid #313244',
-        background: 'rgba(24,24,37,0.85)',
-        backdropFilter: 'blur(4px)',
-        pointerEvents: 'none',
-      }}
-    >
-      <HudPill label="agents" value={totalAgents} color="#89b4fa" />
-      <HudPill label="running" value={runningCount} color="#a6e3a1" />
-      <HudPill label="thinking" value={thinkingCount} color="#a6e3a1" />
-      <HudPill label="web" value={webCount} color="#74c7ec" />
-      <HudPill label="spawns" value={spawnCount} color="#f9e2af" />
-      <HudPill label="signals" value={signalCount} color="#cba6f7" />
-      <HudPill label="errors" value={errorsCount} color="#f38ba8" />
-    </div>
-  );
-}
-
-function HudPill({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <span
-      style={{
-        fontSize: 10.5,
-        lineHeight: 1.2,
-        color: '#cdd6f4',
-        background: 'rgba(30,30,46,0.92)',
-        border: `1px solid ${color}`,
-        borderRadius: 999,
-        padding: '3px 7px',
-      }}
-    >
-      {label}: {value}
-    </span>
-  );
-}
-
-function GraphLegend() {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 12,
-        left: 10,
-        display: 'flex',
-        gap: 6,
-        alignItems: 'center',
-        padding: '6px 8px',
-        borderRadius: 10,
-        border: '1px solid #313244',
-        background: 'rgba(24,24,37,0.82)',
-        backdropFilter: 'blur(4px)',
-        pointerEvents: 'none',
-      }}
-    >
-      <LegendLine color="#a6e3a1" label="thinking" dashed />
-      <LegendLine color="#74c7ec" label="web" dashed />
-      <LegendLine color="#fab387" label="signal" dashed />
-      <LegendLine color="#89b4fa" label="spawn" />
-    </div>
-  );
-}
-
-function LegendLine({ color, label, dashed = false }: { color: string; label: string; dashed?: boolean }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#cdd6f4' }}>
-      <span
-        style={{
-          width: 16,
-          height: 0,
-          borderTop: `2px ${dashed ? 'dashed' : 'solid'} ${color}`,
-          display: 'inline-block',
-        }}
-      />
-      {label}
-    </span>
   );
 }

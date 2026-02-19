@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { GraphAgentNodeData } from '../../hooks/useGraphData';
+import styles from './AgentNode.module.css';
 
 const statusColors: Record<string, string> = {
   running: '#a6e3a1',
@@ -29,82 +30,50 @@ export function AgentNode({ data }: NodeProps) {
 
   return (
     <div
+      className={[styles.node, d.selected && styles.selected].filter(Boolean).join(' ')}
       style={{
-        background: 'linear-gradient(180deg, rgba(24,24,37,0.96) 0%, rgba(17,17,27,0.96) 100%)',
-        border: `2px solid ${d.selected ? '#74c7ec' : color}`,
-        borderRadius: 12,
-        padding: '10px 12px',
-        minWidth: 190,
-        color: '#cdd6f4',
-        fontSize: 12,
-        transition: 'border-color 180ms ease, transform 180ms ease',
+        borderColor: d.selected ? '#74c7ec' : color,
         boxShadow: d.selected
           ? '0 0 0 1px rgba(116,199,236,0.25), 0 10px 22px rgba(0,0,0,0.35)'
           : '0 8px 18px rgba(0,0,0,0.35)',
         animation: animation || 'none',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: '#6c7086', width: 7, height: 7 }} />
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <div style={{ fontWeight: 700, fontSize: 12.5, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {d.label}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: color,
-              boxShadow: isRunning ? `0 0 10px ${color}` : 'none',
-            }}
-          />
-          <span style={{ fontSize: 10, opacity: 0.8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {statusLabel}
-          </span>
-        </div>
-      </div>
+      <Handle type="target" position={Position.Top} className={styles.handle} />
 
       <div
+        className={[styles.accentBar, isRunning && styles.running].filter(Boolean).join(' ')}
         style={{
-          fontSize: 10,
-          opacity: 0.62,
-          marginBottom: 8,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          background: color,
+          boxShadow: isRunning ? `0 0 10px ${color}` : 'none',
         }}
-      >
-        {d.path}
+      />
+
+      <div className={styles.header}>
+        <div className={styles.agentName}>{d.label}</div>
+        <span className={styles.statusLabel}>{statusLabel}</span>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <StatPill label="tokens" value={compactTokens(d.tokenCount)} />
-        <StatPill label="children" value={`${d.spawnCount}`} />
-        {d.isStreaming && <StatPill label="thinking" value="..." glow />}
+      <div className={styles.pathRow}>{d.path}</div>
+
+      <div className={styles.statsRow}>
+        <span className={styles.statItem}>
+          <span className={styles.statDot} style={{ background: 'var(--text-dim)' }} />
+          <span>{compactTokens(d.tokenCount)} tok</span>
+        </span>
+        <span className={styles.statItem}>
+          <span className={styles.statDot} style={{ background: 'var(--text-dim)' }} />
+          <span>{d.spawnCount} children</span>
+        </span>
+        {d.isStreaming && (
+          <span className={styles.statItem}>
+            <span className={styles.statDot} style={{ background: 'var(--status-green)' }} />
+            <span>thinking</span>
+          </span>
+        )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: '#6c7086', width: 7, height: 7 }} />
+      <Handle type="source" position={Position.Bottom} className={styles.handle} />
     </div>
-  );
-}
-
-function StatPill({ label, value, glow = false }: { label: string; value: string; glow?: boolean }) {
-  return (
-    <span
-      style={{
-        fontSize: 9.5,
-        lineHeight: 1.2,
-        padding: '3px 6px',
-        borderRadius: 999,
-        border: `1px solid ${glow ? '#a6e3a1' : '#45475a'}`,
-        color: glow ? '#a6e3a1' : '#bac2de',
-        background: glow ? 'rgba(166,227,161,0.08)' : 'rgba(49,50,68,0.55)',
-        fontWeight: 600,
-      }}
-    >
-      {label}: {value}
-    </span>
   );
 }

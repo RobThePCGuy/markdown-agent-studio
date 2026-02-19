@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useVFS, useAgentRegistry, useUI, vfsStore, agentRegistry } from '../../stores/use-stores';
+import styles from './WorkspaceExplorer.module.css';
 
 export function WorkspaceExplorer() {
   const filesMap = useVFS((s) => s.files);
@@ -53,30 +54,23 @@ export function WorkspaceExplorer() {
 
   return (
     <div
-      style={{ height: '100%', background: '#1e1e2e', color: '#cdd6f4', padding: 8, overflow: 'auto' }}
+      className={styles.container}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', opacity: 0.5 }}>
+      <div className={styles.heading}>
         Workspace
       </div>
 
       {allPaths.length === 0 && (
-        <div style={{
-          border: '2px dashed #45475a',
-          borderRadius: 8,
-          padding: 24,
-          textAlign: 'center',
-          fontSize: 12,
-          opacity: 0.5,
-        }}>
+        <div className={styles.emptyDrop}>
           Drop .md files here to get started
         </div>
       )}
 
       {[...groups.entries()].map(([prefix, paths]) => (
-        <div key={prefix} style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#89b4fa', marginBottom: 2 }}>{prefix}</div>
+        <div key={prefix} className={styles.group}>
+          <div className={styles.groupHeader}>{prefix}</div>
           {paths.map((path) => {
             const filename = path.split('/').pop() ?? path;
             const isAgent = path.startsWith('agents/');
@@ -87,25 +81,15 @@ export function WorkspaceExplorer() {
               <div
                 key={path}
                 onClick={() => handleClick(path)}
-                style={{
-                  padding: '2px 8px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  borderRadius: 4,
-                  background: isSelected ? '#313244' : 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
+                className={`${styles.fileItem}${isSelected ? ` ${styles.selected}` : ''}`}
               >
                 {isAgent && (
-                  <span style={{
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: agentStatus === 'idle' ? '#6c7086' : '#a6e3a1',
-                    display: 'inline-block',
-                  }} />
+                  <span
+                    className={styles.agentDot}
+                    style={{ background: agentStatus === 'idle' ? '#6c7086' : '#a6e3a1' }}
+                  />
                 )}
-                {filename}
+                <span className={styles.fileName}>{filename}</span>
               </div>
             );
           })}

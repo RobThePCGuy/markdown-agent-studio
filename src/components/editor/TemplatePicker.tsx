@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useVFS } from '../../stores/use-stores';
 import { getTemplates, type AgentTemplate } from '../../utils/agent-templates';
+import styles from './TemplatePicker.module.css';
 
 interface TemplatePickerProps {
   onSelect: (template: AgentTemplate) => void;
@@ -27,80 +28,44 @@ export function TemplatePicker({ onSelect }: TemplatePickerProps) {
   }, [open]);
 
   return (
-    <div ref={dropdownRef} style={{ position: 'relative' }}>
+    <div ref={dropdownRef} className={styles.wrapper}>
       <button
         onClick={() => setOpen(!open)}
-        style={{
-          background: '#89b4fa',
-          color: '#1e1e2e',
-          border: 'none',
-          borderRadius: 4,
-          padding: '4px 10px',
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: 'pointer',
-        }}
+        className={styles.trigger}
       >
         New from template...
       </button>
 
       {open && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          marginTop: 4,
-          background: '#313244',
-          borderRadius: 6,
-          border: '1px solid #45475a',
-          minWidth: 260,
-          maxHeight: 320,
-          overflow: 'auto',
-          zIndex: 100,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-        }}>
-          <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 600, color: '#6c7086', textTransform: 'uppercase' }}>
+        <div className={styles.dropdown}>
+          <div className={styles.sectionLabel}>
             Built-in
           </div>
           {builtIns.map((t) => (
             <div
               key={t.id}
               onClick={() => { onSelect(t); setOpen(false); }}
-              style={{
-                padding: '6px 10px',
-                cursor: 'pointer',
-                fontSize: 12,
-                color: '#cdd6f4',
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#45475a'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              className={styles.item}
             >
-              <div style={{ fontWeight: 600 }}>{t.name}</div>
-              <div style={{ fontSize: 11, color: '#6c7086' }}>{t.description}</div>
+              <div className={styles.itemName}>{t.name}</div>
+              <div className={styles.itemDesc}>{t.description}</div>
             </div>
           ))}
 
           {userTemplates.length > 0 && (
             <>
-              <div style={{ borderTop: '1px solid #45475a', margin: '4px 0' }} />
-              <div style={{ padding: '6px 10px', fontSize: 10, fontWeight: 600, color: '#6c7086', textTransform: 'uppercase' }}>
+              <div className={styles.divider} />
+              <div className={styles.sectionLabel}>
                 My Templates
               </div>
               {userTemplates.map((t) => (
                 <div
                   key={t.id}
                   onClick={() => { onSelect(t); setOpen(false); }}
-                  style={{
-                    padding: '6px 10px',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    color: '#cdd6f4',
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#45475a'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  className={styles.item}
                 >
-                  <div style={{ fontWeight: 600 }}>{t.name}</div>
-                  <div style={{ fontSize: 11, color: '#6c7086' }}>{t.description}</div>
+                  <div className={styles.itemName}>{t.name}</div>
+                  <div className={styles.itemDesc}>{t.description}</div>
                 </div>
               ))}
             </>
