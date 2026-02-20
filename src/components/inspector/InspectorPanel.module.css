@@ -81,3 +81,24 @@
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+
+.sessionPicker {
+  padding: 4px var(--space-3);
+  border-bottom: 1px solid var(--depth-3);
+  background: var(--depth-1);
+}
+
+.sessionSelect {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--depth-2);
+  border: 1px solid var(--depth-4);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+}
+.sessionSelect:focus {
+  border-color: var(--accent-secondary);
+}

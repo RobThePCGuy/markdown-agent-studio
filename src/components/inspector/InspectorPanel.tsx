@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { AgentProfile } from '../../types';
 import { useAgentRegistry, useUI, useSessionStore } from '../../stores/use-stores';
 import { ChatLog } from './ChatLog';
@@ -12,16 +12,20 @@ export function InspectorPanel() {
   const agents = useAgentRegistry((s) => s.agents);
   const [viewMode, setViewMode] = useState<'chat' | 'events' | 'memory'>('chat');
 
-  let latestSession;
-  if (selectedAgentId) {
-    for (const session of sessions.values()) {
-      if (session.agentId === selectedAgentId) {
-        if (!latestSession || session.startedAt > latestSession.startedAt) {
-          latestSession = session;
-        }
-      }
-    }
-  }
+  const agentSessions = selectedAgentId
+    ? [...sessions.values()]
+        .filter((s) => s.agentId === selectedAgentId)
+        .sort((a, b) => b.startedAt - a.startedAt)
+    : [];
+
+  const [selectedSessionIdx, setSelectedSessionIdx] = useState(0);
+
+  // Reset to latest session when agent changes
+  useEffect(() => {
+    setSelectedSessionIdx(0);
+  }, [selectedAgentId]);
+
+  const activeSession = agentSessions[selectedSessionIdx];
 
   const profile = selectedAgentId ? agents.get(selectedAgentId) : undefined;
 
@@ -50,12 +54,29 @@ export function InspectorPanel() {
 
       {profile && <PolicyBanner profile={profile} />}
 
+      {viewMode === 'chat' && agentSessions.length > 1 && (
+        <div className={styles.sessionPicker}>
+          <select
+            value={selectedSessionIdx}
+            onChange={(e) => setSelectedSessionIdx(Number(e.target.value))}
+            className={styles.sessionSelect}
+          >
+            {agentSessions.map((s, i) => (
+              <option key={s.activationId} value={i}>
+                {new Date(s.startedAt).toLocaleTimeString()} - {s.status}
+                {s.tokenCount > 0 ? ` (${Math.round(s.tokenCount / 1000)}K tok)` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className={styles.chatArea}>
         {viewMode === 'chat' && (
           <ChatLog
             agentId={selectedAgentId ?? ''}
-            messages={latestSession?.messages ?? []}
-            streamingText={latestSession?.streamingText ?? ''}
+            messages={activeSession?.messages ?? []}
+            streamingText={activeSession?.streamingText ?? ''}
           />
         )}
         {viewMode === 'events' && <EventLogView />}
