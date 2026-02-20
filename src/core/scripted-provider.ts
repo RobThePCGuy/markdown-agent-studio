@@ -46,7 +46,12 @@ export class ScriptedAIProvider implements AIProvider {
    */
   registerSession(sessionId: string, agentPath: string): void {
     this.sessionAgentMap.set(sessionId, agentPath);
-    this.turnCounters.set(sessionId, 0);
+    // Only initialize the turn counter if this is a genuinely new session.
+    // The kernel calls registerSession before every chat() turn, so we must
+    // avoid resetting the counter for sessions that are already in progress.
+    if (!this.turnCounters.has(sessionId)) {
+      this.turnCounters.set(sessionId, 0);
+    }
   }
 
   async *chat(
