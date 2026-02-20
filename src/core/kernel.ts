@@ -250,6 +250,7 @@ export class Kernel {
       agentRegistry: this.deps.agentRegistry,
       eventLog: this.deps.eventLog,
       onSpawnActivation: (act) => this.enqueue(act),
+      onRunSessionAndReturn: (act) => this.runSessionAndReturn(act),
       currentAgentId: activation.agentId,
       currentActivationId: activation.id,
       parentAgentId: activation.parentId,
@@ -425,6 +426,229 @@ export class Kernel {
         this.processQueue();
       }
     }
+  }
+
+  async runSessionAndReturn(activation: Omit<Activation, 'id' | 'createdAt'>): Promise<string> {
+    const fullActivation: Activation = {
+      ...activation,
+      id: `act-${++activationCounter}`,
+      createdAt: Date.now(),
+    };
+    const loopHash = computeHash(`${fullActivation.agentId}:${fullActivation.input}`);
+    if (this.seenHashes.has(loopHash)) {
+      return 'Error: Loop detected, skipping activation.';
+    }
+    this.seenHashes.add(loopHash);
+    return this._runSessionForResult(fullActivation);
+  }
+
+  private async _runSessionForResult(activation: Activation): Promise<string> {
+    // NOTE: No semaphore acquisition -- avoids deadlock when called from a
+    // parent session that already holds a slot.
+
+    const controller = new AbortController();
+    const onGlobalAbort = () => controller.abort();
+    this.globalController.signal.addEventListener('abort', onGlobalAbort);
+
+    const session: AgentSession = {
+      agentId: activation.agentId,
+      activationId: activation.id,
+      controller,
+      status: 'running',
+      history: [{ role: 'user', content: activation.input }],
+      toolCalls: [],
+      tokenCount: 0,
+    };
+
+    this.activeSessions.set(activation.id, session);
+    this.deps.onSessionUpdate?.(session);
+    this.deps.sessionStore?.getState().openSession(activation.agentId, activation.id);
+    this.deps.sessionStore?.getState().addUserMessage(activation.id, activation.input);
+
+    this.deps.eventLog.getState().append({
+      type: 'activation',
+      agentId: activation.agentId,
+      activationId: activation.id,
+      data: { input: activation.input, depth: activation.spawnDepth },
+    });
+
+    const profile = this.deps.agentRegistry.getState().get(activation.agentId);
+    if (!profile) {
+      session.status = 'error';
+      this._completedSessions.push(session);
+      this.activeSessions.delete(activation.id);
+      this.globalController.signal.removeEventListener('abort', onGlobalAbort);
+      return 'Error: Agent profile not found.';
+    }
+
+    // Build per-agent tool list (built-in + custom)
+    let sessionRegistry = this.deps.toolRegistry!;
+    if (profile.customTools && profile.customTools.length > 0) {
+      const customPlugins = profile.customTools.map(createCustomToolPlugin);
+      sessionRegistry = this.deps.toolRegistry!.cloneWith(customPlugins);
+    }
+
+    const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
+
+    const toolHandler = new ToolHandler({
+      pluginRegistry: sessionRegistry,
+      vfs: this.deps.vfs,
+      agentRegistry: this.deps.agentRegistry,
+      eventLog: this.deps.eventLog,
+      onSpawnActivation: (act) => this.enqueue(act),
+      onRunSessionAndReturn: (act) => this.runSessionAndReturn(act),
+      currentAgentId: activation.agentId,
+      currentActivationId: activation.id,
+      parentAgentId: activation.parentId,
+      spawnDepth: activation.spawnDepth,
+      maxDepth: this.deps.config.maxDepth,
+      maxFanout: this.deps.config.maxFanout,
+      childCount: this.childCounts.get(activation.agentId) ?? 0,
+      policy: policyResolution.policy,
+      apiKey: this.deps.apiKey,
+      preferredModel: this.resolvePreferredModel(),
+      memoryStore: this.memoryStore,
+    });
+
+    let finalText = '';
+
+    try {
+      const MAX_AGENT_TURNS = 25;
+
+      // Inject long-term memory context into system prompt
+      let systemPrompt = profile.systemPrompt;
+      if (this.memoryManager && this.deps.config.memoryEnabled !== false) {
+        try {
+          const memoryContext = await this.memoryManager.buildMemoryPrompt(
+            activation.agentId,
+            activation.input
+          );
+          if (memoryContext) {
+            systemPrompt = memoryContext + '\n\n' + systemPrompt;
+          }
+        } catch {
+          // Memory injection is best-effort
+        }
+      }
+
+      for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
+        let textAccumulator = '';
+        let hadToolCalls = false;
+
+        const stream = this.deps.aiProvider.chat(
+          {
+            sessionId: activation.id,
+            systemPrompt,
+            model: this.resolveSessionModel(profile.model),
+          },
+          session.history,
+          sessionRegistry.toToolDefinitions()
+        );
+
+        for await (const chunk of stream) {
+          if (controller.signal.aborted) {
+            session.status = 'aborted';
+            break;
+          }
+
+          this.deps.onStreamChunk?.(activation.agentId, chunk);
+          this.deps.sessionStore?.getState().appendChunk(activation.id, chunk);
+
+          switch (chunk.type) {
+            case 'text':
+              textAccumulator += chunk.text ?? '';
+              break;
+
+            case 'tool_call': {
+              hadToolCalls = true;
+              const tc = chunk.toolCall!;
+              const result = await toolHandler.handle(tc.name, tc.args);
+
+              const record = {
+                id: tc.id,
+                name: tc.name,
+                args: tc.args,
+                result,
+                timestamp: Date.now(),
+              };
+              session.toolCalls.push(record);
+              session.history.push({
+                role: 'tool' as const,
+                content: result,
+                toolCall: record,
+              });
+              this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
+
+              if (tc.name === 'spawn_agent') {
+                const count = this.childCounts.get(activation.agentId) ?? 0;
+                this.childCounts.set(activation.agentId, count + 1);
+              }
+              break;
+            }
+
+            case 'done':
+              if (chunk.tokenCount) {
+                session.tokenCount += chunk.tokenCount;
+                this._totalTokens += chunk.tokenCount;
+              }
+              break;
+
+            case 'error':
+              session.status = 'error';
+              this.deps.eventLog.getState().append({
+                type: 'error',
+                agentId: activation.agentId,
+                activationId: activation.id,
+                data: { error: chunk.error },
+              });
+              break;
+          }
+        }
+
+        if (textAccumulator && !hadToolCalls) {
+          session.history.push({ role: 'model', content: textAccumulator });
+          finalText = textAccumulator;
+        }
+
+        if (!hadToolCalls || session.status !== 'running') break;
+
+        if (this._totalTokens >= this.deps.config.tokenBudget) {
+          this.haltForBudget(activation, 'mid-session');
+          break;
+        }
+      }
+
+      if (session.status === 'running') {
+        session.status = 'completed';
+      }
+
+      this.deps.eventLog.getState().append({
+        type: 'complete',
+        agentId: activation.agentId,
+        activationId: activation.id,
+        data: { status: session.status, tokens: session.tokenCount },
+      });
+
+    } catch (err) {
+      session.status = 'error';
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      this.deps.eventLog.getState().append({
+        type: 'error',
+        agentId: activation.agentId,
+        activationId: activation.id,
+        data: { error: errorMessage },
+      });
+      finalText = `Error: ${errorMessage}`;
+    } finally {
+      this._completedSessions.push(session);
+      this.activeSessions.delete(activation.id);
+      this.globalController.signal.removeEventListener('abort', onGlobalAbort);
+      this.deps.sessionStore?.getState().closeSession(activation.id, session.status);
+      this.deps.aiProvider.endSession?.(activation.id);
+      this.deps.onSessionUpdate?.(session);
+    }
+
+    return finalText;
   }
 
   private waitForResume(signal: AbortSignal): Promise<void> {

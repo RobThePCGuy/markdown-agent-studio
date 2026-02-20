@@ -89,6 +89,19 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
       ctx.incrementSpawnCount();
 
       const newDepth = ctx.spawnDepth + 1;
+
+      if (ctx.onRunSessionAndReturn) {
+        const result = await ctx.onRunSessionAndReturn({
+          agentId: path,
+          input: prompt,
+          parentId: ctx.currentAgentId,
+          spawnDepth: newDepth,
+          priority: newDepth,
+        });
+        return result;
+      }
+
+      // Fallback to fire-and-forget
       ctx.onSpawnActivation({
         agentId: path,
         input: prompt,

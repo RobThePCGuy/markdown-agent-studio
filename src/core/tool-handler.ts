@@ -27,6 +27,7 @@ export interface ToolHandlerConfig {
   agentRegistry: Store<AgentRegistryState>;
   eventLog: Store<EventLogState>;
   onSpawnActivation: (activation: Omit<Activation, 'id' | 'createdAt'>) => void;
+  onRunSessionAndReturn?: (activation: Omit<Activation, 'id' | 'createdAt'>) => Promise<string>;
   currentAgentId: string;
   currentActivationId: string;
   parentAgentId?: string;
@@ -92,6 +93,7 @@ export class ToolHandler {
         childCount: this.config.childCount,
         spawnCount: this.spawnCount,
         onSpawnActivation: this.config.onSpawnActivation,
+        onRunSessionAndReturn: this.config.onRunSessionAndReturn,
         incrementSpawnCount: () => { this.spawnCount++; },
         apiKey: this.config.apiKey,
         preferredModel: this.config.preferredModel,

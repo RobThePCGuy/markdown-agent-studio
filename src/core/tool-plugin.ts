@@ -26,6 +26,7 @@ export interface ToolContext {
   childCount: number;
   spawnCount: number;
   onSpawnActivation: (act: Omit<Activation, 'id' | 'createdAt'>) => void;
+  onRunSessionAndReturn?: (activation: Omit<Activation, 'id' | 'createdAt'>) => Promise<string>;
   incrementSpawnCount: () => void;
   apiKey?: string;
   preferredModel?: string;

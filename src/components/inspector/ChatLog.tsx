@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { ChatMessage } from '../../types/session';
 import styles from './ChatLog.module.css';
 
@@ -16,6 +20,47 @@ function formatTime(ts: number): string {
   return `${h}:${m}:${s}`;
 }
 
+const codeStyle: Record<string, React.CSSProperties> = {
+  ...oneDark,
+  'pre[class*="language-"]': {
+    ...((oneDark as any)['pre[class*="language-"]'] ?? {}),
+    background: '#11111b',
+    margin: '8px 0',
+    padding: '12px',
+    borderRadius: '6px',
+    fontSize: '12px',
+  },
+  'code[class*="language-"]': {
+    ...((oneDark as any)['code[class*="language-"]'] ?? {}),
+    background: 'transparent',
+  },
+};
+
+const markdownComponents: Record<string, React.ComponentType<any>> = {
+  code({ className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || '');
+    const codeString = String(children).replace(/\n$/, '');
+    if (match) {
+      return (
+        <SyntaxHighlighter
+          language={match[1]}
+          style={codeStyle}
+          customStyle={{
+            margin: '8px 0',
+            padding: '12px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            background: '#11111b',
+          }}
+        >
+          {codeString}
+        </SyntaxHighlighter>
+      );
+    }
+    return <code className={className} {...props}>{children}</code>;
+  },
+};
+
 function ToolCallRow({ msg }: { msg: ChatMessage }) {
   const [expanded, setExpanded] = useState(false);
   const tc = msg.toolCall;
@@ -27,7 +72,15 @@ function ToolCallRow({ msg }: { msg: ChatMessage }) {
     <div className={styles.toolBlock}>
       <div
         className={styles.toolHeader}
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded(!expanded);
+          }
+        }}
       >
         <span className={styles.toolName}>{tc.name}</span>
         {!expanded && (
@@ -97,7 +150,11 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
             )}
 
             {msg.role === 'assistant' && (
-              <div className={styles.assistantBubble}>{msg.content}</div>
+              <div className={styles.assistantBubble}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {msg.content}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
         );
@@ -105,7 +162,9 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
 
       {streamingText && (
         <div className={styles.assistantBubble}>
-          {streamingText}
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {streamingText}
+          </ReactMarkdown>
           <span className={styles.streaming}>
             <span className={styles.streamDot} />
             <span className={styles.streamDot} />

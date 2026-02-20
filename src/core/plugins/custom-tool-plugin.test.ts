@@ -131,6 +131,74 @@ describe('createCustomToolPlugin', () => {
     expect(incrementFn).toHaveBeenCalledOnce();
   });
 
+  it('calls onRunSessionAndReturn and returns its result when available', async () => {
+    const plugin = createCustomToolPlugin(toolDef);
+    const runSessionAndReturn = vi.fn().mockResolvedValue('Sub-agent summary result');
+    const onSpawnActivation = vi.fn();
+    const ctx = makeCtx({
+      onSpawnActivation,
+      onRunSessionAndReturn: runSessionAndReturn,
+    });
+
+    const result = await plugin.handler({ text: 'Hello world' }, ctx);
+
+    expect(runSessionAndReturn).toHaveBeenCalledOnce();
+    expect(runSessionAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: 'Summarize the following:\n\nHello world',
+        parentId: 'agents/parent.md',
+        spawnDepth: 2,
+        priority: 2,
+      })
+    );
+    expect(result).toBe('Sub-agent summary result');
+    // onSpawnActivation should NOT be called when onRunSessionAndReturn is used
+    expect(onSpawnActivation).not.toHaveBeenCalled();
+  });
+
+  it('falls back to onSpawnActivation when onRunSessionAndReturn is not provided', async () => {
+    const plugin = createCustomToolPlugin(toolDef);
+    const onSpawnActivation = vi.fn();
+    const ctx = makeCtx({
+      onSpawnActivation,
+      // onRunSessionAndReturn intentionally omitted
+    });
+
+    const result = await plugin.handler({ text: 'Hello world' }, ctx);
+
+    expect(onSpawnActivation).toHaveBeenCalledOnce();
+    expect(result).toContain('dispatched as sub-agent');
+  });
+
+  it('enforces depth limits even when onRunSessionAndReturn is provided', async () => {
+    const plugin = createCustomToolPlugin(toolDef);
+    const runSessionAndReturn = vi.fn().mockResolvedValue('Should not be called');
+    const ctx = makeCtx({
+      spawnDepth: 5,
+      maxDepth: 5,
+      onRunSessionAndReturn: runSessionAndReturn,
+    });
+
+    const result = await plugin.handler({ text: 'test' }, ctx);
+    expect(result).toContain('depth limit');
+    expect(runSessionAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('enforces fanout limits even when onRunSessionAndReturn is provided', async () => {
+    const plugin = createCustomToolPlugin(toolDef);
+    const runSessionAndReturn = vi.fn().mockResolvedValue('Should not be called');
+    const ctx = makeCtx({
+      childCount: 3,
+      spawnCount: 2,
+      maxFanout: 5,
+      onRunSessionAndReturn: runSessionAndReturn,
+    });
+
+    const result = await plugin.handler({ text: 'test' }, ctx);
+    expect(result).toContain('fanout limit');
+    expect(runSessionAndReturn).not.toHaveBeenCalled();
+  });
+
   it('includes result schema in system prompt when defined', async () => {
     const withSchema: CustomToolDef = {
       ...toolDef,

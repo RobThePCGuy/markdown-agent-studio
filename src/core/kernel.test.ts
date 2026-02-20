@@ -180,6 +180,63 @@ describe('Kernel', () => {
     expect(kernel.completedSessions[0].status).toBe('error');
   });
 
+  it('runSessionAndReturn resolves with the final text from the provider', async () => {
+    const resultProvider = new MockAIProvider([
+      { type: 'text', text: 'Sub-agent response text' },
+      { type: 'done', tokenCount: 42 },
+    ]);
+    const testKernel = new Kernel({
+      aiProvider: resultProvider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: { maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000 },
+    });
+
+    const result = await testKernel.runSessionAndReturn({
+      agentId: 'agents/writer.md',
+      input: 'Do something',
+      spawnDepth: 1,
+      priority: 1,
+    });
+
+    expect(result).toBe('Sub-agent response text');
+    expect(testKernel.completedSessions).toHaveLength(1);
+    expect(testKernel.completedSessions[0].status).toBe('completed');
+  });
+
+  it('runSessionAndReturn detects loops and returns error', async () => {
+    const resultProvider = new MockAIProvider([
+      { type: 'text', text: 'first call' },
+      { type: 'done', tokenCount: 10 },
+    ]);
+    const testKernel = new Kernel({
+      aiProvider: resultProvider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: { maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000 },
+    });
+
+    // First call should work fine
+    const result1 = await testKernel.runSessionAndReturn({
+      agentId: 'agents/writer.md',
+      input: 'Same input',
+      spawnDepth: 1,
+      priority: 1,
+    });
+    expect(result1).toBe('first call');
+
+    // Second call with same agent+input should detect loop
+    const result2 = await testKernel.runSessionAndReturn({
+      agentId: 'agents/writer.md',
+      input: 'Same input',
+      spawnDepth: 1,
+      priority: 1,
+    });
+    expect(result2).toContain('Loop detected');
+  });
+
   it('loops back to AI after tool calls with results', async () => {
     // Turn 1: model reads a file via vfs_read
     // Turn 2: model emits final text response
