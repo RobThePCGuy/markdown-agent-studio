@@ -60,6 +60,31 @@ export const spawnAgentPlugin: ToolPlugin = {
       return `Error: fanout limit reached (${totalChildren}/${ctx.maxFanout}). This agent cannot spawn more children.`;
     }
 
+    // If the agent already exists in the registry, activate it instead of overwriting
+    const existingProfile = registry.getState().get(path);
+    if (existingProfile) {
+      const newDepth = ctx.spawnDepth + 1;
+
+      ctx.onSpawnActivation({
+        agentId: path,
+        input: task,
+        parentId: ctx.currentAgentId,
+        spawnDepth: newDepth,
+        priority: newDepth,
+      });
+
+      ctx.incrementSpawnCount();
+
+      eventLog.getState().append({
+        type: 'spawn',
+        agentId: ctx.currentAgentId,
+        activationId: ctx.currentActivationId,
+        data: { spawned: path, depth: newDepth, task },
+      });
+
+      return `Activated existing agent "${existingProfile.name}" at '${path}' (depth ${newDepth}/${ctx.maxDepth}).`;
+    }
+
     const meta = {
       authorAgentId: ctx.currentAgentId,
       activationId: ctx.currentActivationId,
