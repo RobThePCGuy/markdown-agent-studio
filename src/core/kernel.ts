@@ -11,6 +11,7 @@ import { createCustomToolPlugin } from './plugins/custom-tool-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
+import type { MemoryManager } from './memory-manager';
 
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
@@ -33,6 +34,7 @@ interface KernelDeps {
   config: KernelConfig;
   sessionStore?: Store<SessionStoreState>;
   memoryStore?: Store<MemoryStoreState>;
+  memoryManager?: MemoryManager;
   toolRegistry?: ToolPluginRegistry;
   apiKey?: string;
   onSessionUpdate?: (session: AgentSession) => void;
@@ -52,7 +54,9 @@ export class Kernel {
   private _totalTokens = 0;
   private childCounts = new Map<string, number>();
   private seenHashes = new Set<string>();
+  private memoryManager: MemoryManager | undefined;
   private memoryStore: Store<MemoryStoreState> | undefined;
+  private _workingMemorySnapshot: import('../types/memory').WorkingMemoryEntry[] = [];
   private currentRunId: string | null = null;
   private quotaHaltTriggered = false;
   private budgetHaltTriggered = false;
@@ -61,6 +65,7 @@ export class Kernel {
     this.deps = deps;
     this.semaphore = new Semaphore(deps.config.maxConcurrency);
     this.globalController = new AbortController();
+    this.memoryManager = deps.memoryManager;
     if (deps.config.memoryEnabled !== false) {
       this.memoryStore = deps.memoryStore ?? createMemoryStore();
     }
@@ -74,6 +79,9 @@ export class Kernel {
   get completedSessions(): AgentSession[] { return this._completedSessions; }
   get activeSessionCount(): number { return this.activeSessions.size; }
   get queueLength(): number { return this.queue.length; }
+  get lastWorkingMemorySnapshot(): import('../types/memory').WorkingMemoryEntry[] {
+    return this._workingMemorySnapshot;
+  }
 
   enqueue(input: Omit<Activation, 'id' | 'createdAt'>): void {
     const activation: Activation = {
@@ -140,7 +148,7 @@ export class Kernel {
       }
     }
     if (this.memoryStore) {
-      this.memoryStore.getState().endRun();
+      this._workingMemorySnapshot = this.memoryStore.getState().endRun();
     }
   }
 
@@ -258,6 +266,22 @@ export class Kernel {
     try {
       const MAX_AGENT_TURNS = 25;
 
+      // Inject long-term memory context into system prompt
+      let systemPrompt = profile.systemPrompt;
+      if (this.memoryManager && this.deps.config.memoryEnabled !== false) {
+        try {
+          const memoryContext = await this.memoryManager.buildMemoryPrompt(
+            activation.agentId,
+            activation.input
+          );
+          if (memoryContext) {
+            systemPrompt = memoryContext + '\n\n' + systemPrompt;
+          }
+        } catch {
+          // Memory injection is best-effort
+        }
+      }
+
       for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
         let textAccumulator = '';
         let hadToolCalls = false;
@@ -265,7 +289,7 @@ export class Kernel {
         const stream = this.deps.aiProvider.chat(
           {
             sessionId: activation.id,
-            systemPrompt: profile.systemPrompt,
+            systemPrompt,
             model: this.resolveSessionModel(profile.model),
           },
           session.history,

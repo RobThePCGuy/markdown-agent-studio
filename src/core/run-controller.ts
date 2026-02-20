@@ -1,9 +1,12 @@
 import { Kernel } from './kernel';
 import { GeminiProvider } from './gemini-provider';
 import { MockAIProvider } from './mock-provider';
-import { agentRegistry, eventLogStore, sessionStore, uiStore, vfsStore } from '../stores/use-stores';
+import { agentRegistry, eventLogStore, sessionStore, uiStore, vfsStore, memoryStore } from '../stores/use-stores';
 import type { KernelConfig } from '../types';
 import { restoreCheckpoint } from '../utils/replay';
+import { MemoryManager } from './memory-manager';
+import { createMemoryDB } from './memory-db';
+import { Summarizer, SUMMARIZER_SYSTEM_PROMPT } from './summarizer';
 
 export interface RunControllerState {
   isRunning: boolean;
@@ -18,6 +21,7 @@ type Listener = (state: RunControllerState) => void;
 
 class RunController {
   private kernel: Kernel | null = null;
+  private memoryManager = new MemoryManager(createMemoryDB());
   private state: RunControllerState = {
     isRunning: false,
     isPaused: false,
@@ -64,6 +68,8 @@ class RunController {
       eventLog: eventLogStore,
       config,
       sessionStore,
+      memoryStore: config.memoryEnabled !== false ? memoryStore : undefined,
+      memoryManager: config.memoryEnabled !== false ? this.memoryManager : undefined,
       apiKey,
       onSessionUpdate: () => {
         this.setState({
@@ -93,6 +99,41 @@ class RunController {
     this.setState({ isRunning: true, isPaused: false });
     try {
       await kernel.runUntilEmpty();
+
+      // Post-run summarization
+      if (config.memoryEnabled !== false) {
+        const workingSnapshot = memoryStore.getState().entries.length > 0
+          ? memoryStore.getState().endRun()
+          : [];
+        const completedSessions = [...sessionStore.getState().sessions.values()]
+          .filter((s) => s.completedAt);
+
+        // Run summarization in background
+        const apiKey = uiStore.getState().apiKey;
+        if (apiKey && completedSessions.length > 0) {
+          const summarizeFn = async (context: string) => {
+            try {
+              const { GoogleGenerativeAI } = await import('@google/generative-ai');
+              const client = new GoogleGenerativeAI(apiKey);
+              const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+              const result = await model.generateContent(
+                SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
+              );
+              const text = result.response.text();
+              // Extract JSON array from response (may have markdown code fences)
+              const jsonMatch = text.match(/\[[\s\S]*\]/);
+              if (!jsonMatch) return [];
+              return JSON.parse(jsonMatch[0]);
+            } catch {
+              return [];
+            }
+          };
+          const summarizer = new Summarizer(this.memoryManager, summarizeFn);
+          summarizer
+            .summarize(`run-${Date.now()}`, workingSnapshot, completedSessions)
+            .catch(() => {});
+        }
+      }
     } finally {
       const hasPendingWork = kernel.activeSessionCount > 0 || kernel.queueLength > 0;
       this.setState({
