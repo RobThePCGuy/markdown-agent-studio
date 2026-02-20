@@ -1,11 +1,20 @@
-.container { height: 100%; width: 100%; position: relative; }
+.container {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
 
 .hud {
-  position: absolute; top: 10px; left: 10px;
-  display: flex; gap: 2px; align-items: center;
-  padding: 6px 10px; border-radius: 10px;
-  border: 1px solid rgba(69,71,90,0.6);
-  background: rgba(17,17,27,0.8);
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(69, 71, 90, 0.6);
+  background: rgba(17, 17, 27, 0.8);
   backdrop-filter: blur(12px);
   pointer-events: none;
   animation: slideDown 300ms ease-out;
@@ -13,24 +22,100 @@
 }
 
 .hudGroup {
-  display: flex; align-items: center; gap: 4px;
-  padding: 0 6px; font-size: 10.5px; color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: 10.5px;
+  color: var(--text-primary);
 }
-.hudGroup + .hudGroup { border-left: 1px solid rgba(69,71,90,0.5); }
 
-.hudDot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-.hudLabel { color: var(--text-dim); font-size: 10px; }
-.hudValue { font-family: var(--font-mono); font-weight: var(--weight-medium); font-size: 10.5px; }
+.hudGroup + .hudGroup {
+  border-left: 1px solid rgba(69, 71, 90, 0.5);
+}
+
+.hudDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.hudLabel {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.hudValue {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-medium);
+  font-size: 10.5px;
+}
 
 .legend {
-  position: absolute; bottom: 12px; left: 10px;
-  display: flex; gap: 8px; align-items: center;
-  padding: 5px 10px; border-radius: 8px;
-  border: 1px solid rgba(69,71,90,0.6);
-  background: rgba(17,17,27,0.8);
+  position: absolute;
+  bottom: 12px;
+  left: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(69, 71, 90, 0.6);
+  background: rgba(17, 17, 27, 0.8);
   backdrop-filter: blur(12px);
-  pointer-events: none; font-family: var(--font-body);
+  pointer-events: none;
+  font-family: var(--font-body);
 }
 
-.legendItem { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-secondary); }
-.legendLine { width: 16px; height: 0; display: inline-block; }
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.legendLine {
+  width: 16px;
+  height: 0;
+  display: inline-block;
+}
+
+.welcomeBanner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: rgba(17, 17, 27, 0.9);
+  border: 1px solid var(--depth-4);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  max-width: 600px;
+  backdrop-filter: blur(8px);
+  animation: slideDown 300ms ease-out;
+}
+
+.welcomeDismiss {
+  background: none;
+  border: 1px solid var(--depth-4);
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  transition: background var(--transition-fast);
+}
+.welcomeDismiss:hover {
+  background: var(--depth-3);
+}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } from '../../stores/use-stores';
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
+import { loadSampleProject } from '../../core/sample-project';
 import styles from './SettingsModal.module.css';
 
 // ---------------------------------------------------------------------------
@@ -241,6 +242,17 @@ export default function SettingsModal() {
         {/* Section 4: Danger Zone */}
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Danger Zone</h3>
+
+          <button
+            onClick={() => {
+              handleClearWorkspace();
+              loadSampleProject(vfsStore, agentRegistry);
+            }}
+            className={styles.outlineBtn}
+            style={{ marginBottom: 8 }}
+          >
+            Reset to Sample Project
+          </button>
 
           <div className={styles.dangerZone}>
             <p className={styles.dangerText}>

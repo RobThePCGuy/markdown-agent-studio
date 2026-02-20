@@ -15,6 +15,7 @@ import { useGraphData } from '../../hooks/useGraphData';
 import { uiStore } from '../../stores/use-stores';
 import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
+import { useOnboarding } from '../../hooks/useOnboarding';
 import styles from './GraphView.module.css';
 
 const nodeTypes: NodeTypes = {
@@ -26,6 +27,7 @@ export function GraphView() {
   const { nodes: derivedNodes, edges: derivedEdges } = useGraphData();
   const sessions = useSessionStore((s) => s.sessions);
   const events = useEventLog((s) => s.entries);
+  const { showWelcome, dismissWelcome } = useOnboarding();
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
 
@@ -90,6 +92,13 @@ export function GraphView() {
           style={{ background: 'var(--depth-2)', border: '1px solid var(--depth-3)' }}
         />
       </ReactFlow>
+
+      {showWelcome && (
+        <div className={styles.welcomeBanner}>
+          <span>Welcome to Markdown Agent Studio. This sample project demonstrates multi-agent orchestration. Enter a topic in the prompt bar to begin.</span>
+          <button onClick={dismissWelcome} className={styles.welcomeDismiss}>Got it</button>
+        </div>
+      )}
 
       {/* HUD overlay */}
       <div className={styles.hud}>
