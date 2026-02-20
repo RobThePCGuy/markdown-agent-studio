@@ -7,12 +7,20 @@ type Store<T> = {
   subscribe(listener: (state: T, prev: T) => void): () => void;
 };
 
+export const DEBOUNCE_MS = 500;
+
 export class DiskSync {
   private vfs: Store<VFSState>;
   private project: Store<ProjectState>;
   private agentRegistry: Store<AgentRegistryState>;
   private unsubscribe: (() => void) | null = null;
   private loading = false;
+
+  private _pendingWrites = new Map<string, string>();
+  private _pendingDeletes = new Set<string>();
+  private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private _onUnload: (() => void) | null = null;
+  private _onVisibilityChange: (() => void) | null = null;
 
   constructor(
     vfs: Store<VFSState>,
@@ -22,6 +30,32 @@ export class DiskSync {
     this.vfs = vfs;
     this.project = project;
     this.agentRegistry = agentRegistry;
+  }
+
+  /** Flush all pending writes and deletes to disk immediately. */
+  flush(): void {
+    const dirHandle = this.project.getState().dirHandle;
+    if (!dirHandle) return;
+
+    for (const [path, content] of this._pendingWrites) {
+      this.writeFile(dirHandle, path, content).catch((err) => {
+        console.error(`DiskSync: failed to write ${path}:`, err);
+        this.project.getState().setSyncStatus('error');
+      });
+    }
+    for (const path of this._pendingDeletes) {
+      this.deleteFile(dirHandle, path).catch((err) => {
+        console.error(`DiskSync: failed to delete ${path}:`, err);
+      });
+    }
+    this._pendingWrites.clear();
+    this._pendingDeletes.clear();
+  }
+
+  /** Schedule a debounced flush. */
+  private scheduleFlush(): void {
+    if (this._debounceTimer) clearTimeout(this._debounceTimer);
+    this._debounceTimer = setTimeout(() => this.flush(), DEBOUNCE_MS);
   }
 
   /** Write a file to disk, creating parent directories as needed. */
@@ -119,9 +153,6 @@ export class DiskSync {
     this.unsubscribe = this.vfs.subscribe((state) => {
       if (this.loading) return;
 
-      const dirHandle = this.project.getState().dirHandle;
-      if (!dirHandle) return;
-
       const currentPaths = new Set(state.getAllPaths());
       const currentContents = new Map<string, string>();
       for (const p of currentPaths) {
@@ -132,25 +163,30 @@ export class DiskSync {
       for (const path of currentPaths) {
         const content = currentContents.get(path)!;
         if (!prevPaths.has(path) || prevContents.get(path) !== content) {
-          this.writeFile(dirHandle, path, content).catch((err) => {
-            console.error(`DiskSync: failed to write ${path}:`, err);
-            this.project.getState().setSyncStatus('error');
-          });
+          this._pendingWrites.set(path, content);
+          this._pendingDeletes.delete(path); // cancel any pending delete for same path
         }
       }
 
       // Find deleted files
       for (const path of prevPaths) {
         if (!currentPaths.has(path)) {
-          this.deleteFile(dirHandle, path).catch((err) => {
-            console.error(`DiskSync: failed to delete ${path}:`, err);
-          });
+          this._pendingDeletes.add(path);
+          this._pendingWrites.delete(path); // cancel any pending write for same path
         }
       }
+
+      this.scheduleFlush();
 
       prevPaths = currentPaths;
       prevContents = currentContents;
     });
+
+    // Flush pending changes on page unload or tab switch
+    this._onUnload = () => this.flush();
+    this._onVisibilityChange = () => { if (document.hidden) this.flush(); };
+    window.addEventListener('beforeunload', this._onUnload);
+    document.addEventListener('visibilitychange', this._onVisibilityChange);
   }
 
   /** Stop syncing and disconnect. */
@@ -159,6 +195,21 @@ export class DiskSync {
       this.unsubscribe();
       this.unsubscribe = null;
     }
+    // Clean up event listeners
+    if (this._onUnload) {
+      window.removeEventListener('beforeunload', this._onUnload);
+      this._onUnload = null;
+    }
+    if (this._onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._onVisibilityChange);
+      this._onVisibilityChange = null;
+    }
+    // Clear debounce timer and do a final flush
+    if (this._debounceTimer) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
+    this.flush();
     this.project.getState().disconnect();
   }
 }
