@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DiskSync, DEBOUNCE_MS } from './disk-sync';
+import { DiskSync } from './disk-sync';
 import { createVFSStore } from '../stores/vfs-store';
 import { createProjectStore } from '../stores/project-store';
 import { createAgentRegistry } from '../stores/agent-registry';
@@ -118,75 +118,67 @@ describe('DiskSync', () => {
     expect(projectStore.getState().syncStatus).toBe('disconnected');
   });
 
-  it('debounces multiple rapid VFS writes into a single flush', async () => {
+  it('flushes each VFS write to disk immediately', async () => {
     const handle = mockDirHandle();
     const sync = new DiskSync(vfs, projectStore, agentRegistry);
     const writeSpy = vi.spyOn(sync, 'writeFile');
 
     await sync.start(handle);
 
-    // Perform three rapid writes - these should be batched
+    // Each write triggers an immediate flush
     vfs.getState().write('file1.md', 'content1', {});
-    vfs.getState().write('file2.md', 'content2', {});
-    vfs.getState().write('file3.md', 'content3', {});
-
-    // No disk writes should have happened yet (still within debounce window)
-    expect(writeSpy).not.toHaveBeenCalled();
-
-    // Advance past the debounce window
-    vi.advanceTimersByTime(DEBOUNCE_MS + 1);
-
-    // Now all three files should be written in a single flush
-    expect(writeSpy).toHaveBeenCalledTimes(3);
+    expect(writeSpy).toHaveBeenCalledTimes(1);
     expect(writeSpy).toHaveBeenCalledWith(handle, 'file1.md', 'content1');
+
+    vfs.getState().write('file2.md', 'content2', {});
+    expect(writeSpy).toHaveBeenCalledTimes(2);
     expect(writeSpy).toHaveBeenCalledWith(handle, 'file2.md', 'content2');
+
+    vfs.getState().write('file3.md', 'content3', {});
+    expect(writeSpy).toHaveBeenCalledTimes(3);
     expect(writeSpy).toHaveBeenCalledWith(handle, 'file3.md', 'content3');
 
     sync.stop();
   });
 
-  it('only keeps the latest content when the same file is written multiple times', async () => {
+  it('writes every version to disk immediately when the same file is written multiple times', async () => {
     const handle = mockDirHandle();
     const sync = new DiskSync(vfs, projectStore, agentRegistry);
     const writeSpy = vi.spyOn(sync, 'writeFile');
 
     await sync.start(handle);
 
-    // Write the same file three times rapidly
+    // Each write flushes immediately, so every version goes to disk
     vfs.getState().write('file.md', 'version1', {});
     vfs.getState().write('file.md', 'version2', {});
     vfs.getState().write('file.md', 'version3', {});
 
-    vi.advanceTimersByTime(DEBOUNCE_MS + 1);
-
-    // Should only write once with the latest content
-    expect(writeSpy).toHaveBeenCalledTimes(1);
-    expect(writeSpy).toHaveBeenCalledWith(handle, 'file.md', 'version3');
+    expect(writeSpy).toHaveBeenCalledTimes(3);
+    expect(writeSpy).toHaveBeenNthCalledWith(1, handle, 'file.md', 'version1');
+    expect(writeSpy).toHaveBeenNthCalledWith(2, handle, 'file.md', 'version2');
+    expect(writeSpy).toHaveBeenNthCalledWith(3, handle, 'file.md', 'version3');
 
     sync.stop();
   });
 
-  it('stop triggers a final flush of pending writes', async () => {
+  it('writes flush immediately so stop has nothing pending', async () => {
     const handle = mockDirHandle();
     const sync = new DiskSync(vfs, projectStore, agentRegistry);
     const writeSpy = vi.spyOn(sync, 'writeFile');
 
     await sync.start(handle);
 
-    // Write a file but don't advance timers
+    // Write a file -- it flushes immediately
     vfs.getState().write('pending.md', 'pending content', {});
-
-    // Writes should not have happened yet
-    expect(writeSpy).not.toHaveBeenCalled();
-
-    // Stop should trigger a final flush
-    sync.stop();
-
     expect(writeSpy).toHaveBeenCalledTimes(1);
     expect(writeSpy).toHaveBeenCalledWith(handle, 'pending.md', 'pending content');
+
+    // Stop calls flush again but nothing is pending
+    sync.stop();
+    expect(writeSpy).toHaveBeenCalledTimes(1); // no additional writes
   });
 
-  it('pending delete cancels a pending write for the same path', async () => {
+  it('write then delete flushes both immediately', async () => {
     const handle = mockDirHandle();
     const sync = new DiskSync(vfs, projectStore, agentRegistry);
     const writeSpy = vi.spyOn(sync, 'writeFile');
@@ -194,21 +186,20 @@ describe('DiskSync', () => {
 
     await sync.start(handle);
 
-    // Write a file then delete it before the debounce fires
+    // Write flushes immediately
     vfs.getState().write('temp.md', 'temp content', {});
+    expect(writeSpy).toHaveBeenCalledTimes(1);
+    expect(writeSpy).toHaveBeenCalledWith(handle, 'temp.md', 'temp content');
+
+    // Delete flushes immediately
     vfs.getState().deleteFile('temp.md');
-
-    vi.advanceTimersByTime(DEBOUNCE_MS + 1);
-
-    // The write should have been canceled; only delete should fire
-    expect(writeSpy).not.toHaveBeenCalled();
     expect(deleteSpy).toHaveBeenCalledTimes(1);
     expect(deleteSpy).toHaveBeenCalledWith(handle, 'temp.md');
 
     sync.stop();
   });
 
-  it('pending write cancels a pending delete for the same path', async () => {
+  it('delete then write flushes both immediately', async () => {
     const handle = mockDirHandle({ 'existing.md': 'old content' });
     const sync = new DiskSync(vfs, projectStore, agentRegistry);
     const writeSpy = vi.spyOn(sync, 'writeFile');
@@ -216,14 +207,13 @@ describe('DiskSync', () => {
 
     await sync.start(handle);
 
-    // Delete then re-create the file before debounce fires
+    // Delete flushes immediately
     vfs.getState().deleteFile('existing.md');
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy).toHaveBeenCalledWith(handle, 'existing.md');
+
+    // Re-create flushes immediately
     vfs.getState().write('existing.md', 'new content', {});
-
-    vi.advanceTimersByTime(DEBOUNCE_MS + 1);
-
-    // The delete should have been canceled; only write should fire
-    expect(deleteSpy).not.toHaveBeenCalled();
     expect(writeSpy).toHaveBeenCalledTimes(1);
     expect(writeSpy).toHaveBeenCalledWith(handle, 'existing.md', 'new content');
 

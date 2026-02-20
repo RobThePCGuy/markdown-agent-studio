@@ -176,7 +176,7 @@ export class DiskSync {
         }
       }
 
-      this.scheduleFlush();
+      this.flush();
 
       prevPaths = currentPaths;
       prevContents = currentContents;
