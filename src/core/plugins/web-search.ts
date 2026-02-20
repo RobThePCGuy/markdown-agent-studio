@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { Tool, GroundingChunk } from '@google/generative-ai';
 import type { ToolPlugin } from '../tool-plugin';
 
 export const webSearchPlugin: ToolPlugin = {
@@ -20,9 +21,8 @@ export const webSearchPlugin: ToolPlugin = {
       const model = client.getGenerativeModel({
         model: 'gemini-3-flash-preview',
         // googleSearch is the correct tool for Gemini 2.0+; the installed SDK
-        // types only know about googleSearchRetrieval (older models), so we
-        // bypass the type system here.
-        tools: [{ googleSearch: {} } as any],
+        // types only export googleSearchRetrieval (older models), so we cast.
+        tools: [{ googleSearch: {} } as unknown as Tool],
       });
 
       const result = await model.generateContent(query);
@@ -30,13 +30,13 @@ export const webSearchPlugin: ToolPlugin = {
       const text = result.response.text();
 
       // Extract grounding sources from metadata
-      const chunks =
-        (candidate?.groundingMetadata as any)?.groundingChunks ?? [];
+      const chunks: GroundingChunk[] =
+        candidate?.groundingMetadata?.groundingChunks ?? [];
       const sources = chunks
-        .filter((c: any) => c.web)
-        .map((c: any) => ({
-          title: c.web.title ?? '',
-          url: c.web.uri ?? '',
+        .filter((c) => c.web)
+        .map((c) => ({
+          title: c.web?.title ?? '',
+          url: c.web?.uri ?? '',
         }));
 
       if (sources.length > 0) {

@@ -45,6 +45,9 @@ export function TemplatePicker({ onSelect }: TemplatePickerProps) {
             <div
               key={t.id}
               onClick={() => { onSelect(t); setOpen(false); }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(t); setOpen(false); } }}
               className={styles.item}
             >
               <div className={styles.itemName}>{t.name}</div>
@@ -62,6 +65,9 @@ export function TemplatePicker({ onSelect }: TemplatePickerProps) {
                 <div
                   key={t.id}
                   onClick={() => { onSelect(t); setOpen(false); }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(t); setOpen(false); } }}
                   className={styles.item}
                 >
                   <div className={styles.itemName}>{t.name}</div>

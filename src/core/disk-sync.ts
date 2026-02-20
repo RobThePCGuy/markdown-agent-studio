@@ -7,8 +7,6 @@ type Store<T> = {
   subscribe(listener: (state: T, prev: T) => void): () => void;
 };
 
-export const DEBOUNCE_MS = 500;
-
 export class DiskSync {
   private vfs: Store<VFSState>;
   private project: Store<ProjectState>;
@@ -18,7 +16,6 @@ export class DiskSync {
 
   private _pendingWrites = new Map<string, string>();
   private _pendingDeletes = new Set<string>();
-  private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private _onUnload: (() => void) | null = null;
   private _onVisibilityChange: (() => void) | null = null;
 
@@ -52,11 +49,6 @@ export class DiskSync {
     this._pendingDeletes.clear();
   }
 
-  /** Schedule a debounced flush. */
-  private scheduleFlush(): void {
-    if (this._debounceTimer) clearTimeout(this._debounceTimer);
-    this._debounceTimer = setTimeout(() => this.flush(), DEBOUNCE_MS);
-  }
 
   /** Write a file to disk, creating parent directories as needed. */
   async writeFile(
@@ -203,11 +195,6 @@ export class DiskSync {
     if (this._onVisibilityChange) {
       document.removeEventListener('visibilitychange', this._onVisibilityChange);
       this._onVisibilityChange = null;
-    }
-    // Clear debounce timer and do a final flush
-    if (this._debounceTimer) {
-      clearTimeout(this._debounceTimer);
-      this._debounceTimer = null;
     }
     this.flush();
     this.project.getState().disconnect();

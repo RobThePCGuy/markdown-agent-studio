@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useEventLog } from '../../stores/use-stores';
 import { useKernel } from '../../hooks/useKernel';
 import styles from './EventLogView.module.css';
@@ -8,12 +8,15 @@ export function EventLogView() {
   const checkpoints = useEventLog((s) => s.checkpoints);
   const { replayFromEvent, restoreFromEvent, isRunning, lastReplayEventId } = useKernel();
   const [status, setStatus] = useState<string>('');
+  const [isReplaying, startReplayTransition] = useTransition();
   const recent = entries.slice(-100).reverse();
 
-  const handleReplay = async (eventId: string) => {
-    setStatus(`Replaying from ${eventId}...`);
-    const result = await replayFromEvent(eventId);
-    setStatus(result.message);
+  const handleReplay = (eventId: string) => {
+    startReplayTransition(async () => {
+      setStatus(`Replaying from ${eventId}...`);
+      const result = await replayFromEvent(eventId);
+      setStatus(result.message);
+    });
   };
 
   const handleRestore = (eventId: string) => {
@@ -63,10 +66,10 @@ export function EventLogView() {
                 </button>
                 <button
                   className={styles.ghostBtn}
-                  onClick={() => void handleReplay(entry.id)}
-                  disabled={isRunning}
+                  onClick={() => handleReplay(entry.id)}
+                  disabled={isRunning || isReplaying}
                 >
-                  Replay
+                  {isReplaying ? 'Replaying...' : 'Replay'}
                 </button>
               </div>
               {entry.data?.error != null && (
@@ -92,11 +95,11 @@ export function EventLogView() {
 
 function typeColor(type: string): string {
   switch (type) {
-    case 'error': return '#f38ba8';
-    case 'warning': return '#fab387';
-    case 'spawn': return '#a6e3a1';
-    case 'activation': return '#89b4fa';
-    case 'complete': return '#94e2d5';
-    default: return '#cdd6f4';
+    case 'error': return 'var(--status-red)';
+    case 'warning': return 'var(--status-orange)';
+    case 'spawn': return 'var(--status-green)';
+    case 'activation': return 'var(--status-blue)';
+    case 'complete': return 'var(--status-teal)';
+    default: return 'var(--text-primary)';
   }
 }

@@ -14,11 +14,11 @@ describe('web_fetch plugin', () => {
   });
 
   it('fetches plain text content', async () => {
-    (fetch as any).mockResolvedValue({
+    vi.mocked(fetch).mockResolvedValue({
       ok: true,
       headers: { get: () => 'text/plain' },
       text: async () => 'Hello world',
-    });
+    } as unknown as Response);
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com/data.txt' }, mockCtx);
     expect(result).toBe('Hello world');
@@ -26,11 +26,11 @@ describe('web_fetch plugin', () => {
   });
 
   it('strips HTML tags from HTML responses', async () => {
-    (fetch as any).mockResolvedValue({
+    vi.mocked(fetch).mockResolvedValue({
       ok: true,
       headers: { get: () => 'text/html' },
       text: async () => '<html><body><h1>Title</h1><p>Content here</p></body></html>',
-    });
+    } as unknown as Response);
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx);
     expect(result).toContain('Title');
@@ -40,11 +40,11 @@ describe('web_fetch plugin', () => {
 
   it('truncates to maxLength', async () => {
     const longText = 'x'.repeat(200);
-    (fetch as any).mockResolvedValue({
+    vi.mocked(fetch).mockResolvedValue({
       ok: true,
       headers: { get: () => 'text/plain' },
       text: async () => longText,
-    });
+    } as unknown as Response);
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com', maxLength: 50 }, mockCtx);
     expect(result).toContain('[truncated]');
@@ -52,11 +52,11 @@ describe('web_fetch plugin', () => {
   });
 
   it('returns error for non-ok responses', async () => {
-    (fetch as any).mockResolvedValue({
+    vi.mocked(fetch).mockResolvedValue({
       ok: false,
       status: 404,
       statusText: 'Not Found',
-    });
+    } as unknown as Response);
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com/nope' }, mockCtx);
     expect(result).toContain('Error');
@@ -64,7 +64,7 @@ describe('web_fetch plugin', () => {
   });
 
   it('returns error for network failures', async () => {
-    (fetch as any).mockRejectedValue(new Error('Network error'));
+    vi.mocked(fetch).mockRejectedValue(new Error('Network error'));
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx);
     expect(result).toContain('Error');

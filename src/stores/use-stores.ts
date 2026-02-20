@@ -74,11 +74,11 @@ export const uiStore = createStore<UIState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   setKernelConfig: (partial) => set((s) => {
     const next = { ...s.kernelConfig, ...partial };
-    try { localStorage.setItem('mas-kernel-config', JSON.stringify(next)); } catch {}
+    try { localStorage.setItem('mas-kernel-config', JSON.stringify(next)); } catch { /* localStorage may be unavailable */ }
     return { kernelConfig: next };
   }),
   setApiKey: (key) => {
-    try { localStorage.setItem('mas-api-key', key); } catch {}
+    try { localStorage.setItem('mas-api-key', key); } catch { /* localStorage may be unavailable */ }
     set({ apiKey: key });
   },
   setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
@@ -86,7 +86,7 @@ export const uiStore = createStore<UIState>((set) => ({
   openFileInEditor: (path) => set({ editingFilePath: path, editorDirty: false, activeTab: 'editor' }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setSoundEnabled: (enabled) => {
-    try { localStorage.setItem('mas-sound-enabled', String(enabled)); } catch {}
+    try { localStorage.setItem('mas-sound-enabled', String(enabled)); } catch { /* localStorage may be unavailable */ }
     set({ soundEnabled: enabled });
   },
 }));

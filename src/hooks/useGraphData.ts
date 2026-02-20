@@ -129,7 +129,8 @@ export function useGraphData() {
 
   return useMemo(() => {
     const agents = [...agentsMap.values()];
-    const now = Date.now();
+    // eslint-disable-next-line react-hooks/purity -- intentional: time-based recency for live UI
+    const nowMs = Date.now();
 
     // Build a map of agentId -> most recent session
     const latestByAgent = new Map<string, LatestSession>();
@@ -198,7 +199,7 @@ export function useGraphData() {
         const spawnedMeta = firstSpawnByChild.get(agent.path);
         const spawnCount = childrenByParent.get(agent.path)?.length ?? 0;
         const memoryCount = memoryEntries.filter((e) => e.authorAgentId === agent.path).length;
-        const justSpawned = spawnedMeta ? (now - spawnedMeta.timestamp) < 10000 : false;
+        const justSpawned = spawnedMeta ? (nowMs - spawnedMeta.timestamp) < 10000 : false;
         const dagreNode = g.node(agent.path);
         return {
           id: agent.path,
@@ -240,7 +241,7 @@ export function useGraphData() {
     for (const evt of spawnEvents) {
       const spawned = evt.data.spawned as string;
       if (spawned && nodeIds.has(spawned)) {
-        const recent = (now - evt.timestamp) < 8000;
+        const recent = (nowMs - evt.timestamp) < 8000;
         edges.push({
           id: `edge-spawn-${evt.id}`,
           source: evt.agentId,
@@ -262,7 +263,7 @@ export function useGraphData() {
       const parent = evt.data.parent as string | undefined;
       if (!parent) continue;
       if (!nodeIds.has(parent) || !nodeIds.has(evt.agentId)) continue;
-      const recent = (now - evt.timestamp) < 10000;
+      const recent = (nowMs - evt.timestamp) < 10000;
       if (!recent) continue;
       const message = typeof evt.data.message === 'string' ? compactText(evt.data.message, 26) : '';
       edges.push({
@@ -359,7 +360,7 @@ export function useGraphData() {
             label: activity.label,
             detail: activity.detail,
             ownerAgentId: agentId,
-            recent: (now - pendingTool.timestamp) < 8000,
+            recent: (nowMs - pendingTool.timestamp) < 8000,
           },
         });
         edges.push({

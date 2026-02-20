@@ -41,6 +41,15 @@ interface KernelDeps {
   onStreamChunk?: (agentId: string, chunk: StreamChunk) => void;
 }
 
+/** Interface for providers that support session registration (e.g. ScriptedAIProvider). */
+interface SessionRegisterable {
+  registerSession(sessionId: string, agentPath: string): void;
+}
+
+function hasRegisterSession(provider: AIProvider): provider is AIProvider & SessionRegisterable {
+  return 'registerSession' in provider;
+}
+
 let activationCounter = 0;
 
 export class Kernel {
@@ -288,8 +297,8 @@ export class Kernel {
         let hadToolCalls = false;
 
         // Register session with scripted provider if applicable
-        if ('registerSession' in this.deps.aiProvider) {
-          (this.deps.aiProvider as any).registerSession(activation.id, activation.agentId);
+        if (hasRegisterSession(this.deps.aiProvider)) {
+          this.deps.aiProvider.registerSession(activation.id, activation.agentId);
         }
 
         const stream = this.deps.aiProvider.chat(
@@ -541,8 +550,8 @@ export class Kernel {
         let hadToolCalls = false;
 
         // Register session with scripted provider if applicable
-        if ('registerSession' in this.deps.aiProvider) {
-          (this.deps.aiProvider as any).registerSession(activation.id, activation.agentId);
+        if (hasRegisterSession(this.deps.aiProvider)) {
+          this.deps.aiProvider.registerSession(activation.id, activation.agentId);
         }
 
         const stream = this.deps.aiProvider.chat(

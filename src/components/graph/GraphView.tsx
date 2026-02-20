@@ -73,7 +73,7 @@ function GraphViewInner() {
     return () => clearTimeout(timer);
   }, [derivedNodes.length, autoFollow, fitView]);
 
-  const onNodeClick = useCallback((_: any, node: any) => {
+  const onNodeClick = useCallback((_event: React.MouseEvent, node: { type?: string; id: string }) => {
     if (node.type !== 'agentNode') return;
     uiStore.getState().setSelectedAgent(node.id);
   }, []);

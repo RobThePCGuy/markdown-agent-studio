@@ -12,4 +12,17 @@ export default defineConfig({
       buffer: 'buffer/',
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-flow': ['@xyflow/react'],
+          'vendor-monaco': ['@monaco-editor/react'],
+          'vendor-google': ['@google/generative-ai'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm', 'react-syntax-highlighter'],
+        },
+      },
+    },
+  },
 })

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createEventLog } from './event-log';
 import { createVFSStore } from './vfs-store';
+import type { VFSState } from './vfs-store';
 
 function createMockVFS() {
   return {
@@ -89,7 +90,7 @@ describe('Event Log', () => {
 describe('Checkpoint Trimming', () => {
   it('does not trim when under 200 checkpoints', () => {
     const mockVFS = createMockVFS();
-    const log = createEventLog(mockVFS as any);
+    const log = createEventLog(mockVFS as unknown as { getState(): VFSState });
 
     appendN(log, 150);
 
@@ -99,7 +100,7 @@ describe('Checkpoint Trimming', () => {
 
   it('trims to 200 when exceeded, preserving first 10 and last 100', () => {
     const mockVFS = createMockVFS();
-    const log = createEventLog(mockVFS as any);
+    const log = createEventLog(mockVFS as unknown as { getState(): VFSState });
 
     appendN(log, 250);
 
@@ -127,7 +128,7 @@ describe('Checkpoint Trimming', () => {
 
   it('checkpointCount returns correct count', () => {
     const mockVFS = createMockVFS();
-    const log = createEventLog(mockVFS as any);
+    const log = createEventLog(mockVFS as unknown as { getState(): VFSState });
 
     expect(log.getState().checkpointCount()).toBe(0);
 
@@ -142,7 +143,7 @@ describe('Checkpoint Trimming', () => {
 describe('getCheckpoint fallback', () => {
   it('returns exact match when available', () => {
     const mockVFS = createMockVFS();
-    const log = createEventLog(mockVFS as any);
+    const log = createEventLog(mockVFS as unknown as { getState(): VFSState });
 
     appendN(log, 5);
 
@@ -154,7 +155,7 @@ describe('getCheckpoint fallback', () => {
 
   it('falls back to nearest earlier checkpoint when exact is trimmed', () => {
     const mockVFS = createMockVFS();
-    const log = createEventLog(mockVFS as any);
+    const log = createEventLog(mockVFS as unknown as { getState(): VFSState });
 
     // Append enough events to trigger trimming (250 > 200)
     appendN(log, 250);
@@ -187,7 +188,7 @@ describe('getCheckpoint fallback', () => {
 
   it('returns undefined when eventId does not exist', () => {
     const mockVFS = createMockVFS();
-    const log = createEventLog(mockVFS as any);
+    const log = createEventLog(mockVFS as unknown as { getState(): VFSState });
 
     appendN(log, 5);
 

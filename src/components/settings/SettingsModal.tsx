@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } from '../../stores/use-stores';
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
@@ -12,7 +13,7 @@ import styles from './SettingsModal.module.css';
 export default function SettingsModal() {
   const open = useUI((s) => s.settingsOpen);
   const apiKey = useUI((s) => s.apiKey);
-  const kernelConfig = useUI((s) => s.kernelConfig);
+  const kernelConfig = useUI(useShallow((s) => s.kernelConfig));
 
   const [showKey, setShowKey] = useState(false);
   const [clearConfirm, setClearConfirm] = useState('');
@@ -31,13 +32,15 @@ export default function SettingsModal() {
     }
   }, [open, handleKeyDown]);
 
-  // Reset local state when modal opens
-  useEffect(() => {
+  // Reset local state when modal opens (render-time state adjustment)
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setShowKey(false);
       setClearConfirm('');
     }
-  }, [open]);
+  }
 
   if (!open) return null;
 

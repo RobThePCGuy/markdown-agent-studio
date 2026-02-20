@@ -245,7 +245,7 @@ export class ToolHandler {
   private patternBase(pattern: string): string {
     const normalized = this.normalizePattern(pattern);
     if (normalized === '**') return '';
-    const wildcardIndex = normalized.search(/[\*]/);
+    const wildcardIndex = normalized.search(/[*]/);
     if (wildcardIndex === -1) return normalized;
     const beforeWildcard = normalized.slice(0, wildcardIndex);
     const slashIndex = beforeWildcard.lastIndexOf('/');

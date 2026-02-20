@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createCustomToolPlugin } from './custom-tool-plugin';
-import type { CustomToolDef } from '../../types/agent';
+import type { CustomToolDef, Activation } from '../../types';
 import type { ToolContext } from '../tool-plugin';
 import { createVFSStore } from '../../stores/vfs-store';
 import { createAgentRegistry } from '../../stores/agent-registry';
 import { createEventLog } from '../../stores/event-log';
+
+type SpawnedActivation = Omit<Activation, 'id' | 'createdAt'>;
 
 describe('createCustomToolPlugin', () => {
   const toolDef: CustomToolDef = {
@@ -44,7 +46,7 @@ describe('createCustomToolPlugin', () => {
 
   it('substitutes template parameters in prompt', async () => {
     const plugin = createCustomToolPlugin(toolDef);
-    const spawnedActivations: any[] = [];
+    const spawnedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
       onSpawnActivation: (act) => spawnedActivations.push(act),
     });
@@ -59,7 +61,7 @@ describe('createCustomToolPlugin', () => {
     const withModel: CustomToolDef = { ...toolDef, model: 'gemini-3-flash-preview' };
     const plugin = createCustomToolPlugin(withModel);
     const vfs = createVFSStore();
-    const spawnedActivations: any[] = [];
+    const spawnedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
       vfs,
       onSpawnActivation: (act) => spawnedActivations.push(act),
@@ -74,7 +76,7 @@ describe('createCustomToolPlugin', () => {
   it('defaults to preferred model and gloves_off safety mode', async () => {
     const plugin = createCustomToolPlugin(toolDef);
     const vfs = createVFSStore();
-    const spawnedActivations: any[] = [];
+    const spawnedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
       vfs,
       preferredModel: 'gemini-2.5-flash',
@@ -92,7 +94,7 @@ describe('createCustomToolPlugin', () => {
     const legacyModelDef: CustomToolDef = { ...toolDef, model: 'gemini-1.5-pro' };
     const plugin = createCustomToolPlugin(legacyModelDef);
     const vfs = createVFSStore();
-    const spawnedActivations: any[] = [];
+    const spawnedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
       vfs,
       preferredModel: 'gemini-3-flash-preview',
@@ -206,7 +208,7 @@ describe('createCustomToolPlugin', () => {
     };
     const plugin = createCustomToolPlugin(withSchema);
     const vfs = createVFSStore();
-    const spawnedActivations: any[] = [];
+    const spawnedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
       vfs,
       onSpawnActivation: (act) => spawnedActivations.push(act),

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { ChatMessage } from '../../types/session';
@@ -20,10 +21,12 @@ function formatTime(ts: number): string {
   return `${h}:${m}:${s}`;
 }
 
+const oneDarkStyles = oneDark as Record<string, React.CSSProperties>;
+
 const codeStyle: Record<string, React.CSSProperties> = {
   ...oneDark,
   'pre[class*="language-"]': {
-    ...((oneDark as any)['pre[class*="language-"]'] ?? {}),
+    ...(oneDarkStyles['pre[class*="language-"]'] ?? {}),
     background: '#11111b',
     margin: '8px 0',
     padding: '12px',
@@ -31,13 +34,22 @@ const codeStyle: Record<string, React.CSSProperties> = {
     fontSize: '12px',
   },
   'code[class*="language-"]': {
-    ...((oneDark as any)['code[class*="language-"]'] ?? {}),
+    ...(oneDarkStyles['code[class*="language-"]'] ?? {}),
     background: 'transparent',
   },
 };
 
-const markdownComponents: Record<string, React.ComponentType<any>> = {
-  code({ className, children, ...props }: any) {
+// Extend the default GitHub schema to allow className on code elements (needed for syntax highlighting)
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code ?? []), 'className'],
+  },
+};
+
+const markdownComponents: Partial<Components> = {
+  code({ className, children, ...props }) {
     const match = /language-(\w+)/.exec(className || '');
     const codeString = String(children).replace(/\n$/, '');
     if (match) {
@@ -58,6 +70,16 @@ const markdownComponents: Record<string, React.ComponentType<any>> = {
       );
     }
     return <code className={className} {...props}>{children}</code>;
+  },
+  a({ href, children, ...props }) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+        {children}
+      </a>
+    );
+  },
+  img({ src, alt, ...props }) {
+    return <img src={src} alt={alt ?? ''} loading="lazy" {...props} />;
   },
 };
 
@@ -160,7 +182,7 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
 
             {msg.role === 'assistant' && (
               <div className={styles.assistantBubble}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]} components={markdownComponents}>
                   {msg.content}
                 </ReactMarkdown>
               </div>
@@ -171,7 +193,7 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
 
       {streamingText && (
         <div className={styles.assistantBubble}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]} components={markdownComponents}>
             {streamingText}
           </ReactMarkdown>
           <span className={styles.streamCursor}>|</span>

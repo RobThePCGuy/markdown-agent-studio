@@ -6,7 +6,7 @@ import styles from './EditorToolbar.module.css';
 
 interface EditorToolbarProps {
   content: string;
-  onContentChange: (content: string, path: string) => void;
+  onContentChange: (content: string) => void;
 }
 
 export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) {
@@ -43,7 +43,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
     // Write to VFS first so the editor useEffect finds content when editingFilePath changes
     vfsStore.getState().write(newPath, template.content, {});
     agentRegistry.getState().registerFromFile(newPath, template.content);
-    onContentChange(template.content, newPath);
+    onContentChange(template.content);
     setEditingFile(newPath);
     setEditorDirty(false);
   }, [editorDirty, onContentChange, setEditingFile, setEditorDirty, filesMap]);
@@ -82,7 +82,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
           {editingPath ? (
             <form
               onSubmit={(e) => { e.preventDefault(); handlePathSubmit(); }}
-              style={{ display: 'flex', gap: 4 }}
+              className={styles.formRow}
             >
               <input
                 type="text"
@@ -97,6 +97,9 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
           ) : (
             <span
               onClick={() => { setPathInput(editingFilePath); setEditingPath(true); }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPathInput(editingFilePath); setEditingPath(true); } }}
               className={styles.filePath}
               title="Click to rename/move"
             >
@@ -104,7 +107,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
             </span>
           )}
 
-          <div style={{ flex: 1 }} />
+          <div className={styles.spacer} />
 
           {editorDirty && <span className={styles.unsaved}>Unsaved</span>}
 
@@ -128,7 +131,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
           File changed externally.
           <button
             onClick={() => {
-              if (vfsContent) onContentChange(vfsContent, editingFilePath!);
+              if (vfsContent) onContentChange(vfsContent);
             }}
             className={styles.reloadBtn}
           >

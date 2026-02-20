@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import { useKernel } from '../../hooks/useKernel';
 import { useAgentRegistry, useProjectStore, useUI, diskSync, uiStore } from '../../stores/use-stores';
 import { audioEngine } from '../../core/audio-engine';
@@ -13,23 +13,26 @@ export function TopBar() {
   const [selectedAgent, setSelectedAgent] = useState('');
   const [kickoffPrompt, setKickoffPrompt] = useState('');
   const soundEnabled = useUI((s) => s.soundEnabled);
+  const [isOpeningProject, startProjectTransition] = useTransition();
 
   const projectName = useProjectStore((s) => s.projectName);
   const syncStatus = useProjectStore((s) => s.syncStatus);
 
-  const handleOpenProject = async () => {
-    if (projectName) {
-      diskSync.stop();
-      return;
-    }
-    try {
-      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      await diskSync.start(handle);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        console.error('Failed to open project:', err);
+  const handleOpenProject = () => {
+    startProjectTransition(async () => {
+      if (projectName) {
+        diskSync.stop();
+        return;
       }
-    }
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        await diskSync.start(handle);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Failed to open project:', err);
+        }
+      }
+    });
   };
 
   const handleRun = () => {
@@ -104,8 +107,12 @@ export function TopBar() {
 
       <button
         onClick={handleOpenProject}
+        disabled={isOpeningProject}
         className={styles.projectBtn}
-        style={{ color: projectName ? 'var(--status-green)' : 'var(--text-dim)' }}
+        style={{
+          color: projectName ? 'var(--status-green)' : 'var(--text-dim)',
+          opacity: isOpeningProject ? 0.6 : 1,
+        }}
         title={projectName ? `Project: ${projectName} (click to disconnect)` : 'Open project folder'}
       >
         {syncStatus === 'syncing' && (

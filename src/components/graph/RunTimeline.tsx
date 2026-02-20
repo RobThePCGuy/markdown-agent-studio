@@ -30,9 +30,11 @@ export function RunTimeline() {
   if (sessionList.length === 0) return null;
 
   const runStart = sessionList[0].startedAt;
+  // eslint-disable-next-line react-hooks/purity -- intentional: time-based recency for live timeline UI
+  const nowMs = Date.now();
   const runEnd = Math.max(
-    ...sessionList.map((s) => s.completedAt ?? Date.now()),
-    Date.now(),
+    ...sessionList.map((s) => s.completedAt ?? nowMs),
+    nowMs,
   );
   const duration = Math.max(runEnd - runStart, 1);
 
@@ -47,7 +49,7 @@ export function RunTimeline() {
       <div className={styles.tracks}>
         {sessionList.map((session) => {
           const left = toPercent(session.startedAt);
-          const right = toPercent(session.completedAt ?? Date.now());
+          const right = toPercent(session.completedAt ?? nowMs);
           const width = Math.max(right - left, 0.5);
           const agentName = session.agentId.split('/').pop()?.replace('.md', '') ?? session.agentId;
 

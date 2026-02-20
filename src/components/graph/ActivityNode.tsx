@@ -3,13 +3,13 @@ import type { GraphActivityKind, GraphActivityNodeData } from '../../hooks/useGr
 import styles from './ActivityNode.module.css';
 
 const activityPalette: Record<GraphActivityKind, { border: string; bg: string; dot: string }> = {
-  thinking: { border: '#a6e3a1', bg: 'rgba(166,227,161,0.1)', dot: '#a6e3a1' },
-  web_search: { border: '#89b4fa', bg: 'rgba(137,180,250,0.12)', dot: '#89b4fa' },
-  web_fetch: { border: '#74c7ec', bg: 'rgba(116,199,236,0.12)', dot: '#74c7ec' },
-  signal: { border: '#fab387', bg: 'rgba(250,179,135,0.12)', dot: '#fab387' },
-  spawn: { border: '#f9e2af', bg: 'rgba(249,226,175,0.1)', dot: '#f9e2af' },
-  filesystem: { border: '#cba6f7', bg: 'rgba(203,166,247,0.12)', dot: '#cba6f7' },
-  tool: { border: '#94e2d5', bg: 'rgba(148,226,213,0.12)', dot: '#94e2d5' },
+  thinking: { border: '#a6e3a1', bg: 'rgba(166,227,161,0.1)', dot: 'var(--status-green)' },
+  web_search: { border: '#89b4fa', bg: 'rgba(137,180,250,0.12)', dot: 'var(--status-blue)' },
+  web_fetch: { border: '#74c7ec', bg: 'rgba(116,199,236,0.12)', dot: 'var(--status-cyan)' },
+  signal: { border: '#fab387', bg: 'rgba(250,179,135,0.12)', dot: 'var(--status-orange)' },
+  spawn: { border: '#f9e2af', bg: 'rgba(249,226,175,0.1)', dot: 'var(--status-yellow)' },
+  filesystem: { border: '#cba6f7', bg: 'rgba(203,166,247,0.12)', dot: 'var(--status-purple)' },
+  tool: { border: '#94e2d5', bg: 'rgba(148,226,213,0.12)', dot: 'var(--status-teal)' },
 };
 
 /** Convert a hex color like '#a6e3a1' to 'rgba(166,227,161,alpha)' */

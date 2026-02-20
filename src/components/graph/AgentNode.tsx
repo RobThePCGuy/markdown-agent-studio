@@ -32,14 +32,19 @@ export function AgentNode({ data }: NodeProps) {
   const [prevStatus, setPrevStatus] = useState(d.status);
   const [pulseColor, setPulseColor] = useState<string | null>(null);
 
+  // Detect status changes during render (React-recommended state adjustment pattern)
+  if (d.status !== prevStatus) {
+    setPrevStatus(d.status);
+    setPulseColor(statusColors[d.status] ?? '#7f849c');
+  }
+
+  // Clear pulse after animation completes
   useEffect(() => {
-    if (d.status !== prevStatus) {
-      setPulseColor(statusColors[d.status] ?? '#7f849c');
-      setPrevStatus(d.status);
+    if (pulseColor) {
       const timer = setTimeout(() => setPulseColor(null), 600);
       return () => clearTimeout(timer);
     }
-  }, [d.status, prevStatus]);
+  }, [pulseColor]);
 
   return (
     <div

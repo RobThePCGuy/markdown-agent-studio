@@ -9,7 +9,7 @@ const mockOscillator = () => ({
     setValueAtTime: vi.fn(),
     linearRampToValueAtTime: vi.fn(),
   },
-  connect: vi.fn(function (this: any) { return this; }),
+  connect: vi.fn().mockReturnThis(),
   start: vi.fn(),
   stop: vi.fn(),
 });
@@ -21,7 +21,7 @@ const mockGainNode = () => ({
     linearRampToValueAtTime: vi.fn(),
     exponentialRampToValueAtTime: vi.fn(),
   },
-  connect: vi.fn(function (this: any) { return this; }),
+  connect: vi.fn().mockReturnThis(),
 });
 
 const mockAudioContext = {
@@ -34,9 +34,9 @@ const mockAudioContext = {
 };
 
 // Use a proper constructor function so `new AudioContext()` works
-globalThis.AudioContext = vi.fn(function (this: any) {
+globalThis.AudioContext = vi.fn(function (this: Record<string, unknown>) {
   Object.assign(this, mockAudioContext);
-}) as any;
+}) as unknown as typeof AudioContext;
 
 // Import after mocking AudioContext
 const { audioEngine } = await import('./audio-engine');

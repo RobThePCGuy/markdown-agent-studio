@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, type MutableRefObject } from 'react';
 import { useReactFlow, type Edge } from '@xyflow/react';
 import type { GraphEdgeData } from '../../hooks/useGraphData';
 
@@ -132,71 +132,9 @@ export function ParticleOverlay({ edges }: ParticleOverlayProps) {
     }
   }, [edges, getNodes]);
 
-  /**
-   * Animation loop: advances particles and draws them on the canvas.
-   */
-  const animate = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Match canvas size to its container
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const w = rect.width;
-    const h = rect.height;
-
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      ctx.scale(dpr, dpr);
-    }
-
-    ctx.clearRect(0, 0, w, h);
-
-    const { x: panX, y: panY, zoom } = getViewport();
-    const particles = particlesRef.current;
-
-    if (particles.length === 0) {
-      rafRef.current = requestAnimationFrame(animate);
-      return;
-    }
-
-    for (const p of particles) {
-      // Advance
-      p.progress += p.speed;
-      if (p.progress > 1) {
-        p.progress -= 1;
-      }
-
-      // Interpolate position in flow-space
-      const fx = p.sourceX + (p.targetX - p.sourceX) * p.progress;
-      const fy = p.sourceY + (p.targetY - p.sourceY) * p.progress;
-
-      // Transform to screen-space
-      const sx = fx * zoom + panX;
-      const sy = fy * zoom + panY;
-
-      // Alpha fades toward the target
-      const alpha = 1 - p.progress * 0.6;
-
-      // Draw glow (larger, dimmer circle)
-      ctx.beginPath();
-      ctx.arc(sx, sy, PARTICLE_RADIUS * 2.5 * zoom, 0, Math.PI * 2);
-      ctx.fillStyle = colorWithAlpha(p.color, alpha * 0.25);
-      ctx.fill();
-
-      // Draw core (smaller, brighter circle)
-      ctx.beginPath();
-      ctx.arc(sx, sy, PARTICLE_RADIUS * zoom, 0, Math.PI * 2);
-      ctx.fillStyle = colorWithAlpha(p.color, alpha);
-      ctx.fill();
-    }
-
-    rafRef.current = requestAnimationFrame(animate);
-  }, [getViewport]);
+  /** Stable ref for getViewport so the animation loop always uses the latest. */
+  const getViewportRef = useRef(getViewport);
+  useEffect(() => { getViewportRef.current = getViewport; }, [getViewport]);
 
   // Sync particles whenever edges change
   useEffect(() => {
@@ -205,13 +143,14 @@ export function ParticleOverlay({ edges }: ParticleOverlayProps) {
 
   // Start and stop the animation loop
   useEffect(() => {
+    const animate = createAnimationLoop(canvasRef, particlesRef, getViewportRef, rafRef);
     rafRef.current = requestAnimationFrame(animate);
     return () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [animate]);
+  }, []);
 
   return (
     <canvas
@@ -226,6 +165,75 @@ export function ParticleOverlay({ edges }: ParticleOverlayProps) {
       }}
     />
   );
+}
+
+type Viewport = { x: number; y: number; zoom: number };
+
+/**
+ * Creates a self-referencing animation loop function.
+ * Extracted outside the component to avoid ref access during render.
+ */
+function createAnimationLoop(
+  canvasRef: MutableRefObject<HTMLCanvasElement | null>,
+  particlesRef: MutableRefObject<Particle[]>,
+  getViewportRef: MutableRefObject<() => Viewport>,
+  rafRef: MutableRefObject<number>,
+): () => void {
+  const animate = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = rect.width;
+    const h = rect.height;
+
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.scale(dpr, dpr);
+    }
+
+    ctx.clearRect(0, 0, w, h);
+
+    const { x: panX, y: panY, zoom } = getViewportRef.current();
+    const particles = particlesRef.current;
+
+    if (particles.length === 0) {
+      rafRef.current = requestAnimationFrame(animate);
+      return;
+    }
+
+    const updated: Particle[] = [];
+    for (const p of particles) {
+      const next = { ...p, progress: p.progress + p.speed };
+      if (next.progress > 1) next.progress -= 1;
+      updated.push(next);
+
+      const fx = next.sourceX + (next.targetX - next.sourceX) * next.progress;
+      const fy = next.sourceY + (next.targetY - next.sourceY) * next.progress;
+      const sx = fx * zoom + panX;
+      const sy = fy * zoom + panY;
+      const alpha = 1 - next.progress * 0.6;
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, PARTICLE_RADIUS * 2.5 * zoom, 0, Math.PI * 2);
+      ctx.fillStyle = colorWithAlpha(next.color, alpha * 0.25);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, PARTICLE_RADIUS * zoom, 0, Math.PI * 2);
+      ctx.fillStyle = colorWithAlpha(next.color, alpha);
+      ctx.fill();
+    }
+    particlesRef.current = updated;
+
+    rafRef.current = requestAnimationFrame(animate);
+  };
+  return animate;
 }
 
 /**

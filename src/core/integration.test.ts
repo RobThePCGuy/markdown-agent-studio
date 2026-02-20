@@ -5,6 +5,7 @@ import { createVFSStore } from '../stores/vfs-store';
 import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
+import type { AIProvider } from '../types';
 
 describe('Integration: full agent loop', () => {
   it('runs an agent that spawns a child, child writes an artifact', async () => {
@@ -17,7 +18,7 @@ describe('Integration: full agent loop', () => {
     const provider = new MockAIProvider([]);
 
     // Override chat to return different responses per call
-    (provider as any).chat = async function* () {
+    (provider as unknown as { chat: AIProvider['chat'] }).chat = async function* () {
       callCount++;
       if (callCount === 1) {
         // First agent: spawn a child

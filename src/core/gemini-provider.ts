@@ -1,6 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { GenerateContentStreamResult, Tool } from '@google/generative-ai';
+import type { Content, FunctionCall, FunctionDeclarationSchema, GenerateContentRequest, GenerateContentStreamResult, Part, Tool } from '@google/generative-ai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
+
+/**
+ * Raw part from Gemini stream response. May include opaque fields
+ * (thought, thoughtSignature) that the SDK type system does not expose.
+ */
+type RawPart = Part & Record<string, unknown>;
 
 /**
  * Gemini provider that manages conversation history manually using raw Content
@@ -14,7 +20,7 @@ export class GeminiProvider implements AIProvider {
   private client: GoogleGenerativeAI;
   private activeStreams = new Map<string, AbortController>();
   /** Raw Gemini Content[] per session - preserves thought signatures exactly. */
-  private sessionContents = new Map<string, any[]>();
+  private sessionContents = new Map<string, Content[]>();
 
   constructor(apiKey: string) {
     this.client = new GoogleGenerativeAI(apiKey);
@@ -38,11 +44,11 @@ export class GeminiProvider implements AIProvider {
         functionDeclarations: tools.map((t) => ({
           name: t.name,
           description: t.description,
-          parameters: t.parameters as any,
+          parameters: t.parameters as FunctionDeclarationSchema,
         })),
       }] : undefined;
 
-      let contents: any[];
+      let contents: Content[];
 
       if (this.sessionContents.has(config.sessionId)) {
         // Follow-up turn: retrieve stored contents (includes model's raw
@@ -79,14 +85,14 @@ export class GeminiProvider implements AIProvider {
       }
 
       const result: GenerateContentStreamResult = await model.generateContentStream(
-        { contents, tools: geminiTools } as any,
+        { contents, tools: geminiTools } as GenerateContentRequest,
         { signal: controller.signal },
       );
 
       let totalTokens = 0;
       // Collect raw parts from stream chunks (not from aggregated response,
       // which strips thought/thoughtSignature fields via aggregateResponses).
-      const rawModelParts: any[] = [];
+      const rawModelParts: RawPart[] = [];
       let modelRole = 'model';
 
       for await (const chunk of result.stream) {
@@ -105,7 +111,9 @@ export class GeminiProvider implements AIProvider {
         for (const part of candidate.content?.parts ?? []) {
           // Store the raw part reference - preserves thought, thoughtSignature,
           // and any other opaque fields from the JSON-parsed SSE data.
-          rawModelParts.push(part);
+          // Cast needed: SDK Part union types lack index signatures but the
+          // JSON-parsed SSE data may carry additional opaque fields.
+          rawModelParts.push(part as RawPart);
 
           if (part.text) {
             yield { type: 'text', text: part.text };
@@ -114,7 +122,7 @@ export class GeminiProvider implements AIProvider {
             yield {
               type: 'tool_call',
               toolCall: {
-                id: (part.functionCall as any).id ?? `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                id: (part.functionCall as FunctionCall & { id?: string }).id ?? `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                 name: part.functionCall.name,
                 args: (part.functionCall.args ?? {}) as Record<string, unknown>,
               },

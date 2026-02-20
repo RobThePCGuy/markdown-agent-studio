@@ -4,14 +4,14 @@ import { createVFSStore } from '../stores/vfs-store';
 import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
 import { createBuiltinRegistry } from './plugins';
-import type { AgentPolicy } from '../types';
+import type { AgentPolicy, Activation } from '../types';
 
 describe('ToolHandler', () => {
   let handler: ToolHandler;
   let vfs: ReturnType<typeof createVFSStore>;
   let registry: ReturnType<typeof createAgentRegistry>;
   let eventLog: ReturnType<typeof createEventLog>;
-  let spawnedActivations: any[];
+  let spawnedActivations: Omit<Activation, 'id' | 'createdAt'>[];
 
   beforeEach(() => {
     vfs = createVFSStore();

@@ -73,12 +73,3 @@
   to { opacity: 1; }
 }
 
-/* Edge flow animation */
-@keyframes edgeFlow {
-  to { stroke-dashoffset: -20; }
-}
-
-/* Cursor blink */
-@keyframes blink {
-  50% { opacity: 0; }
-}

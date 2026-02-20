@@ -11,6 +11,7 @@ export function useOnboarding(): { showWelcome: boolean; dismissWelcome: () => v
     if (!hasSeenOnboarding && agentCount === 0) {
       loadSampleProject(vfsStore, agentRegistry);
       localStorage.setItem('mas-onboarded', '1');
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initialization side effect
       setShowWelcome(true);
     }
   }, []);

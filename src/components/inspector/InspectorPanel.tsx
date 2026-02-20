@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { AgentProfile } from '../../types';
 import { useAgentRegistry, useUI, useSessionStore } from '../../stores/use-stores';
 import { ChatLog } from './ChatLog';
@@ -20,10 +20,12 @@ export function InspectorPanel() {
 
   const [selectedSessionIdx, setSelectedSessionIdx] = useState(0);
 
-  // Reset to latest session when agent changes
-  useEffect(() => {
+  // Reset to latest session when agent changes (render-time state adjustment)
+  const [prevAgentId, setPrevAgentId] = useState(selectedAgentId);
+  if (selectedAgentId !== prevAgentId) {
+    setPrevAgentId(selectedAgentId);
     setSelectedSessionIdx(0);
-  }, [selectedAgentId]);
+  }
 
   const activeSession = agentSessions[selectedSessionIdx];
 

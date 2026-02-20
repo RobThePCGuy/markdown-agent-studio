@@ -23,15 +23,15 @@ export function AgentEditor() {
     };
   }, []);
 
-  // Load file content when editingFilePath changes
-  useEffect(() => {
-    if (!editingFilePath) {
-      setContent('');
-      return;
-    }
-    const vfsContent = vfsStore.getState().read(editingFilePath);
-    setContent(vfsContent ?? '');
-  }, [editingFilePath]);
+  // Sync content from VFS when editingFilePath changes (render-time state adjustment)
+  const [prevPath, setPrevPath] = useState(editingFilePath);
+  if (editingFilePath !== prevPath) {
+    setPrevPath(editingFilePath);
+    const newVfsContent = editingFilePath
+      ? vfsStore.getState().read(editingFilePath) ?? ''
+      : '';
+    setContent(newVfsContent);
+  }
 
   const runValidation = useCallback((value: string) => {
     const editor = editorRef.current;
@@ -120,7 +120,7 @@ export function AgentEditor() {
     validateTimerRef.current = setTimeout(() => runValidation(newContent), 300);
   }, [setEditorDirty, runValidation]);
 
-  const handleToolbarContentChange = useCallback((newContent: string, _newPath: string) => {
+  const handleToolbarContentChange = useCallback((newContent: string) => {
     setContent(newContent);
     // Validation runs after editor mount updates
     setTimeout(() => runValidation(newContent), 50);
