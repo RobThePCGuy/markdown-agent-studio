@@ -5,10 +5,13 @@
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: var(--text-sm);
-  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color 400ms ease,
+    transform var(--transition-fast),
+    box-shadow 400ms ease;
   background:
     url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"),
-    linear-gradient(180deg, rgba(24,24,37,0.96) 0%, rgba(17,17,27,0.96) 100%);
+    linear-gradient(180deg, rgba(24, 24, 37, 0.96) 0%, rgba(17, 17, 27, 0.96) 100%);
   position: relative;
   cursor: pointer;
   border: 2px solid;
@@ -24,7 +27,9 @@
   inset: -4px;
   border-radius: 18px;
   background: transparent;
-  box-shadow: 0 0 0 1px rgba(116,199,236,0.25), 0 0 16px rgba(116,199,236,0.12);
+  box-shadow:
+    0 0 0 1px rgba(116, 199, 236, 0.25),
+    0 0 16px rgba(116, 199, 236, 0.12);
   pointer-events: none;
 }
 
@@ -35,7 +40,9 @@
   right: 12px;
   height: 3px;
   border-radius: 0 0 2px 2px;
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .accentBar.running {
@@ -82,7 +89,7 @@
   gap: 8px;
   align-items: center;
   padding-top: 6px;
-  border-top: 1px solid rgba(69,71,90,0.4);
+  border-top: 1px solid rgba(69, 71, 90, 0.4);
   font-size: 10px;
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -105,4 +112,18 @@
   background: var(--depth-4) !important;
   width: 7px !important;
   height: 7px !important;
+}
+
+.sonarRing {
+  position: absolute;
+  inset: -4px;
+  border: 2px solid;
+  border-radius: var(--radius-lg);
+  animation: sonarExpand 600ms ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes sonarExpand {
+  0% { inset: -4px; opacity: 0.8; }
+  100% { inset: -24px; opacity: 0; }
 }

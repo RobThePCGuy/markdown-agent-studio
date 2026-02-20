@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { GraphAgentNodeData } from '../../hooks/useGraphData';
 import styles from './AgentNode.module.css';
@@ -28,14 +29,28 @@ export function AgentNode({ data }: NodeProps) {
     isRunning ? 'agentPulse 1.4s ease-in-out infinite' : '',
   ].filter(Boolean).join(', ');
 
+  const [prevStatus, setPrevStatus] = useState(d.status);
+  const [pulseColor, setPulseColor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (d.status !== prevStatus) {
+      setPulseColor(statusColors[d.status] ?? '#7f849c');
+      setPrevStatus(d.status);
+      const timer = setTimeout(() => setPulseColor(null), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [d.status, prevStatus]);
+
   return (
     <div
       className={[styles.node, d.selected && styles.selected].filter(Boolean).join(' ')}
       style={{
         borderColor: d.selected ? 'var(--status-cyan)' : color,
-        boxShadow: d.selected
-          ? '0 0 0 1px rgba(116,199,236,0.25), 0 10px 22px rgba(0,0,0,0.35)'
-          : '0 8px 18px rgba(0,0,0,0.35)',
+        boxShadow: pulseColor
+          ? `0 0 20px ${pulseColor}, 0 8px 18px rgba(0,0,0,0.35)`
+          : d.selected
+            ? '0 0 0 1px rgba(116,199,236,0.25), 0 10px 22px rgba(0,0,0,0.35)'
+            : '0 8px 18px rgba(0,0,0,0.35)',
         animation: animation || 'none',
       }}
     >
@@ -78,6 +93,15 @@ export function AgentNode({ data }: NodeProps) {
           </span>
         )}
       </div>
+
+      {pulseColor && (d.status === 'completed' || d.status === 'error') && (
+        <div
+          className={styles.sonarRing}
+          style={{
+            borderColor: d.status === 'completed' ? 'var(--status-green)' : 'var(--status-red)',
+          }}
+        />
+      )}
 
       <Handle type="source" position={Position.Bottom} className={styles.handle} />
     </div>
