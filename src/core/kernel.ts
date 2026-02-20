@@ -287,6 +287,11 @@ export class Kernel {
         let textAccumulator = '';
         let hadToolCalls = false;
 
+        // Register session with scripted provider if applicable
+        if ('registerSession' in this.deps.aiProvider) {
+          (this.deps.aiProvider as any).registerSession(activation.id, activation.agentId);
+        }
+
         const stream = this.deps.aiProvider.chat(
           {
             sessionId: activation.id,
@@ -535,6 +540,11 @@ export class Kernel {
         let textAccumulator = '';
         let hadToolCalls = false;
 
+        // Register session with scripted provider if applicable
+        if ('registerSession' in this.deps.aiProvider) {
+          (this.deps.aiProvider as any).registerSession(activation.id, activation.agentId);
+        }
+
         const stream = this.deps.aiProvider.chat(
           {
             sessionId: activation.id,
@@ -673,11 +683,17 @@ export class Kernel {
   }
 
   private resolveSessionModel(profileModel: string | undefined): string {
+    // Settings (config) model takes priority - it's the user's explicit global choice.
+    // Agent profile model is only used as a per-agent fallback when no config model is set.
+    const preferred = this.resolvePreferredModel();
+    if (preferred !== DEFAULT_MODEL) {
+      return preferred;
+    }
     const profile = typeof profileModel === 'string' ? profileModel.trim() : '';
     if (profile && !LEGACY_GEMINI_MODEL.test(profile)) {
       return profile;
     }
-    return this.resolvePreferredModel();
+    return preferred;
   }
 
   private isQuotaError(message: unknown): boolean {

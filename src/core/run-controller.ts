@@ -1,6 +1,7 @@
 import { Kernel } from './kernel';
 import { GeminiProvider } from './gemini-provider';
-import { MockAIProvider } from './mock-provider';
+import { ScriptedAIProvider } from './scripted-provider';
+import { DEMO_SCRIPT } from './demo-script';
 import { agentRegistry, eventLogStore, sessionStore, uiStore, vfsStore, memoryStore } from '../stores/use-stores';
 import type { KernelConfig } from '../types';
 import { restoreCheckpoint } from '../utils/replay';
@@ -56,10 +57,7 @@ class RunController {
     const apiKey = uiStore.getState().apiKey;
     const provider = apiKey && apiKey !== 'your-api-key-here'
       ? new GeminiProvider(apiKey)
-      : new MockAIProvider([
-          { type: 'text', text: 'Mock response (no API key configured)' },
-          { type: 'done', tokenCount: 10 },
-        ]);
+      : new ScriptedAIProvider(DEMO_SCRIPT);
 
     const kernel = new Kernel({
       aiProvider: provider,
@@ -111,11 +109,12 @@ class RunController {
         // Run summarization in background
         const apiKey = uiStore.getState().apiKey;
         if (apiKey && completedSessions.length > 0) {
+          const summarizeModel = config.model || 'gemini-2.0-flash';
           const summarizeFn = async (context: string) => {
             try {
               const { GoogleGenerativeAI } = await import('@google/generative-ai');
               const client = new GoogleGenerativeAI(apiKey);
-              const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+              const model = client.getGenerativeModel({ model: summarizeModel });
               const result = await model.generateContent(
                 SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
               );
