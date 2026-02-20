@@ -1,14 +1,18 @@
 import { useState, useMemo } from 'react';
 import { useKernel } from '../../hooks/useKernel';
-import { useAgentRegistry, useProjectStore, diskSync, uiStore } from '../../stores/use-stores';
+import { useAgentRegistry, useProjectStore, useUI, diskSync, uiStore } from '../../stores/use-stores';
+import { audioEngine } from '../../core/audio-engine';
+import { useAudioEvents } from '../../hooks/useAudioEvents';
 import styles from './TopBar.module.css';
 
 export function TopBar() {
+  useAudioEvents();
   const agentsMap = useAgentRegistry((s) => s.agents);
   const agents = useMemo(() => [...agentsMap.values()], [agentsMap]);
   const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount } = useKernel();
   const [selectedAgent, setSelectedAgent] = useState('');
   const [kickoffPrompt, setKickoffPrompt] = useState('');
+  const soundEnabled = useUI((s) => s.soundEnabled);
 
   const projectName = useProjectStore((s) => s.projectName);
   const syncStatus = useProjectStore((s) => s.syncStatus);
@@ -80,6 +84,22 @@ export function TopBar() {
         {Math.round(totalTokens / 1000)}K tokens
       </span>
 
+      <button
+        onClick={() => {
+          if (!soundEnabled) {
+            audioEngine.enable();
+            uiStore.getState().setSoundEnabled(true);
+          } else {
+            audioEngine.disable();
+            uiStore.getState().setSoundEnabled(false);
+          }
+        }}
+        className={styles.soundBtn}
+        title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+      >
+        {soundEnabled ? 'SND' : 'MUTE'}
+      </button>
+
       <div className={styles.divider} />
 
       <button
@@ -97,7 +117,7 @@ export function TopBar() {
         {syncStatus === 'error' && (
           <span className={styles.statusDot} style={{ background: 'var(--status-red)' }} />
         )}
-        {projectName ? projectName : '\u{1F4C1}'}
+        {projectName ? projectName : 'Open'}
       </button>
 
       <button
