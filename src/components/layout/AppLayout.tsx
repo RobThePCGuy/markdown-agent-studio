@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Allotment } from 'allotment';
 import 'allotment/dist/style.css';
 import { TopBar } from './TopBar';
@@ -7,11 +8,24 @@ import { AgentEditor } from '../editor/AgentEditor';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useUI } from '../../stores/use-stores';
 import SettingsModal from '../settings/SettingsModal';
+import { CommandPalette } from '../command-palette/CommandPalette';
 import styles from './AppLayout.module.css';
 
 export function AppLayout() {
   const activeTab = useUI((s) => s.activeTab);
   const setActiveTab = useUI((s) => s.setActiveTab);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   return (
     <>
@@ -50,6 +64,7 @@ export function AppLayout() {
         </div>
       </div>
       <SettingsModal />
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
     </>
   );
 }
