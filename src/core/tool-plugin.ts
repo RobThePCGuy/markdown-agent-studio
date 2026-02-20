@@ -3,6 +3,7 @@ import type { Activation } from '../types/kernel';
 import type { VFSState } from '../stores/vfs-store';
 import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
+import type { MemoryStoreState } from '../stores/memory-store';
 
 type Store<T> = { getState(): T };
 
@@ -28,6 +29,7 @@ export interface ToolContext {
   incrementSpawnCount: () => void;
   apiKey?: string;
   preferredModel?: string;
+  memoryStore?: Store<MemoryStoreState>;
 }
 
 export interface ToolPlugin {
