@@ -283,6 +283,70 @@ describe('ToolHandler', () => {
       expect(vfs.getState().exists('memory/notes.md')).toBe(false);
     });
 
+    it('blocks vfs_read and vfs_list when args are empty or invalid', async () => {
+      vfs.getState().write('artifacts/secret.md', 'secret', {});
+
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-args',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: restrictedPolicy,
+      });
+
+      const readResult = await restricted.handle('vfs_read', { path: 123 });
+      expect(readResult).toContain("Policy blocked 'vfs_read'");
+      expect(readResult).toContain("non-empty string 'path'");
+      expect(readResult).not.toContain('artifacts/secret.md');
+
+      const listResult = await restricted.handle('vfs_list', { prefix: '' });
+      expect(listResult).toContain("Policy blocked 'vfs_list'");
+      expect(listResult).toContain("non-empty string 'prefix'");
+      expect(listResult).not.toContain('artifacts/secret.md');
+    });
+
+    it('requires list prefixes to stay within allowed read roots', async () => {
+      const agentsOnlyReadPolicy: AgentPolicy = {
+        ...restrictedPolicy,
+        reads: ['agents/**'],
+      };
+
+      vfs.getState().write('agents/a.md', 'a', {});
+      vfs.getState().write('artifacts/secret.md', 'secret', {});
+
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-prefix',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: agentsOnlyReadPolicy,
+      });
+
+      const blocked = await restricted.handle('vfs_list', { prefix: 'a' });
+      expect(blocked).toContain("Policy blocked list prefix 'a'");
+      expect(blocked).not.toContain('artifacts/secret.md');
+
+      const allowed = await restricted.handle('vfs_list', { prefix: 'agents/' });
+      expect(allowed).toContain('agents/a.md');
+      expect(allowed).not.toContain('artifacts/secret.md');
+    });
+
     it('bypasses restrictions in gloves_off mode', async () => {
       const glovesOffPolicy: AgentPolicy = {
         ...restrictedPolicy,

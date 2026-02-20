@@ -100,9 +100,7 @@ class RunController {
 
       // Post-run summarization
       if (config.memoryEnabled !== false) {
-        const workingSnapshot = memoryStore.getState().entries.length > 0
-          ? memoryStore.getState().endRun()
-          : [];
+        const workingSnapshot = kernel.lastWorkingMemorySnapshot;
         const completedSessions = [...sessionStore.getState().sessions.values()]
           .filter((s) => s.completedAt);
 

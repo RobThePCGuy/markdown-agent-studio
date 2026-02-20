@@ -16,6 +16,7 @@ export class DiskSync {
 
   private _pendingWrites = new Map<string, string>();
   private _pendingDeletes = new Set<string>();
+  private _flushChain: Promise<void> = Promise.resolve();
   private _onUnload: (() => void) | null = null;
   private _onVisibilityChange: (() => void) | null = null;
 
@@ -34,19 +35,35 @@ export class DiskSync {
     const dirHandle = this.project.getState().dirHandle;
     if (!dirHandle) return;
 
-    for (const [path, content] of this._pendingWrites) {
-      this.writeFile(dirHandle, path, content).catch((err) => {
-        console.error(`DiskSync: failed to write ${path}:`, err);
-        this.project.getState().setSyncStatus('error');
-      });
-    }
-    for (const path of this._pendingDeletes) {
-      this.deleteFile(dirHandle, path).catch((err) => {
-        console.error(`DiskSync: failed to delete ${path}:`, err);
-      });
-    }
+    const writes = [...this._pendingWrites.entries()];
+    const deletes = [...this._pendingDeletes];
     this._pendingWrites.clear();
     this._pendingDeletes.clear();
+
+    if (writes.length === 0 && deletes.length === 0) return;
+
+    this._flushChain = this._flushChain
+      .then(async () => {
+        for (const [path, content] of writes) {
+          try {
+            await this.writeFile(dirHandle, path, content);
+          } catch (err) {
+            console.error(`DiskSync: failed to write ${path}:`, err);
+            this.project.getState().setSyncStatus('error');
+          }
+        }
+        for (const path of deletes) {
+          try {
+            await this.deleteFile(dirHandle, path);
+          } catch (err) {
+            console.error(`DiskSync: failed to delete ${path}:`, err);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('DiskSync: unexpected flush failure:', err);
+        this.project.getState().setSyncStatus('error');
+      });
   }
 
 

@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Kernel } from './kernel';
 import { MockAIProvider } from './mock-provider';
 import { createVFSStore } from '../stores/vfs-store';
 import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
+import { runController } from './run-controller';
+import { Summarizer } from './summarizer';
+import { SAMPLE_AGENTS } from './sample-project';
+import { agentRegistry, eventLogStore, memoryStore, sessionStore, uiStore, vfsStore } from '../stores/use-stores';
 
 describe('Kernel', () => {
   let kernel: Kernel;
@@ -272,5 +276,83 @@ describe('Kernel', () => {
     expect(session.history[2].content).toContain('My Notes');
     // Tokens should accumulate across turns
     expect(session.tokenCount).toBe(130);
+  });
+});
+
+describe('RunController memory handoff regression', () => {
+  const projectLead = SAMPLE_AGENTS.find((agent) => agent.path === 'agents/project-lead.md');
+  if (!projectLead) {
+    throw new Error('Missing sample project lead agent');
+  }
+
+  let previousApiKey = '';
+  let previousKernelConfig = { ...uiStore.getState().kernelConfig };
+
+  const resetGlobalStores = (): void => {
+    runController.killAll();
+    vfsStore.setState({ files: new Map() });
+    agentRegistry.setState({ agents: new Map() });
+    eventLogStore.getState().clear();
+    sessionStore.getState().clearAll();
+    memoryStore.setState({ entries: [], runId: null });
+  };
+
+  beforeEach(() => {
+    previousApiKey = uiStore.getState().apiKey;
+    previousKernelConfig = { ...uiStore.getState().kernelConfig };
+
+    resetGlobalStores();
+    vfsStore.getState().write(projectLead.path, projectLead.content, {});
+    agentRegistry.getState().registerFromFile(projectLead.path, projectLead.content);
+  });
+
+  afterEach(() => {
+    uiStore.getState().setApiKey(previousApiKey);
+    uiStore.getState().setKernelConfig(previousKernelConfig);
+    resetGlobalStores();
+    vi.restoreAllMocks();
+  });
+
+  it('passes kernel working-memory snapshot to summarizer', async () => {
+    const summarizeSpy = vi.spyOn(Summarizer.prototype, 'summarize').mockResolvedValue();
+
+    uiStore.getState().setApiKey('your-api-key-here');
+    uiStore.getState().setKernelConfig({
+      maxConcurrency: 1,
+      maxDepth: 0,
+      maxFanout: 1,
+      tokenBudget: 10000,
+      memoryEnabled: true,
+    });
+
+    await runController.run('agents/project-lead.md', 'Build me a portfolio website');
+
+    for (let i = 0; i < 50 && summarizeSpy.mock.calls.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(summarizeSpy).toHaveBeenCalledTimes(1);
+    const workingMemory = summarizeSpy.mock.calls[0][1] as Array<{ key: string }>;
+    expect(workingMemory.length).toBeGreaterThan(0);
+    expect(workingMemory.some((entry) => entry.key === 'project-plan')).toBe(true);
+  });
+
+  it('keeps summarization disabled when memory is off', async () => {
+    const summarizeSpy = vi.spyOn(Summarizer.prototype, 'summarize').mockResolvedValue();
+
+    uiStore.getState().setApiKey('your-api-key-here');
+    uiStore.getState().setKernelConfig({
+      maxConcurrency: 1,
+      maxDepth: 0,
+      maxFanout: 1,
+      tokenBudget: 10000,
+      memoryEnabled: false,
+    });
+
+    await runController.run('agents/project-lead.md', 'Build me a portfolio website');
+
+    expect(summarizeSpy).not.toHaveBeenCalled();
+    expect(memoryStore.getState().entries).toHaveLength(0);
+    expect(memoryStore.getState().runId).toBeNull();
   });
 });

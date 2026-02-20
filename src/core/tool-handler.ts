@@ -159,7 +159,9 @@ export class ToolHandler {
 
       case 'vfs_read': {
         const path = typeof args.path === 'string' ? args.path : '';
-        if (!path) return null;
+        if (!path.trim()) {
+          return "Policy blocked 'vfs_read'. Provide a non-empty string 'path' that is allowed by frontmatter 'reads'.";
+        }
         if (!this.matchesAnyPattern(path, policy.reads)) {
           return `Policy blocked read '${path}'. Add it to frontmatter 'reads'.`;
         }
@@ -168,7 +170,9 @@ export class ToolHandler {
 
       case 'vfs_list': {
         const prefix = typeof args.prefix === 'string' ? args.prefix : '';
-        if (!prefix) return null;
+        if (!prefix.trim()) {
+          return "Policy blocked 'vfs_list'. Provide a non-empty string 'prefix' that is allowed by frontmatter 'reads'.";
+        }
         if (!this.prefixAllowed(prefix, policy.reads)) {
           return `Policy blocked list prefix '${prefix}'. Add an allowed read scope in frontmatter 'reads'.`;
         }
@@ -261,7 +265,7 @@ export class ToolHandler {
     return patterns.some((pattern) => {
       const base = this.patternBase(pattern);
       if (!base) return true;
-      return normalizedPrefix.startsWith(base) || base.startsWith(normalizedPrefix);
+      return normalizedPrefix.startsWith(base);
     });
   }
 }
