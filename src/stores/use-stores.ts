@@ -5,6 +5,7 @@ import { createAgentRegistry, type AgentRegistryState } from './agent-registry';
 import { createEventLog, type EventLogState } from './event-log';
 import { createSessionStore, type SessionStoreState } from './session-store';
 import { createProjectStore, type ProjectState } from './project-store';
+import { createMemoryStore, type MemoryStoreState } from './memory-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
@@ -15,6 +16,7 @@ export const agentRegistry = createAgentRegistry();
 export const eventLogStore = createEventLog(vfsStore);
 export const sessionStore = createSessionStore();
 export const projectStore = createProjectStore();
+export const memoryStore = createMemoryStore();
 export const diskSync = new DiskSync(vfsStore, projectStore, agentRegistry);
 
 // UI state store
@@ -100,4 +102,8 @@ export function useSessionStore<T>(selector: (state: SessionStoreState) => T): T
 
 export function useProjectStore<T>(selector: (state: ProjectState) => T): T {
   return useStore(projectStore, selector);
+}
+
+export function useMemoryStore<T>(selector: (state: MemoryStoreState) => T): T {
+  return useStore(memoryStore, selector);
 }

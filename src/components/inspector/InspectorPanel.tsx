@@ -1,53 +1,79 @@
+import { useState } from 'react';
 import type { AgentProfile } from '../../types';
 import { useAgentRegistry, useUI, useSessionStore } from '../../stores/use-stores';
 import { ChatLog } from './ChatLog';
 import { EventLogView } from './EventLogView';
+import { MemoryPanel } from './MemoryPanel';
 import styles from './InspectorPanel.module.css';
 
 export function InspectorPanel() {
   const selectedAgentId = useUI((s) => s.selectedAgentId);
   const sessions = useSessionStore((s) => s.sessions);
   const agents = useAgentRegistry((s) => s.agents);
+  const [viewMode, setViewMode] = useState<'chat' | 'events' | 'memory'>('chat');
 
-  if (!selectedAgentId) {
-    return <EventLogView />;
-  }
-
-  // Find most recent session for this agent
   let latestSession;
-  for (const session of sessions.values()) {
-    if (session.agentId === selectedAgentId) {
-      if (!latestSession || session.startedAt > latestSession.startedAt) {
-        latestSession = session;
+  if (selectedAgentId) {
+    for (const session of sessions.values()) {
+      if (session.agentId === selectedAgentId) {
+        if (!latestSession || session.startedAt > latestSession.startedAt) {
+          latestSession = session;
+        }
       }
     }
   }
 
-  const profile = agents.get(selectedAgentId);
+  const profile = selectedAgentId ? agents.get(selectedAgentId) : undefined;
 
   return (
     <div className={styles.container}>
+      <div className={styles.tabBar}>
+        <button
+          onClick={() => setViewMode('chat')}
+          className={`${styles.tab}${viewMode === 'chat' ? ` ${styles.active}` : ''}`}
+        >
+          Chat
+        </button>
+        <button
+          onClick={() => setViewMode('events')}
+          className={`${styles.tab}${viewMode === 'events' ? ` ${styles.active}` : ''}`}
+        >
+          Events
+        </button>
+        <button
+          onClick={() => setViewMode('memory')}
+          className={`${styles.tab}${viewMode === 'memory' ? ` ${styles.active}` : ''}`}
+        >
+          Memory
+        </button>
+      </div>
+
       {profile && <PolicyBanner profile={profile} />}
+
       <div className={styles.chatArea}>
-        <ChatLog
-          agentId={selectedAgentId}
-          messages={latestSession?.messages ?? []}
-          streamingText={latestSession?.streamingText ?? ''}
-        />
+        {viewMode === 'chat' && (
+          <ChatLog
+            agentId={selectedAgentId ?? ''}
+            messages={latestSession?.messages ?? []}
+            streamingText={latestSession?.streamingText ?? ''}
+          />
+        )}
+        {viewMode === 'events' && <EventLogView />}
+        {viewMode === 'memory' && <MemoryPanel />}
       </div>
     </div>
   );
 }
 
 const modeColors: Record<string, string> = {
-  gloves_off: '#f38ba8',
-  safe: '#a6e3a1',
-  balanced: '#f9e2af',
+  gloves_off: 'var(--status-red)',
+  safe: 'var(--status-green)',
+  balanced: 'var(--status-yellow)',
 };
 
 function PolicyBanner({ profile }: { profile: AgentProfile }) {
   const { policy } = profile;
-  const modeColor = modeColors[policy.mode] ?? '#cdd6f4';
+  const modeColor = modeColors[policy.mode] ?? 'var(--text-primary)';
 
   const perms: { label: string; enabled: boolean }[] = [
     { label: 'spawn', enabled: policy.permissions.spawnAgents },

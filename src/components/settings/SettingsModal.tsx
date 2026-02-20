@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } from '../../stores/use-stores';
+import { MemoryManager } from '../../core/memory-manager';
+import { createMemoryDB } from '../../core/memory-db';
 import styles from './SettingsModal.module.css';
 
 // ---------------------------------------------------------------------------
@@ -100,8 +102,7 @@ export default function SettingsModal() {
                 value={apiKey}
                 onChange={(e) => uiStore.getState().setApiKey(e.target.value)}
                 placeholder="Enter your Gemini API key"
-                className={styles.input}
-                style={{ flex: 1 }}
+                className={`${styles.input} ${styles.flexGrow}`}
               />
               <button
                 onClick={() => setShowKey((v) => !v)}
@@ -185,7 +186,59 @@ export default function SettingsModal() {
 
         <hr className={styles.divider} />
 
-        {/* Section 3: Danger Zone */}
+        {/* Section 3: Memory System */}
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>Memory System</h3>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Enable Memory</span>
+            <select
+              value={kernelConfig.memoryEnabled !== false ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  memoryEnabled: e.target.value === 'on',
+                })
+              }
+              className={styles.select}
+            >
+              <option value="on">Enabled</option>
+              <option value="off">Disabled</option>
+            </select>
+          </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Memory Token Budget</span>
+            <input
+              type="number"
+              min={500}
+              max={8000}
+              step={500}
+              value={kernelConfig.memoryTokenBudget ?? 2000}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  memoryTokenBudget: Number(e.target.value),
+                })
+              }
+              className={styles.input}
+            />
+          </label>
+
+          <button
+            onClick={async () => {
+              const db = createMemoryDB();
+              const mgr = new MemoryManager(db);
+              await mgr.clearAll();
+            }}
+            className={styles.dangerBtn}
+            style={{ marginTop: 8 }}
+          >
+            Clear All Memories
+          </button>
+        </div>
+
+        <hr className={styles.divider} />
+
+        {/* Section 4: Danger Zone */}
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Danger Zone</h3>
 

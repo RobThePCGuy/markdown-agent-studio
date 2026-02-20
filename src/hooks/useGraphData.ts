@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
-import { useAgentRegistry, useEventLog, useSessionStore, useUI } from '../stores/use-stores';
+import { useAgentRegistry, useEventLog, useSessionStore, useUI, useMemoryStore } from '../stores/use-stores';
 
 type AgentNodeStatus = 'running' | 'idle' | 'error' | 'aborted' | 'completed' | 'paused';
 export type GraphActivityKind =
@@ -19,6 +19,7 @@ export type GraphAgentNodeData = Record<string, unknown> & {
   status: AgentNodeStatus;
   tokenCount: number;
   spawnCount: number;
+  memoryCount: number;
   isStreaming: boolean;
   selected: boolean;
   justSpawned: boolean;
@@ -123,6 +124,7 @@ export function useGraphData() {
   const entries = useEventLog((s) => s.entries);
   const sessions = useSessionStore((s) => s.sessions);
   const selectedAgentId = useUI((s) => s.selectedAgentId);
+  const memoryEntries = useMemoryStore((s) => s.entries);
 
   return useMemo(() => {
     const agents = [...agentsMap.values()];
@@ -193,6 +195,7 @@ export function useGraphData() {
         const live = latestByAgent.get(agent.path);
         const spawnedMeta = firstSpawnByChild.get(agent.path);
         const spawnCount = childrenByParent.get(agent.path)?.length ?? 0;
+        const memoryCount = memoryEntries.filter((e) => e.authorAgentId === agent.path).length;
         const justSpawned = spawnedMeta ? (now - spawnedMeta.timestamp) < 10000 : false;
         return {
           id: agent.path,
@@ -208,6 +211,7 @@ export function useGraphData() {
             status: live?.status ?? 'idle',
             tokenCount: live?.tokenCount ?? 0,
             spawnCount,
+            memoryCount,
             isStreaming: live?.isStreaming ?? false,
             selected: selectedAgentId === agent.path,
             justSpawned,
@@ -376,5 +380,5 @@ export function useGraphData() {
     }
 
     return { nodes: [...agentNodes, ...activityNodes], edges };
-  }, [agentsMap, entries, sessions, selectedAgentId]);
+  }, [agentsMap, entries, sessions, selectedAgentId, memoryEntries]);
 }

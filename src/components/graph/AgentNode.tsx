@@ -3,12 +3,12 @@ import type { GraphAgentNodeData } from '../../hooks/useGraphData';
 import styles from './AgentNode.module.css';
 
 const statusColors: Record<string, string> = {
-  running: '#a6e3a1',
-  idle: '#6c7086',
-  error: '#f38ba8',
-  aborted: '#fab387',
-  completed: '#89dceb',
-  paused: '#f9e2af',
+  running: 'var(--status-green)',
+  idle: 'var(--text-dim)',
+  error: 'var(--status-red)',
+  aborted: 'var(--status-orange)',
+  completed: 'var(--status-cyan)',
+  paused: 'var(--status-yellow)',
 };
 
 function compactTokens(tokens: number): string {
@@ -20,7 +20,7 @@ function compactTokens(tokens: number): string {
 export function AgentNode({ data }: NodeProps) {
   const d = data as GraphAgentNodeData;
   const isSleeping = d.status === 'idle' || d.status === 'completed';
-  const color = isSleeping ? '#7f849c' : (statusColors[d.status] ?? '#6c7086');
+  const color = isSleeping ? '#7f849c' : (statusColors[d.status] ?? 'var(--text-dim)');
   const isRunning = d.status === 'running';
   const statusLabel = isSleeping ? 'sleeping' : d.status;
   const animation = [
@@ -32,7 +32,7 @@ export function AgentNode({ data }: NodeProps) {
     <div
       className={[styles.node, d.selected && styles.selected].filter(Boolean).join(' ')}
       style={{
-        borderColor: d.selected ? '#74c7ec' : color,
+        borderColor: d.selected ? 'var(--status-cyan)' : color,
         boxShadow: d.selected
           ? '0 0 0 1px rgba(116,199,236,0.25), 0 10px 22px rgba(0,0,0,0.35)'
           : '0 8px 18px rgba(0,0,0,0.35)',
@@ -69,6 +69,12 @@ export function AgentNode({ data }: NodeProps) {
           <span className={styles.statItem}>
             <span className={styles.statDot} style={{ background: 'var(--status-green)' }} />
             <span>thinking</span>
+          </span>
+        )}
+        {(d.memoryCount as number) > 0 && (
+          <span className={styles.statItem}>
+            <span className={styles.statDot} style={{ background: 'var(--status-purple)' }} />
+            <span>{d.memoryCount as number} mem</span>
           </span>
         )}
       </div>
