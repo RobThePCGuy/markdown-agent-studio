@@ -17,6 +17,7 @@ import { uiStore } from '../../stores/use-stores';
 import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
 import { ParticleOverlay } from './ParticleOverlay';
+import { RunTimeline } from './RunTimeline';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import styles from './GraphView.module.css';
 
@@ -210,6 +211,8 @@ export function GraphView() {
           spawn
         </span>
       </div>
+
+      <RunTimeline />
     </div>
   );
 }
