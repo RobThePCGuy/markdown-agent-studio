@@ -4,3 +4,4 @@ export * from './kernel';
 export * from './ai-provider';
 export * from './events';
 export * from './session';
+export * from './memory';
