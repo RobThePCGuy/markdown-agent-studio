@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   useNodesState,
@@ -28,14 +29,14 @@ export function GraphView() {
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
 
-  // Sync derived data into React Flow state, preserving user-dragged positions
+  // Sync derived data into React Flow state, applying dagre-computed positions
   useEffect(() => {
     setNodes((prev) =>
       derivedNodes.map((dn) => {
         const existing = prev.find((n) => n.id === dn.id);
         if (!existing) return dn;
         if (dn.type === 'activityNode') return dn;
-        return { ...existing, data: dn.data };
+        return { ...existing, data: dn.data, position: dn.position };
       })
     );
   }, [derivedNodes, setNodes]);
@@ -81,49 +82,49 @@ export function GraphView() {
             '#0a0a14',
         }}
       >
-        <Background variant={"dots" as any} color="#313244" gap={24} size={1} />
-        <Controls style={{ background: '#1e1e2e', border: '1px solid #313244', borderRadius: 8 }} />
+        <Background variant={BackgroundVariant.Dots} color="#313244" gap={24} size={1} />
+        <Controls style={{ background: 'var(--depth-2)', border: '1px solid var(--depth-3)', borderRadius: 8 }} />
         <MiniMap
           nodeColor="#45475a"
           maskColor="rgba(0,0,0,0.5)"
-          style={{ background: '#1e1e2e', border: '1px solid #313244' }}
+          style={{ background: 'var(--depth-2)', border: '1px solid var(--depth-3)' }}
         />
       </ReactFlow>
 
       {/* HUD overlay */}
       <div className={styles.hud}>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#89b4fa' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-blue)' }} />
           <span className={styles.hudLabel}>agents</span>
           <span className={styles.hudValue}>{agentNodeCount}</span>
         </div>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#a6e3a1' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-green)' }} />
           <span className={styles.hudLabel}>running</span>
           <span className={styles.hudValue}>{runningCount}</span>
         </div>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#a6e3a1' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-green)' }} />
           <span className={styles.hudLabel}>thinking</span>
           <span className={styles.hudValue}>{thinkingCount}</span>
         </div>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#74c7ec' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-cyan)' }} />
           <span className={styles.hudLabel}>web</span>
           <span className={styles.hudValue}>{webCount}</span>
         </div>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#f9e2af' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-yellow)' }} />
           <span className={styles.hudLabel}>spawns</span>
           <span className={styles.hudValue}>{spawnCount}</span>
         </div>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#cba6f7' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-purple)' }} />
           <span className={styles.hudLabel}>signals</span>
           <span className={styles.hudValue}>{signalCount}</span>
         </div>
         <div className={styles.hudGroup}>
-          <span className={styles.hudDot} style={{ background: '#f38ba8' }} />
+          <span className={styles.hudDot} style={{ background: 'var(--status-red)' }} />
           <span className={styles.hudLabel}>errors</span>
           <span className={styles.hudValue}>{errorsCount}</span>
         </div>
@@ -132,19 +133,19 @@ export function GraphView() {
       {/* Legend overlay */}
       <div className={styles.legend}>
         <span className={styles.legendItem}>
-          <span className={styles.legendLine} style={{ borderTop: '2px dashed #a6e3a1' }} />
+          <span className={styles.legendLine} style={{ borderTop: '2px dashed var(--status-green)' }} />
           thinking
         </span>
         <span className={styles.legendItem}>
-          <span className={styles.legendLine} style={{ borderTop: '2px dashed #74c7ec' }} />
+          <span className={styles.legendLine} style={{ borderTop: '2px dashed var(--status-cyan)' }} />
           web
         </span>
         <span className={styles.legendItem}>
-          <span className={styles.legendLine} style={{ borderTop: '2px dashed #fab387' }} />
+          <span className={styles.legendLine} style={{ borderTop: '2px dashed var(--status-orange)' }} />
           signal
         </span>
         <span className={styles.legendItem}>
-          <span className={styles.legendLine} style={{ borderTop: '2px solid #89b4fa' }} />
+          <span className={styles.legendLine} style={{ borderTop: '2px solid var(--status-blue)' }} />
           spawn
         </span>
       </div>

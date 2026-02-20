@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
+import dagre from '@dagrejs/dagre';
 import { useAgentRegistry, useEventLog, useSessionStore, useUI, useMemoryStore } from '../stores/use-stores';
 
 type AgentNodeStatus = 'running' | 'idle' | 'error' | 'aborted' | 'completed' | 'paused';
@@ -155,11 +156,6 @@ export function useGraphData() {
       firstSpawnByChild.set(child, { parent: evt.agentId, timestamp: evt.timestamp });
     }
 
-    const roots = agents
-      .map((a) => a.path)
-      .filter((path) => !firstSpawnByChild.has(path))
-      .sort((a, b) => a.localeCompare(b));
-
     const childrenByParent = new Map<string, string[]>();
     for (const [child, parent] of firstSpawnByChild.entries()) {
       const arr = childrenByParent.get(parent.parent) ?? [];
@@ -170,42 +166,49 @@ export function useGraphData() {
       childList.sort((a, b) => a.localeCompare(b));
     }
 
-    const depthByAgent = new Map<string, number>();
-    const queue: Array<{ id: string; depth: number }> = roots.map((id) => ({ id, depth: 0 }));
-    while (queue.length > 0) {
-      const next = queue.shift();
-      if (!next || depthByAgent.has(next.id)) continue;
-      depthByAgent.set(next.id, next.depth);
-      const children = childrenByParent.get(next.id) ?? [];
-      for (const child of children) {
-        queue.push({ id: child, depth: next.depth + 1 });
-      }
-    }
+    // Build dagre graph for hierarchical layout
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({
+      rankdir: 'TB',
+      nodesep: 80,
+      ranksep: 120,
+      marginx: 40,
+      marginy: 40,
+    });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    // Add agent nodes to dagre
     for (const agent of agents) {
-      if (!depthByAgent.has(agent.path)) depthByAgent.set(agent.path, 0);
+      g.setNode(agent.path, { width: 220, height: 120 });
     }
 
-    const orderByDepth = new Map<number, number>();
+    // Add spawn edges for layout computation
+    for (const [child, info] of firstSpawnByChild.entries()) {
+      if (agents.some(a => a.path === child) && agents.some(a => a.path === info.parent)) {
+        g.setEdge(info.parent, child);
+      }
+    }
+
+    dagre.layout(g);
+
     const agentNodes: Node<GraphNodeData>[] = agents
       .sort((a, b) => a.path.localeCompare(b.path))
       .map((agent) => {
-        const depth = depthByAgent.get(agent.path) ?? 0;
-        const depthIndex = orderByDepth.get(depth) ?? 0;
-        orderByDepth.set(depth, depthIndex + 1);
         const live = latestByAgent.get(agent.path);
         const spawnedMeta = firstSpawnByChild.get(agent.path);
         const spawnCount = childrenByParent.get(agent.path)?.length ?? 0;
         const memoryCount = memoryEntries.filter((e) => e.authorAgentId === agent.path).length;
         const justSpawned = spawnedMeta ? (now - spawnedMeta.timestamp) < 10000 : false;
+        const dagreNode = g.node(agent.path);
         return {
           id: agent.path,
           type: 'agentNode',
           position: {
-            x: depthIndex * 250,
-            y: 100 + depth * 165,
+            x: dagreNode ? dagreNode.x - 110 : 0,  // center-align (220/2)
+            y: dagreNode ? dagreNode.y - 60 : 0,    // center-align (120/2)
           },
           data: {
-            kind: 'agent',
+            kind: 'agent' as const,
             label: agent.name,
             path: agent.path,
             status: live?.status ?? 'idle',
@@ -221,7 +224,16 @@ export function useGraphData() {
 
     const nodeIds = new Set(agentNodes.map((n) => n.id));
     const basePositionByAgent = new Map(
-      agentNodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+      agentNodes.map((n) => {
+        const dagreNode = g.node(n.id);
+        return [
+          n.id,
+          {
+            x: dagreNode ? dagreNode.x - 110 : 0,
+            y: dagreNode ? dagreNode.y - 60 : 0,
+          },
+        ];
+      }),
     );
 
     const edges: Edge<GraphEdgeData>[] = [];
