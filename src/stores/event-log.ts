@@ -21,8 +21,28 @@ export interface EventLogState {
   filterByAgent(agentId: string): EventLogEntry[];
   filterByType(type: EventType): EventLogEntry[];
   getCheckpoint(eventId: string): ReplayCheckpoint | undefined;
+  checkpointCount(): number;
   exportJSON(): string;
   clear(): void;
+}
+
+const MAX_CHECKPOINTS = 200;
+
+function trimCheckpoints(checkpoints: ReplayCheckpoint[]): ReplayCheckpoint[] {
+  if (checkpoints.length <= MAX_CHECKPOINTS) return checkpoints;
+
+  const first10 = checkpoints.slice(0, 10);
+  const last100 = checkpoints.slice(-100);
+  const middle = checkpoints.slice(10, -100);
+
+  const remaining = MAX_CHECKPOINTS - first10.length - last100.length;
+  const step = Math.max(1, Math.floor(middle.length / remaining));
+  const sampled: ReplayCheckpoint[] = [];
+  for (let i = 0; i < middle.length && sampled.length < remaining; i += step) {
+    sampled.push(middle[i]);
+  }
+
+  return [...first10, ...sampled, ...last100];
 }
 
 function snapshotFiles(vfs: Store<VFSState>): Record<string, string> {
@@ -61,7 +81,7 @@ export function createEventLog(vfs?: Store<VFSState>) {
       set((state) => ({
         entries: [...state.entries, entry],
         checkpoints: checkpoint
-          ? [...state.checkpoints, checkpoint]
+          ? trimCheckpoints([...state.checkpoints, checkpoint])
           : state.checkpoints,
       }));
     },
@@ -75,7 +95,21 @@ export function createEventLog(vfs?: Store<VFSState>) {
     },
 
     getCheckpoint(eventId: string): ReplayCheckpoint | undefined {
-      return get().checkpoints.find((c) => c.eventId === eventId);
+      const exact = get().checkpoints.find((c) => c.eventId === eventId);
+      if (exact) return exact;
+
+      // Fall back to most recent checkpoint before this event
+      const entries = get().entries;
+      const eventIndex = entries.findIndex((e) => e.id === eventId);
+      if (eventIndex === -1) return undefined;
+
+      const eventTimestamp = entries[eventIndex].timestamp;
+      const candidates = get().checkpoints.filter((c) => c.timestamp <= eventTimestamp);
+      return candidates.length > 0 ? candidates[candidates.length - 1] : undefined;
+    },
+
+    checkpointCount(): number {
+      return get().checkpoints.length;
     },
 
     exportJSON(): string {
