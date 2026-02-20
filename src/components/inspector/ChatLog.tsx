@@ -112,7 +112,10 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
 
   useEffect(() => {
     if (stickToBottom && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
     }
   }, [messages, streamingText, stickToBottom]);
 
@@ -127,6 +130,12 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
       {isEmpty && (
         <div className={styles.empty}>
           Run an agent to see output here
+        </div>
+      )}
+
+      {streamingText && (
+        <div className={styles.tokenCounter}>
+          ~{Math.round((streamingText.length) / 4).toLocaleString()} tokens
         </div>
       )}
 
@@ -165,11 +174,8 @@ export function ChatLog({ agentId: _agentId, messages, streamingText = '' }: Pro
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
             {streamingText}
           </ReactMarkdown>
-          <span className={styles.streaming}>
-            <span className={styles.streamDot} />
-            <span className={styles.streamDot} />
-            <span className={styles.streamDot} />
-          </span>
+          <span className={styles.streamCursor}>|</span>
+          <span className={styles.thinkingRing} />
         </div>
       )}
 

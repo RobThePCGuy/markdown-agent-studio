@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -7,6 +7,7 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -15,6 +16,7 @@ import { useGraphData } from '../../hooks/useGraphData';
 import { uiStore } from '../../stores/use-stores';
 import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
+import { ParticleOverlay } from './ParticleOverlay';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import styles from './GraphView.module.css';
 
@@ -30,22 +32,44 @@ export function GraphView() {
   const { showWelcome, dismissWelcome } = useOnboarding();
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [autoFollow, setAutoFollow] = useState(true);
+  const { fitView } = useReactFlow();
+  const lastFitRef = useRef(0);
 
   // Sync derived data into React Flow state, applying dagre-computed positions
   useEffect(() => {
     setNodes((prev) =>
       derivedNodes.map((dn) => {
         const existing = prev.find((n) => n.id === dn.id);
-        if (!existing) return dn;
-        if (dn.type === 'activityNode') return dn;
-        return { ...existing, data: dn.data, position: dn.position };
+        const base = existing && dn.type !== 'activityNode'
+          ? { ...existing, data: dn.data, position: dn.position }
+          : dn;
+        if (searchQuery && dn.type === 'agentNode') {
+          const name = ((dn.data as Record<string, unknown>).label as string) ?? '';
+          const matches = name.toLowerCase().includes(searchQuery.toLowerCase());
+          return { ...base, style: { ...base.style, opacity: matches ? 1 : 0.2, transition: 'opacity 300ms' } };
+        }
+        return { ...base, style: { ...base.style, opacity: 1 } };
       })
     );
-  }, [derivedNodes, setNodes]);
+  }, [derivedNodes, setNodes, searchQuery]);
 
   useEffect(() => {
     setEdges(derivedEdges);
   }, [derivedEdges, setEdges]);
+
+  // Auto-fit on node count changes (throttled)
+  useEffect(() => {
+    if (!autoFollow) return;
+    const now = Date.now();
+    if (now - lastFitRef.current < 800) return;
+    lastFitRef.current = now;
+    const timer = setTimeout(() => {
+      fitView({ padding: 0.18, duration: 420 });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [derivedNodes.length, autoFollow, fitView]);
 
   const onNodeClick = useCallback((_: any, node: any) => {
     if (node.type !== 'agentNode') return;
@@ -87,10 +111,22 @@ export function GraphView() {
         <Background variant={BackgroundVariant.Dots} color="#313244" gap={24} size={1} />
         <Controls style={{ background: 'var(--depth-2)', border: '1px solid var(--depth-3)', borderRadius: 8 }} />
         <MiniMap
-          nodeColor="#45475a"
+          nodeColor={(node) => {
+            const data = node.data as Record<string, unknown>;
+            if (data.kind === 'activity') return '#585b70';
+            const status = data.status as string;
+            switch (status) {
+              case 'running': return '#a6e3a1';
+              case 'error': return '#f38ba8';
+              case 'completed': return '#89dceb';
+              case 'paused': return '#f9e2af';
+              default: return '#585b70';
+            }
+          }}
           maskColor="rgba(0,0,0,0.5)"
           style={{ background: 'var(--depth-2)', border: '1px solid var(--depth-3)' }}
         />
+        <ParticleOverlay edges={edges} />
       </ReactFlow>
 
       {showWelcome && (
@@ -137,6 +173,22 @@ export function GraphView() {
           <span className={styles.hudLabel}>errors</span>
           <span className={styles.hudValue}>{errorsCount}</span>
         </div>
+        <div className={styles.hudSearch}>
+          <input
+            type="text"
+            placeholder="Search agents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={styles.hudSearchInput}
+          />
+        </div>
+        <button
+          className={`${styles.autoFitBtn}${autoFollow ? ` ${styles.active}` : ''}`}
+          onClick={() => setAutoFollow((v) => !v)}
+          title={autoFollow ? 'Auto-follow enabled' : 'Auto-follow disabled'}
+        >
+          AF
+        </button>
       </div>
 
       {/* Legend overlay */}
