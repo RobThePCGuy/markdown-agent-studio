@@ -18,6 +18,7 @@ export function MemoryPanel() {
   const runId = useMemoryStore((s) => s.runId);
   const [longTermMemories, setLongTermMemories] = useState<LongTermMemory[]>([]);
   const [activeView, setActiveView] = useState<'working' | 'longterm'>('working');
+  const [refreshCounter, setRefreshCounter] = useState(0);
 
   useEffect(() => {
     if (activeView === 'longterm') {
@@ -25,7 +26,7 @@ export function MemoryPanel() {
       const mgr = new MemoryManager(db);
       mgr.getAll().then(setLongTermMemories).catch(() => {});
     }
-  }, [activeView]);
+  }, [activeView, refreshCounter]);
 
   return (
     <div className={styles.container}>
@@ -42,6 +43,15 @@ export function MemoryPanel() {
         >
           Long-Term ({longTermMemories.length})
         </button>
+        {activeView === 'longterm' && (
+          <button
+            onClick={() => setRefreshCounter((c) => c + 1)}
+            className={styles.refreshBtn}
+            title="Refresh"
+          >
+            Refresh
+          </button>
+        )}
       </div>
 
       <div className={styles.content}>
