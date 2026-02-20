@@ -4,6 +4,7 @@ import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
 import type { ToolPluginRegistry, ToolContext } from './tool-plugin';
 import type { AgentPolicy } from '../types/agent';
+import type { MemoryStoreState } from '../stores/memory-store';
 
 type Store<T> = { getState(): T };
 
@@ -16,6 +17,8 @@ const BUILT_IN_TOOLS = new Set([
   'signal_parent',
   'web_fetch',
   'web_search',
+  'memory_read',
+  'memory_write',
 ]);
 
 export interface ToolHandlerConfig {
@@ -34,6 +37,7 @@ export interface ToolHandlerConfig {
   policy?: AgentPolicy;
   apiKey?: string;
   preferredModel?: string;
+  memoryStore?: Store<MemoryStoreState>;
 }
 
 export class ToolHandler {
@@ -91,6 +95,7 @@ export class ToolHandler {
         incrementSpawnCount: () => { this.spawnCount++; },
         apiKey: this.config.apiKey,
         preferredModel: this.config.preferredModel,
+        memoryStore: this.config.memoryStore,
       };
       result = await plugin.handler(args, ctx);
     } else {

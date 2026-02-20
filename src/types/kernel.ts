@@ -40,6 +40,8 @@ export interface KernelConfig {
   maxFanout: number;
   tokenBudget: number;
   model?: string;
+  memoryEnabled?: boolean;
+  memoryTokenBudget?: number;
 }
 
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
@@ -48,4 +50,6 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxFanout: 5,
   tokenBudget: 250000,
   model: 'gemini-3-flash-preview',
+  memoryEnabled: true,
+  memoryTokenBudget: 2000,
 };

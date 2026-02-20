@@ -10,6 +10,7 @@ import { createBuiltinRegistry } from './plugins';
 import { createCustomToolPlugin } from './plugins/custom-tool-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 import { resolvePolicyForInput } from '../utils/parse-agent';
+import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
 
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
@@ -31,6 +32,7 @@ interface KernelDeps {
   eventLog: Store<EventLogState>;
   config: KernelConfig;
   sessionStore?: Store<SessionStoreState>;
+  memoryStore?: Store<MemoryStoreState>;
   toolRegistry?: ToolPluginRegistry;
   apiKey?: string;
   onSessionUpdate?: (session: AgentSession) => void;
@@ -50,6 +52,8 @@ export class Kernel {
   private _totalTokens = 0;
   private childCounts = new Map<string, number>();
   private seenHashes = new Set<string>();
+  private memoryStore: Store<MemoryStoreState> | undefined;
+  private currentRunId: string | null = null;
   private quotaHaltTriggered = false;
   private budgetHaltTriggered = false;
 
@@ -57,6 +61,9 @@ export class Kernel {
     this.deps = deps;
     this.semaphore = new Semaphore(deps.config.maxConcurrency);
     this.globalController = new AbortController();
+    if (deps.config.memoryEnabled !== false) {
+      this.memoryStore = deps.memoryStore ?? createMemoryStore();
+    }
     if (!this.deps.toolRegistry) {
       this.deps.toolRegistry = createBuiltinRegistry();
     }
@@ -113,6 +120,10 @@ export class Kernel {
   }
 
   async runUntilEmpty(): Promise<void> {
+    if (this.memoryStore) {
+      this.currentRunId = `run-${Date.now()}`;
+      this.memoryStore.getState().initRun(this.currentRunId);
+    }
     await this.processQueue();
 
     // Wait for all active sessions to complete.
@@ -127,6 +138,9 @@ export class Kernel {
       if (!this._paused) {
         await this.processQueue();
       }
+    }
+    if (this.memoryStore) {
+      this.memoryStore.getState().endRun();
     }
   }
 
@@ -238,6 +252,7 @@ export class Kernel {
       policy: policyResolution.policy,
       apiKey: this.deps.apiKey,
       preferredModel: this.resolvePreferredModel(),
+      memoryStore: this.memoryStore,
     });
 
     try {

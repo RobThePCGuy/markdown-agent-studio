@@ -7,6 +7,7 @@ import { spawnAgentPlugin } from './spawn-agent';
 import { signalParentPlugin } from './signal-parent';
 import { webFetchPlugin } from './web-fetch';
 import { webSearchPlugin } from './web-search';
+import { memoryWritePlugin, memoryReadPlugin } from './memory-plugin';
 
 export function createBuiltinRegistry(): ToolPluginRegistry {
   const registry = new ToolPluginRegistry();
@@ -18,6 +19,8 @@ export function createBuiltinRegistry(): ToolPluginRegistry {
   registry.register(signalParentPlugin);
   registry.register(webFetchPlugin);
   registry.register(webSearchPlugin);
+  registry.register(memoryWritePlugin);
+  registry.register(memoryReadPlugin);
   return registry;
 }
 
@@ -30,4 +33,6 @@ export {
   signalParentPlugin,
   webFetchPlugin,
   webSearchPlugin,
+  memoryWritePlugin,
+  memoryReadPlugin,
 };
