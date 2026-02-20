@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   BackgroundVariant,
   Controls,
@@ -26,7 +27,7 @@ const nodeTypes: NodeTypes = {
   activityNode: ActivityNode,
 };
 
-export function GraphView() {
+function GraphViewInner() {
   const { nodes: derivedNodes, edges: derivedEdges } = useGraphData();
   const sessions = useSessionStore((s) => s.sessions);
   const events = useEventLog((s) => s.entries);
@@ -132,7 +133,7 @@ export function GraphView() {
 
       {showWelcome && (
         <div className={styles.welcomeBanner}>
-          <span>Welcome to Markdown Agent Studio. This sample project demonstrates multi-agent orchestration. Enter a topic in the prompt bar to begin.</span>
+          <span>Welcome to Markdown Agent Studio. Hit <strong>Run</strong> with the Project Lead agent selected to watch a team of AI agents build a portfolio website.</span>
           <button onClick={dismissWelcome} className={styles.welcomeDismiss}>Got it</button>
         </div>
       )}
@@ -214,5 +215,13 @@ export function GraphView() {
 
       <RunTimeline />
     </div>
+  );
+}
+
+export function GraphView() {
+  return (
+    <ReactFlowProvider>
+      <GraphViewInner />
+    </ReactFlowProvider>
   );
 }
