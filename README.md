@@ -1,73 +1,30 @@
-# React + TypeScript + Vite
+# Markdown Agent Studio
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A visual IDE for building, orchestrating, and observing autonomous AI agent teams.
 
-Currently, two official plugins are available:
+Define agents in markdown. Watch them collaborate in real time.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## What It Does
 
-## React Compiler
+**Agent Definition in Markdown** -- Define autonomous AI agents using markdown files with YAML frontmatter. Each agent gets a role, tools, and instructions -- no boilerplate, no frameworks.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Real-Time Graph Visualization** -- Watch your agent team come alive on an interactive node graph. See who's talking to whom, track tool calls, and follow the flow of work as it happens.
 
-## Expanding the ESLint configuration
+**Built-In Inspector** -- Drill into any agent's chat log, event history, and memory state. Full visibility into what each agent is thinking and doing.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+**Zero-Cost Demo Mode** -- Experience a full 6-agent website-building team with pre-scripted conversations -- no API key required. See the platform in action before connecting your own AI provider.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Quick Start
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+git clone <repo-url>
+cd markdown-agent-studio
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open http://localhost:5173 and click **Run Demo** to watch a 6-agent team build a portfolio website -- no API key needed.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Built With
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+React -- TypeScript -- Vite -- Zustand -- React Flow -- Monaco Editor -- Google Gemini
