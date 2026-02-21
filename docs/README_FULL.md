@@ -65,6 +65,9 @@ The package exports the built app directory path:
 import distPath from 'markdown-agent-studio';
 ```
 
+No CLI binary is currently published, so `npx markdown-agent-studio` does not launch a server.
+Serve the exported `distPath` with your own static host.
+
 Example (Express static hosting):
 
 ```ts
@@ -103,7 +106,8 @@ If checks fail after a version bump, `package.json` and `package-lock.json` are 
 
 ## Release Notes
 
-- Use `RELEASE_CHECKLIST.md` for the repeatable release flow.
+- Use `scripts/release.sh` for the repeatable release flow.
+- Local publish: `npm publish --access public` (skip `--provenance` unless provider support is available).
 - `prepublishOnly` runs lint + test.
 - `prepack` builds fresh `dist` before packing/publishing.
 

@@ -12,12 +12,15 @@ VALID_BUMPS=(patch minor major prepatch preminor premajor prerelease)
 VERSION_TYPE=""
 DRY_RUN=0
 NO_GH_RELEASE=0
+NPM_PROVENANCE_MODE="${NPM_PROVENANCE:-auto}"
 
 usage() {
-  echo -e "${YELLOW}Usage: ./scripts/release.sh <bump-type> [--dry-run] [--no-gh-release]${NC}"
+  echo -e "${YELLOW}Usage: ./scripts/release.sh <bump-type> [--dry-run] [--no-gh-release] [--provenance|--no-provenance]${NC}"
   echo "  bump-type: patch | minor | major | prepatch | preminor | premajor | prerelease"
   echo "  --dry-run: run checks + simulate publish, then restore version files"
   echo "  --no-gh-release: skip gh release creation"
+  echo "  --provenance: force npm provenance flag"
+  echo "  --no-provenance: disable npm provenance flag"
 }
 
 for arg in "$@"; do
@@ -27,6 +30,12 @@ for arg in "$@"; do
       ;;
     --no-gh-release)
       NO_GH_RELEASE=1
+      ;;
+    --provenance)
+      NPM_PROVENANCE_MODE="on"
+      ;;
+    --no-provenance)
+      NPM_PROVENANCE_MODE="off"
       ;;
     -h|--help)
       usage
@@ -72,6 +81,30 @@ for cmd in git node npm; do
     exit 1
   fi
 done
+
+PUBLISH_ARGS=(--access public --ignore-scripts)
+case "$NPM_PROVENANCE_MODE" in
+  on)
+    PUBLISH_ARGS+=(--provenance)
+    ;;
+  off)
+    ;;
+  auto)
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+      PUBLISH_ARGS+=(--provenance)
+    fi
+    ;;
+  *)
+    echo -e "${RED}Invalid NPM_PROVENANCE mode: $NPM_PROVENANCE_MODE (expected auto|on|off)${NC}"
+    exit 1
+    ;;
+esac
+
+if [[ " ${PUBLISH_ARGS[*]} " == *" --provenance "* ]]; then
+  echo -e "${GREEN}npm provenance: enabled${NC}"
+else
+  echo -e "${YELLOW}npm provenance: disabled (set --provenance or NPM_PROVENANCE=on to force)${NC}"
+fi
 
 if [ -n "$(git status --porcelain)" ]; then
   echo -e "${RED}Working tree is not clean. Commit/stash first.${NC}"
@@ -147,7 +180,7 @@ fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo -e "${GREEN}Running npm publish dry-run...${NC}"
-  npm publish --dry-run --access public --provenance --ignore-scripts
+  npm publish --dry-run "${PUBLISH_ARGS[@]}"
   echo -e "${YELLOW}Restoring version files after dry-run...${NC}"
   git restore -- package.json package-lock.json
   echo -e "${GREEN}Dry-run complete for ${TAG}.${NC}"
@@ -165,7 +198,7 @@ git tag -a "$TAG" -m "$TAG"
 TAGGED=1
 
 echo -e "${GREEN}Publishing to npm...${NC}"
-npm publish --access public --provenance --ignore-scripts
+npm publish "${PUBLISH_ARGS[@]}"
 
 echo -e "${GREEN}Pushing branch and tag...${NC}"
 git push origin "$BRANCH"

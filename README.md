@@ -50,17 +50,20 @@ Use exported `dist` path:
 import distPath from 'markdown-agent-studio';
 ```
 
+This package does not ship a CLI binary, so `npx markdown-agent-studio` will not start a server.
+Host `distPath` with your own static server.
+
 ## Key Commands
 
 - `npm run check:all`
 - `npm run release -- patch` (or `minor` / `major`)
 - `npm run commit:publish -- --message "chore(release): vX.Y.Z" --bump patch`
-- `npm publish --access public --provenance`
+- `npm publish --access public` (use `--provenance` only in supported CI, e.g. GitHub Actions)
 
 ## Docs
 
 - Full guide: <https://github.com/RobThePCGuy/markdown-agent-studio/blob/main/docs/README_FULL.md>
-- Release flow: <https://github.com/RobThePCGuy/markdown-agent-studio/blob/main/RELEASE_CHECKLIST.md>
+- Release script: `scripts/release.sh`
 
 ## License
 

@@ -43,6 +43,20 @@
   "publishConfig": {
     "access": "public"
   },
+  "overrides": {
+    "eslint": {
+      "minimatch": "^10.2.1"
+    },
+    "@eslint/config-array": {
+      "minimatch": "^10.2.1"
+    },
+    "@eslint/eslintrc": {
+      "minimatch": "^10.2.1"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^10.2.1"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
