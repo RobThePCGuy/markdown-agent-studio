@@ -1,4 +1,4 @@
-import type { AIProvider, AgentConfig, StreamChunk, ToolDeclaration } from '../types';
+import type { AIProvider, AgentConfig, StreamChunk, StreamChunkType, ToolDeclaration } from '../types';
 import type { Message } from '../types/kernel';
 
 /**
@@ -9,7 +9,7 @@ import type { Message } from '../types/kernel';
  */
 export type ScriptMap = Record<string, StreamChunk[][]>;
 
-const CHUNK_DELAY_MS: Record<string, number> = {
+const CHUNK_DELAY_MS: Record<StreamChunkType, number> = {
   text: 120,
   tool_call: 600,
   done: 1200,
@@ -96,7 +96,7 @@ export class ScriptedAIProvider implements AIProvider {
         yield { type: 'error', error: 'Aborted' };
         return;
       }
-      await new Promise((r) => setTimeout(r, CHUNK_DELAY_MS[chunk.type] ?? 120));
+      await new Promise((r) => setTimeout(r, CHUNK_DELAY_MS[chunk.type]));
       yield chunk;
     }
   }
