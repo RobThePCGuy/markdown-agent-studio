@@ -1,6 +1,6 @@
 {
   "name": "markdown-agent-studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A visual IDE for building, orchestrating, and observing autonomous AI agent teams.",
   "license": "MIT",
   "author": "RobThePCGuy",
@@ -52,7 +52,7 @@
     "commit:checked": "node scripts/checked-commit.mjs",
     "commit:publish": "node scripts/checked-commit.mjs --stage-publish",
     "preview": "vite preview",
-	"clean": "rm -rf node_modules dist package-lock.json",
+    "clean": "rm -rf node_modules dist package-lock.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepack": "npm run build",
