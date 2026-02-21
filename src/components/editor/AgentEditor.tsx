@@ -132,6 +132,7 @@ export function AgentEditor() {
       <div className={styles.editorArea}>
         {editingFilePath ? (
           <Editor
+            key={editingFilePath}
             height="100%"
             language="markdown"
             value={content}
