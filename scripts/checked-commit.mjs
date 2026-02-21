@@ -14,6 +14,24 @@ const VALID_BUMPS = new Set([
   'prerelease',
 ]);
 
+const PUBLISH_SCOPE_FILES = [
+  'package.json',
+  'package-lock.json',
+  'README.md',
+  'LICENSE',
+  'index.js',
+  'index.d.ts',
+  '.github/workflows/ci.yml',
+  '.github/workflows/publish.yml',
+  'scripts/checked-commit.mjs',
+];
+
+const PUBLISH_SCOPE_SET = new Set(PUBLISH_SCOPE_FILES.map(normalizePath));
+
+function normalizePath(path) {
+  return path.replace(/\\/g, '/');
+}
+
 function run(command, args, capture = false) {
   const result = spawnSync(command, args, {
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
@@ -33,21 +51,30 @@ function run(command, args, capture = false) {
   return capture ? result.stdout.trim() : '';
 }
 
+function runBestEffort(command, args) {
+  spawnSync(command, args, {
+    stdio: 'ignore',
+    encoding: 'utf8',
+  });
+}
+
 function printUsageAndExit(code = 0) {
   const usage = [
     'Usage:',
-    '  npm run commit:checked -- --message "commit message" [--bump patch] [--stage-all] [--dry-run]',
+    '  npm run commit:checked -- --message "commit message" [--bump patch] [--stage-publish] [--dry-run]',
     '',
     'Options:',
     '  -m, --message   Commit message (required)',
     '  --bump          Optional npm version bump type',
-    '  --stage-all     Stage all changes before commit',
+    '  --stage-publish Stage only publish-scope files (safe default for release commits)',
+    '  --stage-all     Stage all changes (requires --allow-stage-all)',
+    '  --allow-stage-all Required safety flag for --stage-all',
     '  --dry-run       Run checks and rollback version bump instead of committing',
     '  -h, --help      Show this message',
     '',
     'Examples:',
     '  npm run commit:checked -- --message "feat: add inspector filters"',
-    '  npm run commit:checked -- --message "chore(release): v0.1.1" --bump patch --stage-all',
+    '  npm run commit:checked -- --message "chore(release): v0.1.1" --bump patch --stage-publish',
   ].join('\n');
 
   process.stdout.write(`${usage}\n`);
@@ -59,9 +86,49 @@ function hasStagedChanges() {
   return result.status === 1;
 }
 
+function isPathTracked(path) {
+  const result = spawnSync('git', ['ls-files', '--error-unmatch', '--', path], { stdio: 'ignore' });
+  return result.status === 0;
+}
+
+function isPathStaged(path) {
+  const result = spawnSync('git', ['diff', '--cached', '--quiet', '--', path], { stdio: 'ignore' });
+  return result.status === 1;
+}
+
+function getStagedFiles() {
+  const output = run('git', ['diff', '--cached', '--name-only'], true);
+  if (!output) return [];
+  return output.split('\n').map((file) => normalizePath(file.trim())).filter(Boolean);
+}
+
+function stagePublishScopeFiles() {
+  const filesToStage = PUBLISH_SCOPE_FILES.filter((file) => existsSync(resolve(file)) || isPathTracked(file));
+  if (filesToStage.length > 0) {
+    run('git', ['add', '--', ...filesToStage]);
+  }
+}
+
+function assertPublishScopeOnly(stagedFiles) {
+  const disallowed = stagedFiles.filter((file) => !PUBLISH_SCOPE_SET.has(file));
+  if (disallowed.length > 0) {
+    throw new Error(
+      [
+        'Publish-scope mode only allows these files:',
+        ...PUBLISH_SCOPE_FILES.map((file) => `  - ${file}`),
+        'Disallowed staged files:',
+        ...disallowed.map((file) => `  - ${file}`),
+        'Unstage those files and retry, or use --stage-all --allow-stage-all if intentional.',
+      ].join('\n'),
+    );
+  }
+}
+
 let message = '';
 let bumpType = '';
+let stagePublish = false;
 let stageAll = false;
+let allowStageAll = false;
 let dryRun = false;
 
 const args = process.argv.slice(2);
@@ -93,8 +160,14 @@ for (let i = 0; i < args.length; i += 1) {
       i += 1;
       break;
     }
+    case '--stage-publish':
+      stagePublish = true;
+      break;
     case '--stage-all':
       stageAll = true;
+      break;
+    case '--allow-stage-all':
+      allowStageAll = true;
       break;
     case '--dry-run':
       dryRun = true;
@@ -115,6 +188,16 @@ if (!message) {
   printUsageAndExit(1);
 }
 
+if (stagePublish && stageAll) {
+  process.stderr.write('Use either --stage-publish or --stage-all, not both.\n');
+  process.exit(1);
+}
+
+if (stageAll && !allowStageAll) {
+  process.stderr.write('--stage-all requires --allow-stage-all. Use --stage-publish for safe release commits.\n');
+  process.exit(1);
+}
+
 run('git', ['rev-parse', '--is-inside-work-tree'], true);
 
 const packageJsonPath = resolve('package.json');
@@ -123,24 +206,34 @@ const packageLockPath = resolve('package-lock.json');
 const originalPackageJson = readFileSync(packageJsonPath, 'utf8');
 const hadPackageLock = existsSync(packageLockPath);
 const originalPackageLock = hadPackageLock ? readFileSync(packageLockPath, 'utf8') : '';
+const packageJsonWasStaged = isPathStaged('package.json');
+const packageLockWasStaged = hadPackageLock ? isPathStaged('package-lock.json') : false;
 
 let bumped = false;
-let stagedVersionFiles = false;
 
 function restoreVersionFiles() {
   writeFileSync(packageJsonPath, originalPackageJson);
+
   if (hadPackageLock) {
     writeFileSync(packageLockPath, originalPackageLock);
   } else if (existsSync(packageLockPath)) {
     rmSync(packageLockPath);
   }
 
-  if (stagedVersionFiles) {
-    const addArgs = ['add', 'package.json'];
-    if (hadPackageLock || existsSync(packageLockPath)) {
-      addArgs.push('package-lock.json');
+  if (packageJsonWasStaged) {
+    runBestEffort('git', ['add', '--', 'package.json']);
+  } else {
+    runBestEffort('git', ['restore', '--staged', '--', 'package.json']);
+  }
+
+  if (hadPackageLock) {
+    if (packageLockWasStaged) {
+      runBestEffort('git', ['add', '--', 'package-lock.json']);
+    } else {
+      runBestEffort('git', ['restore', '--staged', '--', 'package-lock.json']);
     }
-    run('git', addArgs);
+  } else {
+    runBestEffort('git', ['restore', '--staged', '--', 'package-lock.json']);
   }
 }
 
@@ -164,21 +257,30 @@ try {
     process.exit(0);
   }
 
+  if (stagePublish) {
+    process.stdout.write('Staging publish-scope files only...\n');
+    stagePublishScopeFiles();
+  }
+
   if (stageAll) {
+    process.stdout.write('Staging all changes...\n');
     run('git', ['add', '-A']);
   }
 
   if (bumped) {
-    const addArgs = ['add', 'package.json'];
+    const addArgs = ['add', '--', 'package.json'];
     if (hadPackageLock || existsSync(packageLockPath)) {
       addArgs.push('package-lock.json');
     }
     run('git', addArgs);
-    stagedVersionFiles = true;
   }
 
   if (!hasStagedChanges()) {
-    throw new Error('No staged changes found. Stage files first, or rerun with --stage-all.');
+    throw new Error('No staged changes found. Stage files first, or rerun with --stage-publish.');
+  }
+
+  if (stagePublish) {
+    assertPublishScopeOnly(getStagedFiles());
   }
 
   run('git', ['commit', '-m', message]);

@@ -1,18 +1,17 @@
 # Markdown Agent Studio
 
-A visual IDE for building, orchestrating, and observing autonomous AI agent teams.
+A browser IDE for defining, running, and observing multi-agent workflows from Markdown files.
 
-Define agents in Markdown. Watch them collaborate in real time.
+## Highlights
 
-## Features
+- Agent definitions in `agents/*.md` with YAML frontmatter.
+- Real-time run visualization in a graph view.
+- Inspector panels for Chat, Events, and Memory.
+- Event-log restore/replay support.
+- Built-in scripted demo mode when no API key is provided.
+- Gemini-backed live runs when an API key is set.
 
-- Agent definitions in Markdown + YAML frontmatter
-- Real-time multi-agent graph visualization
-- Inspector for chat logs, events, and memory
-- Built-in demo mode (no API key required)
-- Gemini provider integration for live runs
-
-## Run From Source
+## Quick Start
 
 Requires Node.js `20.19+`.
 
@@ -27,8 +26,6 @@ Open `http://localhost:5173`.
 
 ## Configuration
 
-Create a local env file:
-
 ```bash
 cp .env.example .env.local
 ```
@@ -39,9 +36,7 @@ Set:
 VITE_GEMINI_API_KEY=your_key_here
 ```
 
-You can also paste an API key in the app settings UI. Keys are stored in browser `localStorage`.
-
-## NPM Package
+## npm Usage
 
 Install:
 
@@ -49,51 +44,23 @@ Install:
 npm install markdown-agent-studio
 ```
 
-The package exports the built app directory path:
+Use exported `dist` path:
 
 ```ts
 import distPath from 'markdown-agent-studio';
 ```
 
-Example with Express:
+## Key Commands
 
-```ts
-import express from 'express';
-import distPath from 'markdown-agent-studio';
+- `npm run check:all`
+- `npm run release -- patch` (or `minor` / `major`)
+- `npm run commit:publish -- --message "chore(release): vX.Y.Z" --bump patch`
+- `npm publish --access public --provenance`
 
-const app = express();
-app.use(express.static(distPath));
-app.listen(3000);
-```
+## Docs
 
-## Scripts
-
-- `npm run dev` - start Vite dev server
-- `npm run lint` - run ESLint
-- `npm test` - run Vitest suite
-- `npm run build` - typecheck and build production assets
-- `npm run check:all` - run lint, test, and build
-- `npm run commit:checked -- --message "feat: your change"` - run checks before commit
-
-Checked commit with automatic version rollback on failure:
-
-```bash
-npm run commit:checked -- --message "chore(release): v0.1.1" --bump patch --stage-all
-```
-
-If checks or commit fail after a version bump, `package.json` and `package-lock.json` are restored.
-
-## Publishing
-
-- `prepublishOnly` runs lint, tests, and build checks automatically.
-- `prepack` builds fresh `dist` assets for the npm tarball.
-
-Manual publish:
-
-```bash
-npm version patch
-npm publish --access public
-```
+- Full guide: <https://github.com/RobThePCGuy/markdown-agent-studio/blob/main/docs/README_FULL.md>
+- Release flow: <https://github.com/RobThePCGuy/markdown-agent-studio/blob/main/RELEASE_CHECKLIST.md>
 
 ## License
 
