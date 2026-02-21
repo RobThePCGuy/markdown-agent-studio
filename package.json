@@ -1,15 +1,60 @@
 {
   "name": "markdown-agent-studio",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "A visual IDE for building, orchestrating, and observing autonomous AI agent teams.",
+  "license": "MIT",
+  "author": "RobThePCGuy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RobThePCGuy/markdown-agent-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RobThePCGuy/markdown-agent-studio/issues"
+  },
+  "homepage": "https://github.com/RobThePCGuy/markdown-agent-studio#readme",
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "markdown",
+    "react",
+    "vite",
+    "visualization",
+    "orchestration"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "index.js",
+    "index.d.ts",
+    ".env.example",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "check:all": "npm run lint && npm run test && npm run build",
+    "commit:checked": "node scripts/checked-commit.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run lint && npm run test"
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",

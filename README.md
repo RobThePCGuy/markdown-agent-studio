@@ -2,29 +2,99 @@
 
 A visual IDE for building, orchestrating, and observing autonomous AI agent teams.
 
-Define agents in markdown. Watch them collaborate in real time.
+Define agents in Markdown. Watch them collaborate in real time.
 
-## What It Does
+## Features
 
-**Agent Definition in Markdown** -- Define autonomous AI agents using markdown files with YAML frontmatter. Each agent gets a role, tools, and instructions -- no boilerplate, no frameworks.
+- Agent definitions in Markdown + YAML frontmatter
+- Real-time multi-agent graph visualization
+- Inspector for chat logs, events, and memory
+- Built-in demo mode (no API key required)
+- Gemini provider integration for live runs
 
-**Real-Time Graph Visualization** -- Watch your agent team come alive on an interactive node graph. See who's talking to whom, track tool calls, and follow the flow of work as it happens.
+## Run From Source
 
-**Built-In Inspector** -- Drill into any agent's chat log, event history, and memory state. Full visibility into what each agent is thinking and doing.
-
-**Zero-Cost Demo Mode** -- Experience a full 6-agent website-building team with pre-scripted conversations -- no API key required. See the platform in action before connecting your own AI provider.
-
-## Quick Start
+Requires Node.js `20.19+`.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/RobThePCGuy/markdown-agent-studio.git
 cd markdown-agent-studio
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and click **Run Demo** to watch a 6-agent team build a portfolio website -- no API key needed.
+Open `http://localhost:5173`.
 
-## Built With
+## Configuration
 
-React -- TypeScript -- Vite -- Zustand -- React Flow -- Monaco Editor -- Google Gemini
+Create a local env file:
+
+```bash
+cp .env.example .env.local
+```
+
+Set:
+
+```bash
+VITE_GEMINI_API_KEY=your_key_here
+```
+
+You can also paste an API key in the app settings UI. Keys are stored in browser `localStorage`.
+
+## NPM Package
+
+Install:
+
+```bash
+npm install markdown-agent-studio
+```
+
+The package exports the built app directory path:
+
+```ts
+import distPath from 'markdown-agent-studio';
+```
+
+Example with Express:
+
+```ts
+import express from 'express';
+import distPath from 'markdown-agent-studio';
+
+const app = express();
+app.use(express.static(distPath));
+app.listen(3000);
+```
+
+## Scripts
+
+- `npm run dev` - start Vite dev server
+- `npm run lint` - run ESLint
+- `npm test` - run Vitest suite
+- `npm run build` - typecheck and build production assets
+- `npm run check:all` - run lint, test, and build
+- `npm run commit:checked -- --message "feat: your change"` - run checks before commit
+
+Checked commit with automatic version rollback on failure:
+
+```bash
+npm run commit:checked -- --message "chore(release): v0.1.1" --bump patch --stage-all
+```
+
+If checks or commit fail after a version bump, `package.json` and `package-lock.json` are restored.
+
+## Publishing
+
+- `prepublishOnly` runs lint, tests, and build checks automatically.
+- `prepack` builds fresh `dist` assets for the npm tarball.
+
+Manual publish:
+
+```bash
+npm version patch
+npm publish --access public
+```
+
+## License
+
+MIT

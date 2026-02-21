@@ -1,4 +1,4 @@
-import { useState, useMemo, useTransition, useEffect, useRef } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import { useKernel } from '../../hooks/useKernel';
 import { useAgentRegistry, useProjectStore, useUI, diskSync, uiStore } from '../../stores/use-stores';
 import { audioEngine } from '../../core/audio-engine';
@@ -11,26 +11,11 @@ export function TopBar() {
   const agentsMap = useAgentRegistry((s) => s.agents);
   const agents = useMemo(() => [...agentsMap.values()], [agentsMap]);
   const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount } = useKernel();
-  const [selectedAgent, setSelectedAgent] = useState('');
-  const [kickoffPrompt, setKickoffPrompt] = useState('');
-  const globalSelectedAgent = useUI((s) => s.selectedAgentId);
-
-  // Sync dropdown with global agent selection (set by onboarding, graph clicks, etc.)
-  useEffect(() => {
-    if (globalSelectedAgent) {
-      setSelectedAgent(globalSelectedAgent);
-    }
-  }, [globalSelectedAgent]);
-
-  // Pre-fill demo prompt when sample project-lead agent appears and prompt is still empty
-  const didPrefill = useRef(false);
-  useEffect(() => {
-    if (!didPrefill.current && agentsMap.has(DEMO_AGENT)) {
-      setSelectedAgent(DEMO_AGENT);
-      setKickoffPrompt(DEMO_PROMPT);
-      didPrefill.current = true;
-    }
-  }, [agentsMap]);
+  const selectedAgentId = useUI((s) => s.selectedAgentId);
+  const setSelectedAgent = useUI((s) => s.setSelectedAgent);
+  const [kickoffPromptDraft, setKickoffPromptDraft] = useState<string | null>(null);
+  const selectedAgent = selectedAgentId ?? (agentsMap.has(DEMO_AGENT) ? DEMO_AGENT : '');
+  const kickoffPrompt = kickoffPromptDraft ?? (agentsMap.has(DEMO_AGENT) ? DEMO_PROMPT : '');
   const soundEnabled = useUI((s) => s.soundEnabled);
   const [isOpeningProject, startProjectTransition] = useTransition();
 
@@ -56,8 +41,9 @@ export function TopBar() {
 
   const handleRun = () => {
     const agentPath = selectedAgent || agents[0]?.path;
-    if (!agentPath || !kickoffPrompt.trim()) return;
-    run(agentPath, kickoffPrompt.trim());
+    const prompt = kickoffPrompt.trim();
+    if (!agentPath || !prompt) return;
+    run(agentPath, prompt);
   };
 
   return (
@@ -81,7 +67,7 @@ export function TopBar() {
         type="text"
         placeholder="What should the agent do?"
         value={kickoffPrompt}
-        onChange={(e) => setKickoffPrompt(e.target.value)}
+        onChange={(e) => setKickoffPromptDraft(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && handleRun()}
         className={styles.promptInput}
       />
