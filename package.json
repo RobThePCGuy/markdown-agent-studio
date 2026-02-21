@@ -28,7 +28,7 @@
   "main": "./index.js",
   "types": "./index.d.ts",
   "bin": {
-    "markdown-agent-studio": "./bin/markdown-agent-studio.js"
+    "markdown-agent-studio": "bin/markdown-agent-studio.js"
   },
   "exports": {
     ".": {
