@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
-import { vfsStore, agentRegistry } from '../stores/use-stores';
+import { useEffect } from 'react';
+import { vfsStore, agentRegistry, uiStore, useUI } from '../stores/use-stores';
 import { loadSampleProject } from '../core/sample-project';
 
+export const DEMO_PROMPT = 'Build me a portfolio website';
+export const DEMO_AGENT = 'agents/project-lead.md';
+
 export function useOnboarding(): { showWelcome: boolean; dismissWelcome: () => void } {
-  const [showWelcome, setShowWelcome] = useState(false);
+  const showWelcome = useUI((s) => s.showWelcome);
 
   useEffect(() => {
     const hasSeenOnboarding = localStorage.getItem('mas-onboarded');
@@ -11,10 +14,10 @@ export function useOnboarding(): { showWelcome: boolean; dismissWelcome: () => v
     if (!hasSeenOnboarding && agentCount === 0) {
       loadSampleProject(vfsStore, agentRegistry);
       localStorage.setItem('mas-onboarded', '1');
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initialization side effect
-      setShowWelcome(true);
+      uiStore.getState().setShowWelcome(true);
+      uiStore.getState().setSelectedAgent(DEMO_AGENT);
     }
   }, []);
 
-  return { showWelcome, dismissWelcome: () => setShowWelcome(false) };
+  return { showWelcome, dismissWelcome: () => uiStore.getState().setShowWelcome(false) };
 }

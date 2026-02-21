@@ -30,6 +30,7 @@ export interface UIState {
   editorDirty: boolean;
   settingsOpen: boolean;
   soundEnabled: boolean;
+  showWelcome: boolean;
   setSelectedAgent: (id: string | null) => void;
   setSelectedFile: (path: string | null) => void;
   setActiveTab: (tab: 'graph' | 'editor') => void;
@@ -40,6 +41,7 @@ export interface UIState {
   openFileInEditor: (path: string) => void;
   setSettingsOpen: (open: boolean) => void;
   setSoundEnabled: (enabled: boolean) => void;
+  setShowWelcome: (show: boolean) => void;
 }
 
 const persistedApiKey = (() => {
@@ -69,6 +71,7 @@ export const uiStore = createStore<UIState>((set) => ({
   editorDirty: false,
   settingsOpen: false,
   soundEnabled: persistedSoundEnabled,
+  showWelcome: false,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -89,6 +92,7 @@ export const uiStore = createStore<UIState>((set) => ({
     try { localStorage.setItem('mas-sound-enabled', String(enabled)); } catch { /* localStorage may be unavailable */ }
     set({ soundEnabled: enabled });
   },
+  setShowWelcome: (show) => set({ showWelcome: show }),
 }));
 
 // React hooks

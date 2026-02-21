@@ -1,8 +1,9 @@
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect, useRef } from 'react';
 import { useKernel } from '../../hooks/useKernel';
 import { useAgentRegistry, useProjectStore, useUI, diskSync, uiStore } from '../../stores/use-stores';
 import { audioEngine } from '../../core/audio-engine';
 import { useAudioEvents } from '../../hooks/useAudioEvents';
+import { DEMO_PROMPT, DEMO_AGENT } from '../../hooks/useOnboarding';
 import styles from './TopBar.module.css';
 
 export function TopBar() {
@@ -12,6 +13,24 @@ export function TopBar() {
   const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount } = useKernel();
   const [selectedAgent, setSelectedAgent] = useState('');
   const [kickoffPrompt, setKickoffPrompt] = useState('');
+  const globalSelectedAgent = useUI((s) => s.selectedAgentId);
+
+  // Sync dropdown with global agent selection (set by onboarding, graph clicks, etc.)
+  useEffect(() => {
+    if (globalSelectedAgent) {
+      setSelectedAgent(globalSelectedAgent);
+    }
+  }, [globalSelectedAgent]);
+
+  // Pre-fill demo prompt when sample project-lead agent appears and prompt is still empty
+  const didPrefill = useRef(false);
+  useEffect(() => {
+    if (!didPrefill.current && agentsMap.has(DEMO_AGENT)) {
+      setSelectedAgent(DEMO_AGENT);
+      setKickoffPrompt(DEMO_PROMPT);
+      didPrefill.current = true;
+    }
+  }, [agentsMap]);
   const soundEnabled = useUI((s) => s.soundEnabled);
   const [isOpeningProject, startProjectTransition] = useTransition();
 

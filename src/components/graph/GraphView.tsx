@@ -9,6 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useNodesInitialized,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -37,6 +38,7 @@ function GraphViewInner() {
   const [searchQuery, setSearchQuery] = useState('');
   const [autoFollow, setAutoFollow] = useState(true);
   const { fitView } = useReactFlow();
+  const nodesInitialized = useNodesInitialized();
   const lastFitRef = useRef(0);
 
   // Sync derived data into React Flow state, applying dagre-computed positions
@@ -61,17 +63,17 @@ function GraphViewInner() {
     setEdges(derivedEdges);
   }, [derivedEdges, setEdges]);
 
-  // Auto-fit on node count changes (throttled)
+  // Auto-fit on node count changes or when nodes finish measuring
   useEffect(() => {
-    if (!autoFollow) return;
+    if (!autoFollow || !nodesInitialized) return;
     const now = Date.now();
     if (now - lastFitRef.current < 800) return;
     lastFitRef.current = now;
     const timer = setTimeout(() => {
       fitView({ padding: 0.18, duration: 420 });
-    }, 500);
+    }, 80);
     return () => clearTimeout(timer);
-  }, [derivedNodes.length, autoFollow, fitView]);
+  }, [derivedNodes.length, nodesInitialized, autoFollow, fitView]);
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: { type?: string; id: string }) => {
     if (node.type !== 'agentNode') return;
@@ -99,8 +101,6 @@ function GraphViewInner() {
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.18, duration: 420 }}
         minZoom={0.2}
         maxZoom={1.6}
         style={{
