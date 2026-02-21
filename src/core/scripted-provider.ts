@@ -9,7 +9,12 @@ import type { Message } from '../types/kernel';
  */
 export type ScriptMap = Record<string, StreamChunk[][]>;
 
-const CHUNK_DELAY_MS = 30;
+const CHUNK_DELAY_MS: Record<string, number> = {
+  text: 120,
+  tool_call: 600,
+  done: 1200,
+  error: 0,
+};
 
 const FALLBACK_TEXT = '[ScriptedAIProvider] No script available for this agent or turn.';
 
@@ -91,7 +96,7 @@ export class ScriptedAIProvider implements AIProvider {
         yield { type: 'error', error: 'Aborted' };
         return;
       }
-      await new Promise((r) => setTimeout(r, CHUNK_DELAY_MS));
+      await new Promise((r) => setTimeout(r, CHUNK_DELAY_MS[chunk.type] ?? 120));
       yield chunk;
     }
   }

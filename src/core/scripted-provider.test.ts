@@ -210,6 +210,38 @@ describe('ScriptedAIProvider', () => {
     expect(s2chunks[0].text).toBe('Turn 0');
   });
 
+  it('applies longer delays for tool_call and done chunks than text chunks', async () => {
+    const scripts: ScriptMap = {
+      [agentPath]: [
+        [
+          { type: 'text', text: 'fast text' },
+          { type: 'tool_call', toolCall: { id: 'tc-1', name: 'test', args: {} } },
+          { type: 'done', tokenCount: 1 },
+        ],
+      ],
+    };
+
+    const provider = new ScriptedAIProvider(scripts);
+    provider.registerSession('s1', agentPath);
+
+    const timestamps: number[] = [];
+    for await (const _chunk of provider.chat(makeConfig('s1'), [], [])) {
+      timestamps.push(Date.now());
+    }
+
+    // 3 chunks = 3 timestamps
+    expect(timestamps).toHaveLength(3);
+
+    const textToToolGap = timestamps[1] - timestamps[0];
+    const toolToDoneGap = timestamps[2] - timestamps[1];
+
+    // tool_call delay should be noticeably longer than text delay
+    // text ~120ms, tool_call ~600ms, done ~1200ms
+    // Allow generous margins for CI timing variance
+    expect(textToToolGap).toBeGreaterThan(200);
+    expect(toolToDoneGap).toBeGreaterThan(500);
+  });
+
   it('supports tool_call chunks in scripts', async () => {
     const scripts: ScriptMap = {
       [agentPath]: [

@@ -98,5 +98,5 @@ describe('Demo integration: full project run through kernel', () => {
     for (const session of kernel.completedSessions) {
       expect(session.status).toBe('completed');
     }
-  }, 30_000);
+  }, 120_000);
 });
