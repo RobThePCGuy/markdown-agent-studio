@@ -12,21 +12,60 @@ VALID_BUMPS=(patch minor major prepatch preminor premajor prerelease)
 VERSION_TYPE=""
 DRY_RUN=0
 NO_GH_RELEASE=0
+AUTO_PULL=0
 NPM_PROVENANCE_MODE="${NPM_PROVENANCE:-auto}"
 
+TEMP_NPMRC=""
+BUMPED=0
+COMMITTED=0
+TAGGED=0
+NEW_VERSION=""
+TAG=""
+VERSION_CHANGED_FILES=()
+
 usage() {
-  echo -e "${YELLOW}Usage: ./scripts/release.sh <bump-type> [--dry-run] [--no-gh-release] [--provenance|--no-provenance]${NC}"
+  echo -e "${YELLOW}Usage: ./scripts/release.sh <bump-type> [--dry-run] [--pull] [--no-gh-release] [--provenance|--no-provenance]${NC}"
   echo "  bump-type: patch | minor | major | prepatch | preminor | premajor | prerelease"
   echo "  --dry-run: run checks + simulate publish, then restore version files"
+  echo "  --pull: if behind origin/main, offer a fast-forward pull (or do it in CI/non-interactive)"
   echo "  --no-gh-release: skip gh release creation"
   echo "  --provenance: force npm provenance flag"
   echo "  --no-provenance: disable npm provenance flag"
 }
 
+restore_version_files() {
+  if [ "${#VERSION_CHANGED_FILES[@]}" -gt 0 ]; then
+    git restore -- "${VERSION_CHANGED_FILES[@]}" || true
+  fi
+}
+
+cleanup_npm_auth() {
+  if [ -n "${TEMP_NPMRC:-}" ] && [ -f "$TEMP_NPMRC" ]; then
+    rm -f "$TEMP_NPMRC"
+  fi
+}
+
+cleanup_on_error() {
+  echo -e "${RED}Release failed.${NC}"
+  if [ "$BUMPED" -eq 1 ] && [ "$COMMITTED" -eq 0 ]; then
+    echo -e "${YELLOW}Restoring version files...${NC}"
+    restore_version_files
+  fi
+  if [ "$TAGGED" -eq 1 ] && [ -n "${TAG:-}" ]; then
+    echo -e "${YELLOW}Removing local tag $TAG...${NC}"
+    git tag -d "$TAG" >/dev/null 2>&1 || true
+  fi
+}
+
+trap cleanup_npm_auth EXIT
+
 for arg in "$@"; do
   case "$arg" in
     --dry-run)
       DRY_RUN=1
+      ;;
+    --pull)
+      AUTO_PULL=1
       ;;
     --no-gh-release)
       NO_GH_RELEASE=1
@@ -75,12 +114,22 @@ if [ "$is_valid_bump" -ne 1 ]; then
   exit 1
 fi
 
-for cmd in git node npm; do
+for cmd in git node npm mktemp; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo -e "${RED}Missing required command: $cmd${NC}"
     exit 1
   fi
 done
+
+if [ -n "${NPM_TOKEN:-}" ]; then
+  TEMP_NPMRC="$(mktemp)"
+  chmod 600 "$TEMP_NPMRC"
+  printf '%s\n' "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$TEMP_NPMRC"
+  export NPM_CONFIG_USERCONFIG="$TEMP_NPMRC"
+  echo -e "${GREEN}Using NPM_TOKEN for npm authentication.${NC}"
+else
+  echo -e "${YELLOW}NPM_TOKEN not set. npm publish will use your existing npm auth config.${NC}"
+fi
 
 PUBLISH_ARGS=(--access public --ignore-scripts)
 case "$NPM_PROVENANCE_MODE" in
@@ -107,7 +156,9 @@ else
 fi
 
 if [ -n "$(git status --porcelain)" ]; then
-  echo -e "${RED}Working tree is not clean. Commit/stash first.${NC}"
+  echo -e "${RED}Working tree is not clean. Pulling/releasing could overwrite uncommitted or staged changes.${NC}"
+  git status --short
+  echo -e "${YELLOW}Commit or stash your changes first.${NC}"
   exit 1
 fi
 
@@ -134,8 +185,31 @@ BASE="$(git merge-base HEAD origin/main)"
 
 if [ "$LOCAL" != "$REMOTE" ]; then
   if [ "$LOCAL" = "$BASE" ]; then
-    echo -e "${RED}Local branch is behind origin/main. Pull first.${NC}"
-    exit 1
+    echo -e "${YELLOW}Local branch is behind origin/main.${NC}"
+
+    if [ "$AUTO_PULL" -eq 1 ]; then
+      if [ "$BRANCH" != "main" ]; then
+        echo -e "${RED}Refusing --pull while not on main. Switch to main first or pull manually.${NC}"
+        exit 1
+      fi
+
+      if [ -n "${CI:-}" ] || [ "${NONINTERACTIVE:-0}" = "1" ]; then
+        echo -e "${GREEN}Auto-pulling with --ff-only...${NC}"
+        git pull --ff-only origin main
+      else
+        echo -e "${YELLOW}About to run: git pull --ff-only origin main${NC}"
+        echo -e "${YELLOW}Your working tree is clean, so no uncommitted data will be overwritten.${NC}"
+        read -r -p "Continue with pull? (y/N) " -n 1 REPLY
+        echo
+        if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+          exit 1
+        fi
+        git pull --ff-only origin main
+      fi
+    else
+      echo -e "${RED}Pull first (or rerun with --pull for a fast-forward pull).${NC}"
+      exit 1
+    fi
   elif [ "$REMOTE" = "$BASE" ]; then
     echo -e "${YELLOW}Local branch is ahead of origin/main.${NC}"
   else
@@ -144,23 +218,6 @@ if [ "$LOCAL" != "$REMOTE" ]; then
   fi
 fi
 
-BUMPED=0
-COMMITTED=0
-TAGGED=0
-NEW_VERSION=""
-TAG=""
-
-cleanup_on_error() {
-  echo -e "${RED}Release failed.${NC}"
-  if [ "$BUMPED" -eq 1 ] && [ "$COMMITTED" -eq 0 ]; then
-    echo -e "${YELLOW}Restoring version files...${NC}"
-    git restore -- package.json package-lock.json || true
-  fi
-  if [ "$TAGGED" -eq 1 ]; then
-    echo -e "${YELLOW}Removing local tag $TAG...${NC}"
-    git tag -d "$TAG" >/dev/null 2>&1 || true
-  fi
-}
 trap cleanup_on_error ERR
 
 echo -e "${GREEN}Running full checks...${NC}"
@@ -169,6 +226,13 @@ npm run check:all
 echo -e "${GREEN}Bumping version (${VERSION_TYPE})...${NC}"
 npm version "$VERSION_TYPE" --no-git-tag-version --ignore-scripts
 BUMPED=1
+
+mapfile -t VERSION_CHANGED_FILES < <(git diff --name-only)
+
+if [ "${#VERSION_CHANGED_FILES[@]}" -eq 0 ]; then
+  echo -e "${RED}Version bump did not modify any files.${NC}"
+  exit 1
+fi
 
 NEW_VERSION="$(node -p "require('./package.json').version")"
 TAG="v$NEW_VERSION"
@@ -182,14 +246,14 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo -e "${GREEN}Running npm publish dry-run...${NC}"
   npm publish --dry-run "${PUBLISH_ARGS[@]}"
   echo -e "${YELLOW}Restoring version files after dry-run...${NC}"
-  git restore -- package.json package-lock.json
+  restore_version_files
   echo -e "${GREEN}Dry-run complete for ${TAG}.${NC}"
   trap - ERR
   exit 0
 fi
 
 echo -e "${GREEN}Committing release files...${NC}"
-git add -- package.json package-lock.json
+git add -- "${VERSION_CHANGED_FILES[@]}"
 git commit -m "chore(release): ${TAG}"
 COMMITTED=1
 
@@ -207,7 +271,9 @@ git push origin "$TAG"
 if [ "$NO_GH_RELEASE" -eq 0 ] && command -v gh >/dev/null 2>&1; then
   if gh auth status >/dev/null 2>&1; then
     echo -e "${GREEN}Creating GitHub release ${TAG}...${NC}"
-    gh release create "$TAG" --generate-notes
+    if ! gh release create "$TAG" --generate-notes; then
+      echo -e "${YELLOW}GitHub release creation failed, but npm publish and git push already succeeded.${NC}"
+    fi
   else
     echo -e "${YELLOW}gh is installed but not authenticated; skipping GitHub release.${NC}"
   fi

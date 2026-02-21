@@ -4,6 +4,7 @@
   "description": "A visual IDE for building, orchestrating, and observing autonomous AI agent teams.",
   "license": "MIT",
   "author": "RobThePCGuy",
+  "homepage": "https://github.com/RobThePCGuy/markdown-agent-studio#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/RobThePCGuy/markdown-agent-studio.git"
@@ -11,7 +12,6 @@
   "bugs": {
     "url": "https://github.com/RobThePCGuy/markdown-agent-studio/issues"
   },
-  "homepage": "https://github.com/RobThePCGuy/markdown-agent-studio#readme",
   "keywords": [
     "ai-agents",
     "multi-agent",
@@ -47,10 +47,24 @@
   "publishConfig": {
     "access": "public"
   },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:all": "npm run lint && npm run test && npm run build",
+    "clean": "rm -rf node_modules dist package-lock.json",
+    "commit:checked": "node scripts/checked-commit.mjs",
+    "commit:publish": "node scripts/checked-commit.mjs --stage-publish",
+    "release:patch": "bash scripts/release.sh patch",
+    "release:minor": "bash scripts/release.sh minor",
+    "release:major": "bash scripts/release.sh major",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run lint && npm run test"
+  },
   "overrides": {
-    "eslint": {
-      "minimatch": "^10.2.1"
-    },
     "@eslint/config-array": {
       "minimatch": "^10.2.1"
     },
@@ -59,22 +73,10 @@
     },
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^10.2.1"
+    },
+    "eslint": {
+      "minimatch": "^10.2.1"
     }
-  },
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "check:all": "npm run lint && npm run test && npm run build",
-    "release": "bash scripts/release.sh",
-    "commit:checked": "node scripts/checked-commit.mjs",
-    "commit:publish": "node scripts/checked-commit.mjs --stage-publish",
-    "preview": "vite preview",
-    "clean": "rm -rf node_modules dist package-lock.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm run lint && npm run test"
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",
