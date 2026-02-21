@@ -27,6 +27,9 @@
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
+  "bin": {
+    "markdown-agent-studio": "./bin/markdown-agent-studio.js"
+  },
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -35,6 +38,7 @@
   },
   "files": [
     "dist",
+    "bin/markdown-agent-studio.js",
     "index.js",
     "index.d.ts",
     "README.md",

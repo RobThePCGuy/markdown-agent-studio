@@ -65,8 +65,18 @@ The package exports the built app directory path:
 import distPath from 'markdown-agent-studio';
 ```
 
-No CLI binary is currently published, so `npx markdown-agent-studio` does not launch a server.
-Serve the exported `distPath` with your own static host.
+Quick-run CLI is available:
+
+```bash
+npx markdown-agent-studio
+```
+
+CLI options:
+- `--port 4173`
+- `--host 127.0.0.1`
+- `--no-open`
+
+You can also serve the exported `distPath` with your own static host.
 
 Example (Express static hosting):
 

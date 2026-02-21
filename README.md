@@ -50,8 +50,18 @@ Use exported `dist` path:
 import distPath from 'markdown-agent-studio';
 ```
 
-This package does not ship a CLI binary, so `npx markdown-agent-studio` will not start a server.
-Host `distPath` with your own static server.
+Run immediately with npx (starts local static server and opens your browser):
+
+```bash
+npx markdown-agent-studio
+```
+
+Options:
+- `--port 4173`
+- `--host 127.0.0.1`
+- `--no-open`
+
+Or host `distPath` with your own static server.
 
 ## Key Commands
 
