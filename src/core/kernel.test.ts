@@ -304,6 +304,12 @@ describe('RunController memory handoff regression', () => {
     resetGlobalStores();
     vfsStore.getState().write(projectLead.path, projectLead.content, {});
     agentRegistry.getState().registerFromFile(projectLead.path, projectLead.content);
+
+    // Zero out ScriptedAIProvider chunk delays so tests don't time out
+    const originalSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: TimerHandler, _ms?: number) => {
+      return originalSetTimeout(fn, 0);
+    }) as typeof setTimeout);
   });
 
   afterEach(() => {
