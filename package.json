@@ -1,6 +1,6 @@
 {
   "name": "markdown-agent-studio",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A visual IDE for building, orchestrating, and observing autonomous AI agent teams.",
   "license": "MIT",
   "author": "RobThePCGuy",
