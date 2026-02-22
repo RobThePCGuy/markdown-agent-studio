@@ -18,7 +18,6 @@ import { useGraphData } from '../../hooks/useGraphData';
 import { uiStore } from '../../stores/use-stores';
 import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
-import { ParticleOverlay } from './ParticleOverlay';
 import { RunTimeline } from './RunTimeline';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import styles from './GraphView.module.css';
@@ -128,7 +127,6 @@ function GraphViewInner() {
           maskColor="rgba(0,0,0,0.5)"
           style={{ background: 'var(--depth-2)', border: '1px solid var(--depth-3)' }}
         />
-        <ParticleOverlay edges={edges} />
       </ReactFlow>
 
       {showWelcome && (
