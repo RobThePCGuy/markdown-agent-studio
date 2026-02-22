@@ -33,7 +33,7 @@ describe('Memory types', () => {
   });
 
   it('MemoryType covers all valid types', () => {
-    const types: MemoryType[] = ['fact', 'procedure', 'observation', 'mistake', 'preference'];
-    expect(types).toHaveLength(5);
+    const types: MemoryType[] = ['fact', 'procedure', 'observation', 'mistake', 'preference', 'skill'];
+    expect(types).toHaveLength(6);
   });
 });

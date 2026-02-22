@@ -5,7 +5,7 @@ import { DEMO_SCRIPT } from './demo-script';
 import { createBuiltinRegistry } from './plugins';
 import { taskQueueReadPlugin } from './plugins/task-queue-read';
 import { taskQueueWritePlugin } from './plugins/task-queue-write';
-import { Summarizer, SUMMARIZER_SYSTEM_PROMPT, CONSOLIDATION_SYSTEM_PROMPT } from './summarizer';
+import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
 import type { MemoryManager } from './memory-manager';
 import type { KernelConfig } from '../types';
 import type { TaskQueueState } from '../stores/task-queue-store';
@@ -256,40 +256,12 @@ export class AutonomousRunner {
     if (!apiKey || completedSessions.length === 0) return;
 
     const summarizeModel = kernelConfig.model || 'gemini-2.0-flash';
-    const summarizeFn = async (context: string) => {
-      try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const client = new GoogleGenerativeAI(apiKey);
-        const model = client.getGenerativeModel({ model: summarizeModel });
-        const result = await model.generateContent(
-          SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
-        );
-        const text = result.response.text();
-        const jsonMatch = text.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) return [];
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return [];
-      }
-    };
-
-    const consolidateFn = async (context: string) => {
-      try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const client = new GoogleGenerativeAI(apiKey);
-        const model = client.getGenerativeModel({ model: summarizeModel });
-        const result = await model.generateContent(
-          CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
-        );
-        const text = result.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return { operations: [] };
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return { operations: [] };
-      }
-    };
-    const summarizer = new Summarizer(this.deps.memoryManager, summarizeFn, this.deps.vfs, consolidateFn);
+    const summarizer = new Summarizer(
+      this.deps.memoryManager,
+      createGeminiSummarizeFn(apiKey, summarizeModel),
+      this.deps.vfs,
+      createGeminiConsolidateFn(apiKey, summarizeModel),
+    );
     try {
       await summarizer.summarize(
         `autonomous-cycle-${this._currentCycle}-${Date.now()}`,

@@ -226,7 +226,7 @@ export default function SettingsModal() {
 
           <button
             onClick={async () => {
-              const db = createMemoryDB();
+              const db = createMemoryDB(vfsStore);
               const mgr = new MemoryManager(db);
               await mgr.clearAll();
             }}

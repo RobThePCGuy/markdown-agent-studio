@@ -109,6 +109,8 @@ Return ONLY a JSON object (no other text):
 
 const DEFAULT_CONTEXT_WINDOW = 1_000_000;
 
+const VALID_MEMORY_TYPES = new Set<string>(['fact', 'procedure', 'observation', 'mistake', 'preference', 'skill']);
+
 // ---------------------------------------------------------------------------
 // Summarizer
 // ---------------------------------------------------------------------------
@@ -307,7 +309,7 @@ export class Summarizer {
     for (const op of result.operations) {
       switch (op.action) {
         case 'ADD':
-          if (op.content && op.type) {
+          if (op.content && op.type && VALID_MEMORY_TYPES.has(op.type)) {
             await this.manager.store({
               agentId,
               type: op.type,
@@ -337,4 +339,46 @@ export class Summarizer {
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Factory helpers for creating LLM-backed summarize/consolidate functions
+// ---------------------------------------------------------------------------
+
+export function createGeminiSummarizeFn(apiKey: string, model: string): SummarizeFn {
+  return async (context: string) => {
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const client = new GoogleGenerativeAI(apiKey);
+      const genModel = client.getGenerativeModel({ model });
+      const result = await genModel.generateContent(
+        SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
+      );
+      const text = result.response.text();
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) return [];
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return [];
+    }
+  };
+}
+
+export function createGeminiConsolidateFn(apiKey: string, model: string): ConsolidateFn {
+  return async (context: string) => {
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const client = new GoogleGenerativeAI(apiKey);
+      const genModel = client.getGenerativeModel({ model });
+      const result = await genModel.generateContent(
+        CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
+      );
+      const text = result.response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { operations: [] };
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return { operations: [] };
+    }
+  };
 }

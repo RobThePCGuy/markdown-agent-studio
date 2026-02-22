@@ -7,7 +7,7 @@ import type { KernelConfig } from '../types';
 import { restoreCheckpoint } from '../utils/replay';
 import { MemoryManager } from './memory-manager';
 import { createMemoryDB } from './memory-db';
-import { Summarizer, SUMMARIZER_SYSTEM_PROMPT, CONSOLIDATION_SYSTEM_PROMPT } from './summarizer';
+import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
 import { AutonomousRunner } from './autonomous-runner';
 
 export interface RunControllerState {
@@ -116,40 +116,12 @@ class RunController {
         const apiKey = uiStore.getState().apiKey;
         if (apiKey && completedSessions.length > 0) {
           const summarizeModel = config.model || 'gemini-2.0-flash';
-          const summarizeFn = async (context: string) => {
-            try {
-              const { GoogleGenerativeAI } = await import('@google/generative-ai');
-              const client = new GoogleGenerativeAI(apiKey);
-              const model = client.getGenerativeModel({ model: summarizeModel });
-              const result = await model.generateContent(
-                SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
-              );
-              const text = result.response.text();
-              // Extract JSON array from response (may have markdown code fences)
-              const jsonMatch = text.match(/\[[\s\S]*\]/);
-              if (!jsonMatch) return [];
-              return JSON.parse(jsonMatch[0]);
-            } catch {
-              return [];
-            }
-          };
-          const consolidateFn = async (context: string) => {
-            try {
-              const { GoogleGenerativeAI } = await import('@google/generative-ai');
-              const client = new GoogleGenerativeAI(apiKey);
-              const model = client.getGenerativeModel({ model: summarizeModel });
-              const result = await model.generateContent(
-                CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
-              );
-              const text = result.response.text();
-              const jsonMatch = text.match(/\{[\s\S]*\}/);
-              if (!jsonMatch) return { operations: [] };
-              return JSON.parse(jsonMatch[0]);
-            } catch {
-              return { operations: [] };
-            }
-          };
-          const summarizer = new Summarizer(this.memoryManager, summarizeFn, vfsStore, consolidateFn);
+          const summarizer = new Summarizer(
+            this.memoryManager,
+            createGeminiSummarizeFn(apiKey, summarizeModel),
+            vfsStore,
+            createGeminiConsolidateFn(apiKey, summarizeModel),
+          );
           summarizer
             .summarize(`run-${Date.now()}`, workingSnapshot, completedSessions)
             .catch(() => {});

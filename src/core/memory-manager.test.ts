@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryManager, _resetLtmCounter } from './memory-manager';
-import type { MemoryDB } from './memory-manager';
+import type { MemoryDB } from './memory-db';
 import type { LongTermMemory } from '../types/memory';
 
 /** In-memory mock implementation of MemoryDB */
@@ -196,6 +196,55 @@ describe('MemoryManager', () => {
       await mm.clearAll();
       const all = await mm.getAll();
       expect(all).toHaveLength(0);
+    });
+  });
+
+  describe('update', () => {
+    it('updates content only', async () => {
+      const mem = await mm.store({ agentId: 'a', type: 'fact', content: 'old', tags: ['tag1'], runId: 'r' });
+      await mm.update(mem.id, { content: 'new' });
+
+      const all = await mm.getAll();
+      expect(all[0].content).toBe('new');
+      expect(all[0].tags).toEqual(['tag1']);
+    });
+
+    it('updates tags only', async () => {
+      const mem = await mm.store({ agentId: 'a', type: 'fact', content: 'keep', tags: ['old'], runId: 'r' });
+      await mm.update(mem.id, { tags: ['new', 'tags'] });
+
+      const all = await mm.getAll();
+      expect(all[0].content).toBe('keep');
+      expect(all[0].tags).toEqual(['new', 'tags']);
+    });
+
+    it('updates both content and tags', async () => {
+      const mem = await mm.store({ agentId: 'a', type: 'fact', content: 'old', tags: ['old'], runId: 'r' });
+      await mm.update(mem.id, { content: 'new', tags: ['new'] });
+
+      const all = await mm.getAll();
+      expect(all[0].content).toBe('new');
+      expect(all[0].tags).toEqual(['new']);
+    });
+
+    it('preserves other fields (type, agentId, accessCount, etc.)', async () => {
+      const mem = await mm.store({ agentId: 'agent-x', type: 'mistake', content: 'old', tags: [], runId: 'run-5' });
+      await mm.update(mem.id, { content: 'updated' });
+
+      const all = await mm.getAll();
+      expect(all[0].type).toBe('mistake');
+      expect(all[0].agentId).toBe('agent-x');
+      expect(all[0].runId).toBe('run-5');
+      expect(all[0].createdAt).toBe(mem.createdAt);
+    });
+
+    it('is a no-op for non-existent id', async () => {
+      await mm.store({ agentId: 'a', type: 'fact', content: 'safe', tags: [], runId: 'r' });
+      await mm.update('does-not-exist', { content: 'should not appear' });
+
+      const all = await mm.getAll();
+      expect(all).toHaveLength(1);
+      expect(all[0].content).toBe('safe');
     });
   });
 

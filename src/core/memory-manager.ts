@@ -1,4 +1,5 @@
 import type { LongTermMemory, MemoryType } from '../types/memory';
+import type { MemoryDB } from './memory-db';
 
 let ltmCounter = 0;
 
@@ -8,13 +9,6 @@ export interface StoreInput {
   content: string;
   tags: string[];
   runId: string;
-}
-
-export interface MemoryDB {
-  getAll(): Promise<LongTermMemory[]>;
-  put(entry: LongTermMemory): Promise<void>;
-  delete(id: string): Promise<void>;
-  clear(): Promise<void>;
 }
 
 export class MemoryManager {
