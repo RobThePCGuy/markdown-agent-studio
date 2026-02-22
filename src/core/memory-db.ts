@@ -1,4 +1,7 @@
 import type { LongTermMemory } from '../types/memory';
+import type { VFSState } from '../stores/vfs-store';
+
+type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -137,10 +140,66 @@ export class IndexedDBMemoryDB implements MemoryDB {
 }
 
 // ---------------------------------------------------------------------------
+// VFSMemoryDB - stores memories as a JSON file in the virtual filesystem
+// ---------------------------------------------------------------------------
+
+const VFS_MEMORY_PATH = 'memory/long-term-memory.json';
+
+export class VFSMemoryDB implements MemoryDB {
+  private vfs: Store<VFSState>;
+
+  constructor(vfs: Store<VFSState>) {
+    this.vfs = vfs;
+  }
+
+  private readEntries(): LongTermMemory[] {
+    const raw = this.vfs.getState().read(VFS_MEMORY_PATH);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeEntries(entries: LongTermMemory[]): void {
+    this.vfs.getState().write(VFS_MEMORY_PATH, JSON.stringify(entries, null, 2), {});
+  }
+
+  async getAll(): Promise<LongTermMemory[]> {
+    return this.readEntries();
+  }
+
+  async put(entry: LongTermMemory): Promise<void> {
+    const entries = this.readEntries();
+    const idx = entries.findIndex((e) => e.id === entry.id);
+    if (idx >= 0) {
+      entries[idx] = entry;
+    } else {
+      entries.push(entry);
+    }
+    this.writeEntries(entries);
+  }
+
+  async delete(id: string): Promise<void> {
+    const entries = this.readEntries().filter((e) => e.id !== id);
+    this.writeEntries(entries);
+  }
+
+  async clear(): Promise<void> {
+    this.writeEntries([]);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
-export function createMemoryDB(): MemoryDB {
+export function createMemoryDB(vfs?: Store<VFSState>): MemoryDB {
+  if (vfs) {
+    return new VFSMemoryDB(vfs);
+  }
   if (typeof indexedDB !== 'undefined') {
     return new IndexedDBMemoryDB();
   }
