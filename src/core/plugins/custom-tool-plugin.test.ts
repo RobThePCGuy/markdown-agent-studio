@@ -57,7 +57,7 @@ describe('createCustomToolPlugin', () => {
     expect(spawnedActivations[0].input).toBe('Summarize the following:\n\nHello world');
   });
 
-  it('includes model override in spawned agent', async () => {
+  it('does not include model in spawned agent frontmatter', async () => {
     const withModel: CustomToolDef = { ...toolDef, model: 'gemini-3-flash-preview' };
     const plugin = createCustomToolPlugin(withModel);
     const vfs = createVFSStore();
@@ -69,43 +69,24 @@ describe('createCustomToolPlugin', () => {
 
     await plugin.handler({ text: 'test' }, ctx);
 
-    const content = vfs.getState().read(spawnedActivations[0].agentId);
-    expect(content).toContain('model: "gemini-3-flash-preview"');
+    const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
+    expect(content).not.toContain('model:');
   });
 
-  it('defaults to preferred model and gloves_off safety mode', async () => {
+  it('defaults to gloves_off safety mode', async () => {
     const plugin = createCustomToolPlugin(toolDef);
     const vfs = createVFSStore();
     const spawnedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
       vfs,
-      preferredModel: 'gemini-2.5-flash',
       onSpawnActivation: (act) => spawnedActivations.push(act),
     });
 
     await plugin.handler({ text: 'test' }, ctx);
 
     const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
-    expect(content).toContain('model: "gemini-2.5-flash"');
+    expect(content).not.toContain('model:');
     expect(content).toContain('safety_mode: "gloves_off"');
-  });
-
-  it('normalizes legacy gemini-1.5 model to preferred model', async () => {
-    const legacyModelDef: CustomToolDef = { ...toolDef, model: 'gemini-1.5-pro' };
-    const plugin = createCustomToolPlugin(legacyModelDef);
-    const vfs = createVFSStore();
-    const spawnedActivations: SpawnedActivation[] = [];
-    const ctx = makeCtx({
-      vfs,
-      preferredModel: 'gemini-3-flash-preview',
-      onSpawnActivation: (act) => spawnedActivations.push(act),
-    });
-
-    await plugin.handler({ text: 'test' }, ctx);
-
-    const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
-    expect(content).toContain('model: "gemini-3-flash-preview"');
-    expect(content).not.toContain('model: "gemini-1.5-pro"');
   });
 
   it('respects depth limits', async () => {

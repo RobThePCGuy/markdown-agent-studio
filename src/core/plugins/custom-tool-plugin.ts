@@ -1,27 +1,10 @@
 import type { ToolPlugin, ToolParameter } from '../tool-plugin';
 import type { CustomToolDef } from '../../types/agent';
 
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
-
 function substituteTemplate(template: string, args: Record<string, unknown>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     return args[key] !== undefined ? String(args[key]) : `{{${key}}}`;
   });
-}
-
-function resolveWorkerModel(model: string | undefined, preferredModel: string | undefined): string {
-  // User's preferred model (from settings) takes priority over tool def model
-  const preferred = typeof preferredModel === 'string' ? preferredModel.trim() : '';
-  if (preferred) {
-    return preferred;
-  }
-
-  const requestedModel = typeof model === 'string' ? model.trim() : '';
-  if (requestedModel) {
-    return requestedModel;
-  }
-
-  return DEFAULT_MODEL;
 }
 
 export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
@@ -51,9 +34,8 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
       const prompt = substituteTemplate(def.prompt, args);
       const agentName = `${def.name}-worker`;
       const path = `agents/_custom_${def.name}_${Date.now()}.md`;
-      const model = resolveWorkerModel(def.model, ctx.preferredModel);
 
-      let frontmatter = `---\nname: "${agentName}"\nmodel: "${model}"`;
+      let frontmatter = `---\nname: "${agentName}"`;
       frontmatter +=
         '\nsafety_mode: "gloves_off"' +
         '\nreads:\n  - "**"' +
