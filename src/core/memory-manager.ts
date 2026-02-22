@@ -41,6 +41,15 @@ export class MemoryManager {
     return entry;
   }
 
+  async update(id: string, changes: Partial<Pick<LongTermMemory, 'content' | 'tags'>>): Promise<void> {
+    const all = await this.db.getAll();
+    const entry = all.find((m) => m.id === id);
+    if (!entry) return;
+    if (changes.content !== undefined) entry.content = changes.content;
+    if (changes.tags !== undefined) entry.tags = changes.tags;
+    await this.db.put(entry);
+  }
+
   async retrieve(
     agentId: string,
     taskContext: string,

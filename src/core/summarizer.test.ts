@@ -275,4 +275,132 @@ describe('Summarizer', () => {
     const all = await manager.getAll();
     expect(all).toHaveLength(2);
   });
+
+  describe('consolidation', () => {
+    it('calls consolidateFn with candidates and existing memories', async () => {
+      const existing = await manager.store({
+        agentId: 'agent-1',
+        type: 'fact',
+        content: 'Old fact',
+        tags: ['old'],
+        runId: 'run-0',
+      });
+
+      const candidates: ExtractedMemory[] = [
+        { type: 'skill', content: 'New skill', tags: ['new'] },
+      ];
+      mockSummarizeFn.mockResolvedValue(candidates);
+
+      const mockConsolidateFn = vi.fn().mockResolvedValue({
+        operations: [
+          { action: 'KEEP', id: existing.id },
+          { action: 'ADD', type: 'skill', content: 'New skill', tags: ['new'] },
+        ],
+      });
+
+      const summarizer = new Summarizer(manager, mockSummarizeFn, undefined, mockConsolidateFn);
+      await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+      expect(mockConsolidateFn).toHaveBeenCalledOnce();
+      const consolidateArg = mockConsolidateFn.mock.calls[0][0];
+      expect(consolidateArg).toContain('Old fact');
+      expect(consolidateArg).toContain('New skill');
+      expect(consolidateArg).toContain('GENEROUS');
+    });
+
+    it('applies ADD operations from consolidation', async () => {
+      mockSummarizeFn.mockResolvedValue([
+        { type: 'skill', content: 'Learned skill', tags: ['skill'] },
+      ]);
+
+      const mockConsolidateFn = vi.fn().mockResolvedValue({
+        operations: [
+          { action: 'ADD', type: 'skill', content: 'Learned skill', tags: ['skill'] },
+        ],
+      });
+
+      const summarizer = new Summarizer(manager, mockSummarizeFn, undefined, mockConsolidateFn);
+      await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+      const all = await manager.getAll();
+      expect(all).toHaveLength(1);
+      expect(all[0].content).toBe('Learned skill');
+      expect(all[0].type).toBe('skill');
+    });
+
+    it('applies UPDATE operations from consolidation', async () => {
+      const existing = await manager.store({
+        agentId: 'agent-1',
+        type: 'fact',
+        content: 'Old content',
+        tags: ['old'],
+        runId: 'run-0',
+      });
+
+      mockSummarizeFn.mockResolvedValue([]);
+
+      const mockConsolidateFn = vi.fn().mockResolvedValue({
+        operations: [
+          { action: 'UPDATE', id: existing.id, content: 'Updated content', tags: ['updated'] },
+        ],
+      });
+
+      const summarizer = new Summarizer(manager, mockSummarizeFn, undefined, mockConsolidateFn);
+      await summarizer.summarize('run-1', [], [makeSession()]);
+
+      const all = await manager.getAll();
+      expect(all).toHaveLength(1);
+      expect(all[0].content).toBe('Updated content');
+      expect(all[0].tags).toEqual(['updated']);
+    });
+
+    it('applies DELETE operations from consolidation', async () => {
+      const existing = await manager.store({
+        agentId: 'agent-1',
+        type: 'fact',
+        content: 'To be deleted',
+        tags: ['old'],
+        runId: 'run-0',
+      });
+
+      mockSummarizeFn.mockResolvedValue([]);
+
+      const mockConsolidateFn = vi.fn().mockResolvedValue({
+        operations: [
+          { action: 'DELETE', id: existing.id },
+        ],
+      });
+
+      const summarizer = new Summarizer(manager, mockSummarizeFn, undefined, mockConsolidateFn);
+      await summarizer.summarize('run-1', [], [makeSession()]);
+
+      const all = await manager.getAll();
+      expect(all).toHaveLength(0);
+    });
+
+    it('falls back to adding all candidates when consolidation fails', async () => {
+      mockSummarizeFn.mockResolvedValue([
+        { type: 'fact', content: 'Fallback fact', tags: ['fallback'] },
+      ]);
+
+      const mockConsolidateFn = vi.fn().mockRejectedValue(new Error('LLM failed'));
+
+      const summarizer = new Summarizer(manager, mockSummarizeFn, undefined, mockConsolidateFn);
+      await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+      const all = await manager.getAll();
+      expect(all).toHaveLength(1);
+      expect(all[0].content).toBe('Fallback fact');
+    });
+
+    it('falls back when no consolidateFn is provided', async () => {
+      mockSummarizeFn.mockResolvedValue(sampleExtracted);
+
+      const summarizer = new Summarizer(manager, mockSummarizeFn);
+      await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+      const all = await manager.getAll();
+      expect(all).toHaveLength(2);
+    });
+  });
 });
