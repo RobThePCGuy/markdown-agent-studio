@@ -19,6 +19,7 @@ type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => 
 
 export interface AutonomousRunnerConfig {
   maxCycles: number;
+  minCycles?: number;
   wrapUpThreshold: number;
   agentPath: string;
   missionPrompt: string;
@@ -78,6 +79,7 @@ export class AutonomousRunner {
   async run(): Promise<void> {
     // Clear task queue for a fresh autonomous run
     this.deps.taskQueueStore.getState().clear();
+    const minCycles = this.config.minCycles ?? 1;
 
     for (let cycle = 1; cycle <= this.config.maxCycles; cycle++) {
       if (this._stopped) break;
@@ -105,6 +107,14 @@ export class AutonomousRunner {
 
       // Post-cycle summarization
       await this.runSummarization(kernel);
+
+      // Assess whether work is complete
+      const completeness = this.assessCompletion(kernel);
+      if (completeness === 'complete' && cycle >= minCycles) {
+        this.deps.sessionStore.getState().clearAll();
+        this.currentKernel = null;
+        break;
+      }
 
       // Clear session store for next cycle (keeps VFS and task queue intact)
       this.deps.sessionStore.getState().clearAll();
@@ -169,6 +179,17 @@ export class AutonomousRunner {
       }
       parts.push('');
     }
+
+    // Work ethic
+    parts.push('## Work Ethic');
+    parts.push(
+      'Be thorough and persistent. Do NOT give up after a single attempt. ' +
+      'If a tool call fails, try a different approach. If a search returns no results, ' +
+      'rephrase your query. If you are stuck, spawn a sub-agent to research the problem. ' +
+      'Use ALL available tools before concluding. Write all deliverables to files ' +
+      'using vfs_write - text responses alone are not enough.'
+    );
+    parts.push('');
 
     // Instructions about available tools
     parts.push('## Autonomous Mode Tools');
@@ -235,13 +256,56 @@ export class AutonomousRunner {
         'CONTEXT LIMIT APPROACHING. You have 2-3 turns remaining in this cycle. ' +
         'Write any final outputs as files using vfs_write. Save inter-agent notes using memory_write. ' +
         'Update or add remaining tasks using task_queue_write. ' +
-        'The next cycle will have access to your memories and task queue.',
+        'The next cycle will have access to your memories and task queue.\n\n' +
+        '## Required Reflection\n' +
+        'Before ending, write a memory_write entry with key "cycle-reflection" that answers:\n' +
+        '- What approaches worked in this cycle?\n' +
+        '- What approaches FAILED and should not be repeated?\n' +
+        '- What is the most promising next step for the next cycle?',
     });
 
     this.deps.sessionStore.getState().addUserMessage(
       activationId,
       '[System] Context limit approaching - wrapping up cycle.'
     );
+  }
+
+  private assessCompletion(kernel: Kernel): 'complete' | 'incomplete' | 'uncertain' {
+    // Check for pending tasks in the queue
+    const tasks = this.deps.taskQueueStore.getState().getAll();
+    const pendingTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'in-progress');
+    if (pendingTasks.length > 0) return 'incomplete';
+
+    // Examine completed sessions
+    const sessions = kernel.completedSessions;
+    if (sessions.length === 0) return 'incomplete';
+
+    // Check if any session ended in error
+    if (sessions.some((s) => s.status === 'error')) return 'incomplete';
+
+    // Check if agent barely tried (very few tool calls total)
+    const totalToolCalls = sessions.reduce((sum, s) => sum + s.toolCalls.length, 0);
+    if (totalToolCalls <= 2) return 'incomplete';
+
+    // Check the last model message for incompleteness signals
+    const lastSession = sessions[sessions.length - 1];
+    const lastModelMsg = [...lastSession.history]
+      .reverse()
+      .find((m) => m.role === 'model');
+    if (lastModelMsg) {
+      const text = lastModelMsg.content.toLowerCase();
+      const incompletePatterns = [
+        'could not', 'unable to', 'need more', 'next step',
+        'incomplete', 'not yet', 'remains to', 'todo', 'to do',
+        'further research', 'more work', 'follow up', 'blocked',
+      ];
+      if (incompletePatterns.some((p) => text.includes(p))) return 'incomplete';
+    }
+
+    // If all tasks are done, consider complete
+    if (tasks.length > 0 && tasks.every((t) => t.status === 'done')) return 'complete';
+
+    return 'uncertain';
   }
 
   private async runSummarization(kernel: Kernel): Promise<void> {

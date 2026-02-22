@@ -4,6 +4,7 @@ import { MockAIProvider } from './mock-provider';
 import { createVFSStore } from '../stores/vfs-store';
 import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
+import { createMemoryStore } from '../stores/memory-store';
 import { runController } from './run-controller';
 import { Summarizer } from './summarizer';
 import { SAMPLE_AGENTS } from './sample-project';
@@ -276,6 +277,218 @@ describe('Kernel', () => {
     expect(session.history[2].content).toContain('My Notes');
     // Tokens should accumulate across turns
     expect(session.tokenCount).toBe(130);
+  });
+});
+
+describe('Kernel persistence (nudge, failure tracking, reflection)', () => {
+  let vfs: ReturnType<typeof createVFSStore>;
+  let registry: ReturnType<typeof createAgentRegistry>;
+  let eventLog: ReturnType<typeof createEventLog>;
+
+  beforeEach(() => {
+    vfs = createVFSStore();
+    registry = createAgentRegistry();
+    eventLog = createEventLog();
+    vfs.getState().write('agents/writer.md', '---\nname: "Writer"\n---\nYou are a writer.', {});
+    registry.getState().registerFromFile('agents/writer.md', vfs.getState().read('agents/writer.md')!);
+  });
+
+  it('nudge fires when agent stops early', async () => {
+    // Turn 1: text-only (should trigger nudge)
+    // Turn 2 (after nudge): tool call then text (should complete)
+    const provider = new MockAIProvider([]);
+    provider.setResponseQueue([
+      // Turn 1: text only - triggers nudge
+      [
+        { type: 'text', text: 'I think I am done' },
+        { type: 'done', tokenCount: 50 },
+      ],
+      // Turn 2 (after nudge): use a tool then stop
+      [
+        { type: 'tool_call', toolCall: { id: 'tc-1', name: 'vfs_read', args: { path: 'agents/writer.md' } } },
+        { type: 'done', tokenCount: 50 },
+      ],
+      // Turn 3: final text
+      [
+        { type: 'text', text: 'Done now' },
+        { type: 'done', tokenCount: 50 },
+      ],
+    ]);
+
+    const kernel = new Kernel({
+      aiProvider: provider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: {
+        maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000,
+        minTurnsBeforeStop: 5, maxNudges: 3,
+        forceReflection: false, autoRecordFailures: false,
+      },
+    });
+
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'Research topic', spawnDepth: 0, priority: 0 });
+    await kernel.runUntilEmpty();
+
+    const session = kernel.completedSessions[0];
+    expect(session.status).toBe('completed');
+    // History should contain: user input, model text, nudge (user), tool result, model text
+    const nudgeMessages = session.history.filter(
+      (m) => m.role === 'user' && m.content.includes('turns remaining')
+    );
+    expect(nudgeMessages.length).toBe(1);
+  });
+
+  it('nudge respects maxNudges cap', async () => {
+    // Provider always returns text-only - agent never uses tools
+    const responses: import('../types').StreamChunk[][] = [];
+    for (let i = 0; i < 10; i++) {
+      responses.push([
+        { type: 'text', text: `Response ${i}` },
+        { type: 'done', tokenCount: 10 },
+      ]);
+    }
+    const provider = new MockAIProvider([]);
+    provider.setResponseQueue(responses);
+
+    const kernel = new Kernel({
+      aiProvider: provider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: {
+        maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000,
+        minTurnsBeforeStop: 20, maxNudges: 2,
+        forceReflection: false, autoRecordFailures: false,
+      },
+    });
+
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'Do research', spawnDepth: 0, priority: 0 });
+    await kernel.runUntilEmpty();
+
+    const session = kernel.completedSessions[0];
+    const nudgeMessages = session.history.filter(
+      (m) => m.role === 'user' && m.content !== 'Do research'
+    );
+    // Should have exactly 2 nudges (maxNudges=2), then session stops
+    expect(nudgeMessages.length).toBe(2);
+  });
+
+  it('nudge disabled when minTurnsBeforeStop=0', async () => {
+    const provider = new MockAIProvider([
+      { type: 'text', text: 'Quick response' },
+      { type: 'done', tokenCount: 50 },
+    ]);
+
+    const kernel = new Kernel({
+      aiProvider: provider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: {
+        maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000,
+        minTurnsBeforeStop: 0, maxNudges: 3,
+        forceReflection: false, autoRecordFailures: false,
+      },
+    });
+
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'Quick task', spawnDepth: 0, priority: 0 });
+    await kernel.runUntilEmpty();
+
+    const session = kernel.completedSessions[0];
+    // Should stop immediately - no nudges
+    expect(session.history).toHaveLength(2); // user + model
+    expect(session.history[0].role).toBe('user');
+    expect(session.history[1].role).toBe('model');
+  });
+
+  it('tool failure detection writes to working memory', async () => {
+    const mStore = createMemoryStore();
+    const provider = new MockAIProvider([]);
+    provider.setResponseQueue([
+      [
+        { type: 'tool_call', toolCall: { id: 'tc-1', name: 'vfs_read', args: { path: 'nonexistent.md' } } },
+        { type: 'done', tokenCount: 50 },
+      ],
+      [
+        { type: 'text', text: 'File was not found' },
+        { type: 'done', tokenCount: 50 },
+      ],
+    ]);
+
+    const kernel = new Kernel({
+      aiProvider: provider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      memoryStore: mStore,
+      config: {
+        maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000,
+        minTurnsBeforeStop: 0, maxNudges: 0,
+        forceReflection: false, autoRecordFailures: true,
+        memoryEnabled: true,
+      },
+    });
+
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'Read a file', spawnDepth: 0, priority: 0 });
+    await kernel.runUntilEmpty();
+
+    // Check working memory snapshot for failure entries
+    const snapshot = kernel.lastWorkingMemorySnapshot;
+    const failureEntry = snapshot.find((e) => e.key === 'tool-failures');
+    expect(failureEntry).toBeDefined();
+    expect(failureEntry!.tags).toContain('mistake');
+    expect(failureEntry!.tags).toContain('tool-failure');
+    expect(failureEntry!.tags).toContain('auto-detected');
+    expect(failureEntry!.value).toContain('vfs_read');
+  });
+
+  it('reflection prompt injected when forceReflection is enabled', async () => {
+    const provider = new MockAIProvider([]);
+    provider.setResponseQueue([
+      // Turn 1: tool call
+      [
+        { type: 'tool_call', toolCall: { id: 'tc-1', name: 'vfs_read', args: { path: 'agents/writer.md' } } },
+        { type: 'done', tokenCount: 50 },
+      ],
+      // Turn 2: text response (ends main loop)
+      [
+        { type: 'text', text: 'All done with research' },
+        { type: 'done', tokenCount: 50 },
+      ],
+      // Turn 3: reflection response
+      [
+        { type: 'text', text: 'Reflection: I learned a lot' },
+        { type: 'done', tokenCount: 50 },
+      ],
+    ]);
+
+    const kernel = new Kernel({
+      aiProvider: provider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: {
+        maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000,
+        minTurnsBeforeStop: 0, maxNudges: 0,
+        forceReflection: true, autoRecordFailures: false,
+      },
+    });
+
+    kernel.enqueue({ agentId: 'agents/writer.md', input: 'Research topic', spawnDepth: 0, priority: 0 });
+    await kernel.runUntilEmpty();
+
+    const session = kernel.completedSessions[0];
+    // Should contain the reflection prompt in history
+    const reflectionPrompt = session.history.find(
+      (m) => m.role === 'user' && m.content.includes('session-reflection')
+    );
+    expect(reflectionPrompt).toBeDefined();
+    // Should contain the reflection response
+    const reflectionResponse = session.history.find(
+      (m) => m.role === 'model' && m.content.includes('Reflection')
+    );
+    expect(reflectionResponse).toBeDefined();
   });
 });
 

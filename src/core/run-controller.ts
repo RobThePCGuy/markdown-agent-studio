@@ -153,6 +153,7 @@ class RunController {
     const runner = new AutonomousRunner(
       {
         maxCycles,
+        minCycles: 1,
         wrapUpThreshold: 0.8,
         agentPath,
         missionPrompt: input,

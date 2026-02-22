@@ -17,7 +17,48 @@ import type { MemoryManager } from './memory-manager';
 const WORKSPACE_PREAMBLE =
   'You are an agent in a multi-agent workspace with access to a virtual filesystem and shared memory.\n' +
   'Always write final deliverables, reports, and code as files using vfs_write -- these persist across runs.\n' +
-  'Use memory_write only for temporary inter-agent coordination during a run (it is cleared when the run ends).\n';
+  'Use memory_write only for temporary inter-agent coordination during a run (it is cleared when the run ends).\n' +
+  'When stuck on a complex sub-problem, use spawn_agent to create a specialist sub-agent for focused research.\n';
+
+const TOOL_FAILURE_PATTERNS = [
+  /^error:/i,
+  /not found/i,
+  /policy blocked/i,
+  /permission denied/i,
+  /failed to/i,
+  /invalid/i,
+];
+
+function isToolFailure(result: string): boolean {
+  if (!result || result.trim() === '') return true;
+  return TOOL_FAILURE_PATTERNS.some((p) => p.test(result));
+}
+
+function buildNudgePrompt(currentTurn: number, maxTurns: number, nudgeCount: number): string {
+  const remaining = maxTurns - currentTurn;
+  if (nudgeCount <= 1) {
+    return (
+      `You still have ${remaining} turns remaining. Review your progress so far. ` +
+      'What is missing? Try a different approach or use web_search / spawn_agent to make progress.'
+    );
+  }
+  if (nudgeCount === 2) {
+    return (
+      'You stopped twice without using tools. Before finishing, you MUST do at least one of: ' +
+      'write your findings to a file with vfs_write, try a different approach, or spawn a sub-agent for help.'
+    );
+  }
+  return (
+    'Last chance before session ends. Write your output to a file using vfs_write ' +
+    'or record what you learned with memory_write.'
+  );
+}
+
+const REFLECTION_PROMPT =
+  'Before this session ends, reflect on your work. Use memory_write to record:\n' +
+  '- Key "session-reflection": What you accomplished and key learnings\n' +
+  '- Key "mistakes": Any approaches that failed and why\n' +
+  '- Key "next-steps": What remains incomplete and what to try next';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
@@ -289,6 +330,11 @@ export class Kernel {
 
     try {
       const MAX_AGENT_TURNS = 25;
+      let nudgeCount = 0;
+      const maxNudges = this.deps.config.maxNudges ?? 3;
+      const minTurns = this.deps.config.minTurnsBeforeStop ?? 0;
+      const toolFailures: Array<{ tool: string; args: string; error: string }> = [];
+      let sessionUsedTools = false;
 
       // Inject workspace preamble and long-term memory context into system prompt
       let systemPrompt = WORKSPACE_PREAMBLE + '\n' + profile.systemPrompt;
@@ -349,8 +395,18 @@ export class Kernel {
               }
 
               hadToolCalls = true;
+              sessionUsedTools = true;
               const tc = chunk.toolCall!;
               const result = await toolHandler.handle(tc.name, tc.args);
+
+              // Track tool failures
+              if (isToolFailure(result)) {
+                toolFailures.push({
+                  tool: tc.name,
+                  args: JSON.stringify(tc.args).slice(0, 200),
+                  error: result.slice(0, 300),
+                });
+              }
 
               const record = {
                 id: tc.id,
@@ -407,8 +463,19 @@ export class Kernel {
           session.history.push({ role: 'model', content: textAccumulator });
         }
 
-        // Exit loop if no tool calls (model finished) or session errored/aborted
-        if (!hadToolCalls || session.status !== 'running') break;
+        // Nudge system: if model stopped without tool calls too early, push it to keep going
+        if (!hadToolCalls && session.status === 'running') {
+          if (turn < minTurns && nudgeCount < maxNudges) {
+            nudgeCount++;
+            const nudge = buildNudgePrompt(turn, MAX_AGENT_TURNS, nudgeCount);
+            session.history.push({ role: 'user', content: nudge });
+            continue;
+          }
+          break;
+        }
+
+        // Exit if session errored/aborted
+        if (session.status !== 'running') break;
 
         // Wrap-up threshold check (for autonomous mode)
         if (this.deps.onBudgetWarning && !this._wrapUpInjected) {
@@ -424,6 +491,30 @@ export class Kernel {
           this.haltForBudget(activation, 'mid-session');
           break;
         }
+      }
+
+      // Auto-record tool failures to working memory
+      if ((this.deps.config.autoRecordFailures ?? true) && toolFailures.length > 0 && this.memoryStore) {
+        const summary = toolFailures
+          .map((f) => `- ${f.tool}(${f.args}): ${f.error}`)
+          .join('\n');
+        this.memoryStore.getState().write({
+          key: 'tool-failures',
+          value: `Tool failures detected in session:\n${summary}`,
+          tags: ['mistake', 'tool-failure', 'auto-detected'],
+          authorAgentId: activation.agentId,
+        });
+      }
+
+      // Forced reflection: inject a reflection prompt and run one more turn
+      if (
+        (this.deps.config.forceReflection ?? false) &&
+        sessionUsedTools &&
+        session.status === 'running' &&
+        this._totalTokens < this.deps.config.tokenBudget
+      ) {
+        session.history.push({ role: 'user', content: REFLECTION_PROMPT });
+        await this.runReflectionTurn(session, activation, systemPrompt, sessionRegistry, profile.model);
       }
 
       if (session.status === 'running') {
@@ -552,6 +643,11 @@ export class Kernel {
 
     try {
       const MAX_AGENT_TURNS = 25;
+      let nudgeCount = 0;
+      const maxNudges = this.deps.config.maxNudges ?? 3;
+      const minTurns = this.deps.config.minTurnsBeforeStop ?? 0;
+      const toolFailures: Array<{ tool: string; args: string; error: string }> = [];
+      let sessionUsedTools = false;
 
       // Inject workspace preamble and long-term memory context into system prompt
       let systemPrompt = WORKSPACE_PREAMBLE + '\n' + profile.systemPrompt;
@@ -604,8 +700,18 @@ export class Kernel {
 
             case 'tool_call': {
               hadToolCalls = true;
+              sessionUsedTools = true;
               const tc = chunk.toolCall!;
               const result = await toolHandler.handle(tc.name, tc.args);
+
+              // Track tool failures
+              if (isToolFailure(result)) {
+                toolFailures.push({
+                  tool: tc.name,
+                  args: JSON.stringify(tc.args).slice(0, 200),
+                  error: result.slice(0, 300),
+                });
+              }
 
               const record = {
                 id: tc.id,
@@ -653,12 +759,47 @@ export class Kernel {
           finalText = textAccumulator;
         }
 
-        if (!hadToolCalls || session.status !== 'running') break;
+        // Nudge system for sub-agent sessions
+        if (!hadToolCalls && session.status === 'running') {
+          if (turn < minTurns && nudgeCount < maxNudges) {
+            nudgeCount++;
+            const nudge = buildNudgePrompt(turn, MAX_AGENT_TURNS, nudgeCount);
+            session.history.push({ role: 'user', content: nudge });
+            continue;
+          }
+          break;
+        }
+
+        if (session.status !== 'running') break;
 
         if (this._totalTokens >= this.deps.config.tokenBudget) {
           this.haltForBudget(activation, 'mid-session');
           break;
         }
+      }
+
+      // Auto-record tool failures to working memory
+      if ((this.deps.config.autoRecordFailures ?? true) && toolFailures.length > 0 && this.memoryStore) {
+        const summary = toolFailures
+          .map((f) => `- ${f.tool}(${f.args}): ${f.error}`)
+          .join('\n');
+        this.memoryStore.getState().write({
+          key: 'tool-failures',
+          value: `Tool failures detected in session:\n${summary}`,
+          tags: ['mistake', 'tool-failure', 'auto-detected'],
+          authorAgentId: activation.agentId,
+        });
+      }
+
+      // Forced reflection for sub-agent sessions
+      if (
+        (this.deps.config.forceReflection ?? false) &&
+        sessionUsedTools &&
+        session.status === 'running' &&
+        this._totalTokens < this.deps.config.tokenBudget
+      ) {
+        session.history.push({ role: 'user', content: REFLECTION_PROMPT });
+        await this.runReflectionTurn(session, activation, systemPrompt, sessionRegistry, profile.model);
       }
 
       if (session.status === 'running') {
@@ -692,6 +833,88 @@ export class Kernel {
     }
 
     return finalText;
+  }
+
+  private async runReflectionTurn(
+    session: AgentSession,
+    activation: Activation,
+    systemPrompt: string,
+    sessionRegistry: ToolPluginRegistry,
+    profileModel: string | undefined,
+  ): Promise<void> {
+    if (hasRegisterSession(this.deps.aiProvider)) {
+      this.deps.aiProvider.registerSession(activation.id, activation.agentId);
+    }
+
+    const stream = this.deps.aiProvider.chat(
+      {
+        sessionId: activation.id,
+        systemPrompt,
+        model: this.resolveSessionModel(profileModel),
+      },
+      session.history,
+      sessionRegistry.toToolDefinitions()
+    );
+
+    let textAccumulator = '';
+    for await (const chunk of stream) {
+      if (session.controller.signal.aborted) {
+        session.status = 'aborted';
+        break;
+      }
+
+      this.deps.onStreamChunk?.(activation.agentId, chunk);
+      this.deps.sessionStore?.getState().appendChunk(activation.id, chunk);
+
+      switch (chunk.type) {
+        case 'text':
+          textAccumulator += chunk.text ?? '';
+          break;
+        case 'tool_call': {
+          // Allow the reflection turn to use tools (e.g. memory_write)
+          const tc = chunk.toolCall!;
+          const handler = new ToolHandler({
+            pluginRegistry: sessionRegistry,
+            vfs: this.deps.vfs,
+            agentRegistry: this.deps.agentRegistry,
+            eventLog: this.deps.eventLog,
+            onSpawnActivation: (act) => this.enqueue(act),
+            onRunSessionAndReturn: (act) => this.runSessionAndReturn(act),
+            currentAgentId: activation.agentId,
+            currentActivationId: activation.id,
+            parentAgentId: activation.parentId,
+            spawnDepth: activation.spawnDepth,
+            maxDepth: this.deps.config.maxDepth,
+            maxFanout: this.deps.config.maxFanout,
+            childCount: this.childCounts.get(activation.agentId) ?? 0,
+            policy: 'default',
+            apiKey: this.deps.apiKey,
+            preferredModel: this.resolvePreferredModel(),
+            memoryStore: this.memoryStore,
+            taskQueueStore: this.deps.taskQueueStore,
+          });
+          const result = await handler.handle(tc.name, tc.args);
+          const record = { id: tc.id, name: tc.name, args: tc.args, result, timestamp: Date.now() };
+          session.toolCalls.push(record);
+          session.history.push({ role: 'tool' as const, content: result, toolCall: record });
+          this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
+          break;
+        }
+        case 'done':
+          if (chunk.tokenCount) {
+            session.tokenCount += chunk.tokenCount;
+            this._totalTokens += chunk.tokenCount;
+          }
+          break;
+        case 'error':
+          // Don't fail the session for reflection errors
+          break;
+      }
+    }
+
+    if (textAccumulator) {
+      session.history.push({ role: 'model', content: textAccumulator });
+    }
   }
 
   private waitForResume(signal: AbortSignal): Promise<void> {

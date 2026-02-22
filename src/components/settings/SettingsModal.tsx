@@ -191,6 +191,57 @@ export default function SettingsModal() {
 
         <hr className={styles.divider} />
 
+        {/* Section: Agent Persistence */}
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>Agent Persistence</h3>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Min Turns Before Stop</span>
+            <input
+              type="number"
+              min={0}
+              max={25}
+              defaultValue={kernelConfig.minTurnsBeforeStop ?? 5}
+              onChange={(e) => { const v = e.target.valueAsNumber; if (!isNaN(v)) uiStore.getState().setKernelConfig({ minTurnsBeforeStop: Math.max(0, Math.min(25, v)) }); }}
+              className={styles.input}
+            />
+          </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Force Reflection</span>
+            <select
+              value={kernelConfig.forceReflection !== false ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  forceReflection: e.target.value === 'on',
+                })
+              }
+              className={styles.select}
+            >
+              <option value="on">Enabled</option>
+              <option value="off">Disabled</option>
+            </select>
+          </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Auto-Record Failures</span>
+            <select
+              value={kernelConfig.autoRecordFailures !== false ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  autoRecordFailures: e.target.value === 'on',
+                })
+              }
+              className={styles.select}
+            >
+              <option value="on">Enabled</option>
+              <option value="off">Disabled</option>
+            </select>
+          </label>
+        </div>
+
+        <hr className={styles.divider} />
+
         {/* Section 3: Memory System */}
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Memory System</h3>
