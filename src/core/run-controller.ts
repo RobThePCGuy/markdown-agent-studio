@@ -7,7 +7,7 @@ import type { KernelConfig } from '../types';
 import { restoreCheckpoint } from '../utils/replay';
 import { MemoryManager } from './memory-manager';
 import { createMemoryDB } from './memory-db';
-import { Summarizer, SUMMARIZER_SYSTEM_PROMPT } from './summarizer';
+import { Summarizer, SUMMARIZER_SYSTEM_PROMPT, CONSOLIDATION_SYSTEM_PROMPT } from './summarizer';
 import { AutonomousRunner } from './autonomous-runner';
 
 export interface RunControllerState {
@@ -27,7 +27,7 @@ type Listener = (state: RunControllerState) => void;
 class RunController {
   private kernel: Kernel | null = null;
   private autonomousRunner: AutonomousRunner | null = null;
-  private memoryManager = new MemoryManager(createMemoryDB());
+  private memoryManager = new MemoryManager(createMemoryDB(vfsStore));
   private state: RunControllerState = {
     isRunning: false,
     isPaused: false,
@@ -133,7 +133,23 @@ class RunController {
               return [];
             }
           };
-          const summarizer = new Summarizer(this.memoryManager, summarizeFn);
+          const consolidateFn = async (context: string) => {
+            try {
+              const { GoogleGenerativeAI } = await import('@google/generative-ai');
+              const client = new GoogleGenerativeAI(apiKey);
+              const model = client.getGenerativeModel({ model: summarizeModel });
+              const result = await model.generateContent(
+                CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
+              );
+              const text = result.response.text();
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              if (!jsonMatch) return { operations: [] };
+              return JSON.parse(jsonMatch[0]);
+            } catch {
+              return { operations: [] };
+            }
+          };
+          const summarizer = new Summarizer(this.memoryManager, summarizeFn, vfsStore, consolidateFn);
           summarizer
             .summarize(`run-${Date.now()}`, workingSnapshot, completedSessions)
             .catch(() => {});
