@@ -6,8 +6,16 @@ export function useKernel() {
 
   useEffect(() => runController.subscribe(setState), []);
 
-  const run = useCallback(async (agentPath: string, input: string) => {
-    await runController.run(agentPath, input);
+  const run = useCallback(async (
+    agentPath: string,
+    input: string,
+    options?: { autonomous?: boolean },
+  ) => {
+    if (options?.autonomous) {
+      await runController.runAutonomous(agentPath, input);
+    } else {
+      await runController.run(agentPath, input);
+    }
   }, []);
 
   const replayFromEvent = useCallback(async (eventId: string) => {

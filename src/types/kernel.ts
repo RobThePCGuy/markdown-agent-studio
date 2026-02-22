@@ -42,6 +42,8 @@ export interface KernelConfig {
   model?: string;
   memoryEnabled?: boolean;
   memoryTokenBudget?: number;
+  wrapUpThreshold?: number;
+  autonomousMaxCycles?: number;
 }
 
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
@@ -51,4 +53,5 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   tokenBudget: 250000,
   memoryEnabled: true,
   memoryTokenBudget: 2000,
+  autonomousMaxCycles: 10,
 };

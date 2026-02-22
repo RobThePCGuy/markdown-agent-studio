@@ -5,6 +5,7 @@ import type { EventLogState } from '../stores/event-log';
 import type { ToolPluginRegistry, ToolContext } from './tool-plugin';
 import type { AgentPolicy } from '../types/agent';
 import type { MemoryStoreState } from '../stores/memory-store';
+import type { TaskQueueState } from '../stores/task-queue-store';
 
 type Store<T> = { getState(): T };
 
@@ -19,6 +20,8 @@ const BUILT_IN_TOOLS = new Set([
   'web_search',
   'memory_read',
   'memory_write',
+  'task_queue_read',
+  'task_queue_write',
 ]);
 
 export interface ToolHandlerConfig {
@@ -39,6 +42,7 @@ export interface ToolHandlerConfig {
   apiKey?: string;
   preferredModel?: string;
   memoryStore?: Store<MemoryStoreState>;
+  taskQueueStore?: Store<TaskQueueState>;
 }
 
 export class ToolHandler {
@@ -98,6 +102,7 @@ export class ToolHandler {
         apiKey: this.config.apiKey,
         preferredModel: this.config.preferredModel,
         memoryStore: this.config.memoryStore,
+        taskQueueStore: this.config.taskQueueStore,
       };
       result = await plugin.handler(args, ctx);
     } else {

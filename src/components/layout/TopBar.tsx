@@ -1,4 +1,4 @@
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useEffect, useTransition } from 'react';
 import { useKernel } from '../../hooks/useKernel';
 import { useAgentRegistry, useProjectStore, useUI, diskSync, uiStore } from '../../stores/use-stores';
 import { audioEngine } from '../../core/audio-engine';
@@ -10,14 +10,20 @@ export function TopBar() {
   useAudioEvents();
   const agentsMap = useAgentRegistry((s) => s.agents);
   const agents = useMemo(() => [...agentsMap.values()], [agentsMap]);
-  const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount } = useKernel();
+  const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount, isAutonomous, currentCycle, maxCycles } = useKernel();
   const selectedAgentId = useUI((s) => s.selectedAgentId);
   const setSelectedAgent = useUI((s) => s.setSelectedAgent);
   const [kickoffPromptDraft, setKickoffPromptDraft] = useState<string | null>(null);
   const selectedAgent = selectedAgentId ?? (agentsMap.has(DEMO_AGENT) ? DEMO_AGENT : '');
   const kickoffPrompt = kickoffPromptDraft ?? (agentsMap.has(DEMO_AGENT) ? DEMO_PROMPT : '');
   const soundEnabled = useUI((s) => s.soundEnabled);
+  const [runMode, setRunMode] = useState<'once' | 'autonomous'>('once');
   const [isOpeningProject, startProjectTransition] = useTransition();
+
+  useEffect(() => {
+    const profile = selectedAgent ? agentsMap.get(selectedAgent) : null;
+    setRunMode(profile?.autonomousConfig ? 'autonomous' : 'once');
+  }, [selectedAgent, agentsMap]);
 
   const projectName = useProjectStore((s) => s.projectName);
   const syncStatus = useProjectStore((s) => s.syncStatus);
@@ -43,7 +49,7 @@ export function TopBar() {
     const agentPath = selectedAgent || agents[0]?.path;
     const prompt = kickoffPrompt.trim();
     if (!agentPath || !prompt) return;
-    run(agentPath, prompt);
+    run(agentPath, prompt, runMode === 'autonomous' ? { autonomous: true } : undefined);
   };
 
   return (
@@ -72,6 +78,16 @@ export function TopBar() {
         className={styles.promptInput}
       />
 
+      <select
+        value={runMode}
+        onChange={(e) => setRunMode(e.target.value as 'once' | 'autonomous')}
+        className={styles.select}
+        disabled={isRunning}
+      >
+        <option value="once">Run Once</option>
+        <option value="autonomous">Autonomous</option>
+      </select>
+
       <div className={styles.divider} />
 
       {!isRunning ? (
@@ -88,6 +104,7 @@ export function TopBar() {
       )}
 
       <span className={styles.stats}>
+        {isRunning && isAutonomous && `Cycle ${currentCycle}/${maxCycles} | `}
         {isRunning ? `${activeCount} active, ${queueCount} queued, ` : ''}
         {Math.round(totalTokens / 1000)}K tokens
       </span>

@@ -4,6 +4,7 @@ import type { VFSState } from '../stores/vfs-store';
 import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
 import type { MemoryStoreState } from '../stores/memory-store';
+import type { TaskQueueState } from '../stores/task-queue-store';
 
 type Store<T> = { getState(): T };
 
@@ -31,6 +32,7 @@ export interface ToolContext {
   apiKey?: string;
   preferredModel?: string;
   memoryStore?: Store<MemoryStoreState>;
+  taskQueueStore?: Store<TaskQueueState>;
 }
 
 export interface ToolPlugin {

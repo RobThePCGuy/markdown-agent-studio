@@ -28,6 +28,10 @@ export interface AgentPolicy {
   permissions: AgentPermissions;
 }
 
+export interface AutonomousConfig {
+  maxCycles: number;
+}
+
 export interface AgentProfile {
   id: string;
   path: string;
@@ -38,4 +42,5 @@ export interface AgentProfile {
   contentHash: string;
   policy: AgentPolicy;
   customTools?: CustomToolDef[];
+  autonomousConfig?: AutonomousConfig;
 }

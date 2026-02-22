@@ -2,12 +2,13 @@ import { Kernel } from './kernel';
 import { GeminiProvider } from './gemini-provider';
 import { ScriptedAIProvider } from './scripted-provider';
 import { DEMO_SCRIPT } from './demo-script';
-import { agentRegistry, eventLogStore, sessionStore, uiStore, vfsStore, memoryStore } from '../stores/use-stores';
+import { agentRegistry, eventLogStore, sessionStore, uiStore, vfsStore, memoryStore, taskQueueStore } from '../stores/use-stores';
 import type { KernelConfig } from '../types';
 import { restoreCheckpoint } from '../utils/replay';
 import { MemoryManager } from './memory-manager';
 import { createMemoryDB } from './memory-db';
 import { Summarizer, SUMMARIZER_SYSTEM_PROMPT } from './summarizer';
+import { AutonomousRunner } from './autonomous-runner';
 
 export interface RunControllerState {
   isRunning: boolean;
@@ -16,12 +17,16 @@ export interface RunControllerState {
   activeCount: number;
   queueCount: number;
   lastReplayEventId: string | null;
+  isAutonomous: boolean;
+  currentCycle: number;
+  maxCycles: number;
 }
 
 type Listener = (state: RunControllerState) => void;
 
 class RunController {
   private kernel: Kernel | null = null;
+  private autonomousRunner: AutonomousRunner | null = null;
   private memoryManager = new MemoryManager(createMemoryDB());
   private state: RunControllerState = {
     isRunning: false,
@@ -30,6 +35,9 @@ class RunController {
     activeCount: 0,
     queueCount: 0,
     lastReplayEventId: null,
+    isAutonomous: false,
+    currentCycle: 0,
+    maxCycles: 0,
   };
   private listeners = new Set<Listener>();
 
@@ -143,23 +151,106 @@ class RunController {
     }
   }
 
+  async runAutonomous(agentPath: string, input: string): Promise<void> {
+    if (this.state.isRunning) return;
+
+    const config = uiStore.getState().kernelConfig;
+
+    // Resolve max cycles: settings > agent frontmatter > default 10
+    const agentProfile = agentRegistry.getState().get(agentPath);
+    const maxCycles = config.autonomousMaxCycles
+      ?? agentProfile?.autonomousConfig?.maxCycles
+      ?? 10;
+
+    const runner = new AutonomousRunner(
+      {
+        maxCycles,
+        wrapUpThreshold: 0.8,
+        agentPath,
+        missionPrompt: input,
+        kernelConfig: config,
+      },
+      {
+        memoryManager: this.memoryManager,
+        taskQueueStore,
+        vfs: vfsStore,
+        agentRegistry,
+        eventLog: eventLogStore,
+        sessionStore,
+        memoryStore,
+        apiKey: uiStore.getState().apiKey,
+      },
+    );
+
+    this.autonomousRunner = runner;
+
+    runner.subscribe((s) => {
+      this.setState({
+        currentCycle: s.currentCycle,
+        maxCycles: s.maxCycles,
+        totalTokens: s.totalTokensAllCycles,
+        activeCount: runner.activeSessionCount,
+        queueCount: runner.queueLength,
+      });
+    });
+
+    this.setState({
+      isRunning: true,
+      isPaused: false,
+      isAutonomous: true,
+      currentCycle: 0,
+      maxCycles,
+    });
+
+    try {
+      await runner.run();
+    } finally {
+      this.autonomousRunner = null;
+      this.setState({
+        isRunning: false,
+        isPaused: false,
+        isAutonomous: false,
+        currentCycle: 0,
+        maxCycles: 0,
+        activeCount: 0,
+        queueCount: 0,
+      });
+    }
+  }
+
   pause(): void {
-    this.kernel?.pause();
+    if (this.autonomousRunner) {
+      this.autonomousRunner.pause();
+    } else {
+      this.kernel?.pause();
+    }
     this.setState({ isPaused: true });
   }
 
   resume(): void {
-    this.kernel?.resume();
+    if (this.autonomousRunner) {
+      this.autonomousRunner.resume();
+    } else {
+      this.kernel?.resume();
+    }
     this.setState({ isPaused: false });
   }
 
   killAll(): void {
-    this.kernel?.killAll();
+    if (this.autonomousRunner) {
+      this.autonomousRunner.stop();
+      this.autonomousRunner = null;
+    } else {
+      this.kernel?.killAll();
+    }
     this.setState({
       isRunning: false,
       isPaused: false,
+      isAutonomous: false,
       activeCount: 0,
       queueCount: 0,
+      currentCycle: 0,
+      maxCycles: 0,
     });
   }
 

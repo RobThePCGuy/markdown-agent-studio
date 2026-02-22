@@ -146,8 +146,8 @@ export default function SettingsModal() {
               type="number"
               min={1}
               max={10}
-              value={kernelConfig.maxConcurrency}
-              onChange={(e) => uiStore.getState().setKernelConfig({ maxConcurrency: Number(e.target.value) })}
+              defaultValue={kernelConfig.maxConcurrency}
+              onChange={(e) => { const v = e.target.valueAsNumber; if (!isNaN(v)) uiStore.getState().setKernelConfig({ maxConcurrency: v }); }}
               className={styles.input}
             />
           </label>
@@ -158,8 +158,8 @@ export default function SettingsModal() {
               type="number"
               min={1}
               max={20}
-              value={kernelConfig.maxDepth}
-              onChange={(e) => uiStore.getState().setKernelConfig({ maxDepth: Number(e.target.value) })}
+              defaultValue={kernelConfig.maxDepth}
+              onChange={(e) => { const v = e.target.valueAsNumber; if (!isNaN(v)) uiStore.getState().setKernelConfig({ maxDepth: v }); }}
               className={styles.input}
             />
           </label>
@@ -170,8 +170,8 @@ export default function SettingsModal() {
               type="number"
               min={1}
               max={20}
-              value={kernelConfig.maxFanout}
-              onChange={(e) => uiStore.getState().setKernelConfig({ maxFanout: Number(e.target.value) })}
+              defaultValue={kernelConfig.maxFanout}
+              onChange={(e) => { const v = e.target.valueAsNumber; if (!isNaN(v)) uiStore.getState().setKernelConfig({ maxFanout: v }); }}
               className={styles.input}
             />
           </label>
@@ -182,8 +182,8 @@ export default function SettingsModal() {
               type="number"
               min={50000}
               step={50000}
-              value={kernelConfig.tokenBudget}
-              onChange={(e) => uiStore.getState().setKernelConfig({ tokenBudget: Number(e.target.value) })}
+              defaultValue={kernelConfig.tokenBudget}
+              onChange={(e) => { const v = e.target.valueAsNumber; if (!isNaN(v)) uiStore.getState().setKernelConfig({ tokenBudget: v }); }}
               className={styles.input}
             />
           </label>
@@ -218,12 +218,8 @@ export default function SettingsModal() {
               min={500}
               max={8000}
               step={500}
-              value={kernelConfig.memoryTokenBudget ?? 2000}
-              onChange={(e) =>
-                uiStore.getState().setKernelConfig({
-                  memoryTokenBudget: Number(e.target.value),
-                })
-              }
+              defaultValue={kernelConfig.memoryTokenBudget ?? 2000}
+              onChange={(e) => { const v = e.target.valueAsNumber; if (!isNaN(v)) uiStore.getState().setKernelConfig({ memoryTokenBudget: v }); }}
               className={styles.input}
             />
           </label>
@@ -243,7 +239,29 @@ export default function SettingsModal() {
 
         <hr className={styles.divider} />
 
-        {/* Section 4: Danger Zone */}
+        {/* Section 4: Autonomous Mode */}
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>Autonomous Mode</h3>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Default Max Cycles</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              defaultValue={kernelConfig.autonomousMaxCycles ?? 10}
+              onChange={(e) => {
+                const v = e.target.valueAsNumber;
+                if (!isNaN(v)) uiStore.getState().setKernelConfig({ autonomousMaxCycles: Math.max(1, Math.min(100, v)) });
+              }}
+              className={styles.input}
+            />
+          </label>
+        </div>
+
+        <hr className={styles.divider} />
+
+        {/* Section 5: Danger Zone */}
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Danger Zone</h3>
 

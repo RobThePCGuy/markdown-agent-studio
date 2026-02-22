@@ -4,6 +4,7 @@ import type {
   AgentPermissions,
   AgentPolicy,
   AgentProfile,
+  AutonomousConfig,
   CustomToolDef,
 } from '../types';
 import { computeHash } from './vfs-helpers';
@@ -359,6 +360,24 @@ function parseCustomTools(
   return valid.length > 0 ? valid : undefined;
 }
 
+function parseAutonomousConfig(
+  frontmatter: Record<string, unknown>,
+): AutonomousConfig | undefined {
+  const mode = frontmatter.mode;
+  if (mode !== 'autonomous') return undefined;
+
+  let maxCycles = 10;
+  const autoBlock = frontmatter.autonomous;
+  if (autoBlock && typeof autoBlock === 'object' && !Array.isArray(autoBlock)) {
+    const raw = (autoBlock as Record<string, unknown>).max_cycles;
+    if (typeof raw === 'number' && !isNaN(raw)) {
+      maxCycles = Math.max(1, Math.min(100, Math.round(raw)));
+    }
+  }
+
+  return { maxCycles };
+}
+
 export function parseAgentFile(path: string, content: string): AgentProfile {
   const filename = path.split('/').pop()?.replace(/\.md$/, '') ?? path;
 
@@ -376,6 +395,7 @@ export function parseAgentFile(path: string, content: string): AgentProfile {
       contentHash: computeHash(content),
       policy: parseAgentPolicy(fm),
       customTools: parseCustomTools(fm.tools),
+      autonomousConfig: parseAutonomousConfig(fm),
     };
   } catch {
     return {

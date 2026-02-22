@@ -6,6 +6,7 @@ import { createEventLog, type EventLogState } from './event-log';
 import { createSessionStore, type SessionStoreState } from './session-store';
 import { createProjectStore, type ProjectState } from './project-store';
 import { createMemoryStore, type MemoryStoreState } from './memory-store';
+import { createTaskQueueStore, type TaskQueueState } from './task-queue-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
@@ -17,6 +18,7 @@ export const eventLogStore = createEventLog(vfsStore);
 export const sessionStore = createSessionStore();
 export const projectStore = createProjectStore();
 export const memoryStore = createMemoryStore();
+export const taskQueueStore = createTaskQueueStore();
 export const diskSync = new DiskSync(vfsStore, projectStore, agentRegistry);
 
 // UI state store
@@ -122,4 +124,8 @@ export function useProjectStore<T>(selector: (state: ProjectState) => T): T {
 
 export function useMemoryStore<T>(selector: (state: MemoryStoreState) => T): T {
   return useStore(memoryStore, selector);
+}
+
+export function useTaskQueueStore<T>(selector: (state: TaskQueueState) => T): T {
+  return useStore(taskQueueStore, selector);
 }

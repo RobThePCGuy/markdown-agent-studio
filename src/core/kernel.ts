@@ -11,6 +11,7 @@ import { createCustomToolPlugin } from './plugins/custom-tool-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
+import type { TaskQueueState } from '../stores/task-queue-store';
 import type { MemoryManager } from './memory-manager';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
@@ -36,9 +37,11 @@ interface KernelDeps {
   memoryStore?: Store<MemoryStoreState>;
   memoryManager?: MemoryManager;
   toolRegistry?: ToolPluginRegistry;
+  taskQueueStore?: Store<TaskQueueState>;
   apiKey?: string;
   onSessionUpdate?: (session: AgentSession) => void;
   onStreamChunk?: (agentId: string, chunk: StreamChunk) => void;
+  onBudgetWarning?: (activationId: string) => void;
 }
 
 /** Interface for providers that support session registration (e.g. ScriptedAIProvider). */
@@ -69,6 +72,7 @@ export class Kernel {
   private currentRunId: string | null = null;
   private quotaHaltTriggered = false;
   private budgetHaltTriggered = false;
+  private _wrapUpInjected = false;
 
   constructor(deps: KernelDeps) {
     this.deps = deps;
@@ -90,6 +94,10 @@ export class Kernel {
   get queueLength(): number { return this.queue.length; }
   get lastWorkingMemorySnapshot(): import('../types/memory').WorkingMemoryEntry[] {
     return this._workingMemorySnapshot;
+  }
+
+  getActiveSession(activationId: string): AgentSession | undefined {
+    return this.activeSessions.get(activationId);
   }
 
   enqueue(input: Omit<Activation, 'id' | 'createdAt'>): void {
@@ -271,6 +279,7 @@ export class Kernel {
       apiKey: this.deps.apiKey,
       preferredModel: this.resolvePreferredModel(),
       memoryStore: this.memoryStore,
+      taskQueueStore: this.deps.taskQueueStore,
     });
 
     try {
@@ -395,6 +404,15 @@ export class Kernel {
 
         // Exit loop if no tool calls (model finished) or session errored/aborted
         if (!hadToolCalls || session.status !== 'running') break;
+
+        // Wrap-up threshold check (for autonomous mode)
+        if (this.deps.onBudgetWarning && !this._wrapUpInjected) {
+          const threshold = this.deps.config.wrapUpThreshold ?? 1.0;
+          if (this._totalTokens >= this.deps.config.tokenBudget * threshold) {
+            this._wrapUpInjected = true;
+            this.deps.onBudgetWarning(activation.id);
+          }
+        }
 
         // Token budget check between turns
         if (this._totalTokens >= this.deps.config.tokenBudget) {
@@ -522,6 +540,7 @@ export class Kernel {
       apiKey: this.deps.apiKey,
       preferredModel: this.resolvePreferredModel(),
       memoryStore: this.memoryStore,
+      taskQueueStore: this.deps.taskQueueStore,
     });
 
     let finalText = '';
