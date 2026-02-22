@@ -113,6 +113,18 @@ describe('Memory Store', () => {
     expect(results).toHaveLength(2);
   });
 
+  it('normalizes tags and matches tag filters case-insensitively', () => {
+    store.getState().initRun('run-1');
+    store.getState().write({ key: 'a', value: 'x', tags: ['Research', 'API', 'api'], authorAgentId: 'x' });
+
+    const stored = store.getState().entries[0];
+    expect(stored.tags).toEqual(['research', 'api']);
+
+    const results = store.getState().read('x', ['Api']);
+    expect(results).toHaveLength(1);
+    expect(results[0].key).toBe('a');
+  });
+
   it('read returns results sorted by recency (newest first)', () => {
     store.getState().initRun('run-1');
     store.getState().write({ key: 'item', value: 'first', tags: [], authorAgentId: 'a' });

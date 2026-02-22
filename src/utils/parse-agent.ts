@@ -13,6 +13,7 @@ const MODE_ALIASES: Record<string, AgentExecutionMode> = {
   safe: 'safe',
   street: 'safe',
   balanced: 'balanced',
+  autonomous: 'gloves_off',
   gloves_off: 'gloves_off',
   'gloves-off': 'gloves_off',
   glovesoff: 'gloves_off',
@@ -363,19 +364,42 @@ function parseCustomTools(
 function parseAutonomousConfig(
   frontmatter: Record<string, unknown>,
 ): AutonomousConfig | undefined {
-  const mode = frontmatter.mode;
-  if (mode !== 'autonomous') return undefined;
+  const mode = typeof frontmatter.mode === 'string'
+    ? frontmatter.mode.trim().toLowerCase()
+    : '';
+  const autoBlock = frontmatter.autonomous;
+  const hasAutoBlock = autoBlock && typeof autoBlock === 'object' && !Array.isArray(autoBlock);
+  if (mode !== 'autonomous' && !hasAutoBlock) return undefined;
 
   let maxCycles = 10;
-  const autoBlock = frontmatter.autonomous;
-  if (autoBlock && typeof autoBlock === 'object' && !Array.isArray(autoBlock)) {
-    const raw = (autoBlock as Record<string, unknown>).max_cycles;
-    if (typeof raw === 'number' && !isNaN(raw)) {
-      maxCycles = Math.max(1, Math.min(100, Math.round(raw)));
+  let stopWhenComplete: boolean | undefined;
+  let resumeMission: boolean | undefined;
+  let seedTaskWhenIdle: boolean | undefined;
+
+  if (hasAutoBlock) {
+    const block = autoBlock as Record<string, unknown>;
+    const rawMax = block.max_cycles;
+    if (typeof rawMax === 'number' && !isNaN(rawMax)) {
+      maxCycles = Math.max(1, Math.min(1000, Math.round(rawMax)));
+    }
+
+    if (typeof block.stop_when_complete === 'boolean') {
+      stopWhenComplete = block.stop_when_complete;
+    }
+    if (typeof block.resume_mission === 'boolean') {
+      resumeMission = block.resume_mission;
+    }
+    if (typeof block.seed_task_when_idle === 'boolean') {
+      seedTaskWhenIdle = block.seed_task_when_idle;
     }
   }
 
-  return { maxCycles };
+  return {
+    maxCycles,
+    stopWhenComplete,
+    resumeMission,
+    seedTaskWhenIdle,
+  };
 }
 
 export function parseAgentFile(path: string, content: string): AgentProfile {

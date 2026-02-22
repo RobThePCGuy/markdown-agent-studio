@@ -82,6 +82,16 @@ describe('memory_write plugin', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].tags).toEqual(['research', 'api', 'important']);
   });
+
+  it('normalizes tags to lowercase for consistent retrieval', async () => {
+    await memoryWritePlugin.handler(
+      { key: 'mixed-tags', value: 'data', tags: 'Research,API' },
+      ctx,
+    );
+
+    const entries = ctx.memoryStore!.getState().read('mixed-tags');
+    expect(entries[0].tags).toEqual(['research', 'api']);
+  });
 });
 
 describe('memory_read plugin', () => {
@@ -138,6 +148,22 @@ describe('memory_read plugin', () => {
 
     expect(result).toContain('api-result');
     expect(result).not.toContain('[notes]');
+  });
+
+  it('matches tag filters case-insensitively', async () => {
+    ctx.memoryStore!.getState().write({
+      key: 'api-result',
+      value: 'some api data',
+      tags: ['api'],
+      authorAgentId: 'agent-1',
+    });
+
+    const result = await memoryReadPlugin.handler(
+      { query: 'api', tags: 'API' },
+      ctx,
+    );
+
+    expect(result).toContain('api-result');
   });
 
   it('returns error when no memory store', async () => {

@@ -129,6 +129,7 @@ export class MemoryManager {
     agentId: string,
     taskContext: string,
     maxEntries?: number,
+    tokenBudget?: number,
   ): Promise<string> {
     const memories = await this.retrieve(agentId, taskContext, maxEntries);
     if (memories.length === 0) {
@@ -136,10 +137,24 @@ export class MemoryManager {
     }
 
     const lines = ['## Memory Context', ''];
+    const normalizedBudget = typeof tokenBudget === 'number' && tokenBudget > 0
+      ? tokenBudget
+      : Number.POSITIVE_INFINITY;
+    let usedTokens = Math.ceil(lines.join('\n').length / 4);
+
     for (const m of memories) {
-      lines.push(`- **[${m.type}]** ${m.content} _(tags: ${m.tags.join(', ')})_`);
+      const line = `- **[${m.type}]** ${m.content} _(tags: ${m.tags.join(', ')})_`;
+      const lineTokens = Math.ceil(line.length / 4);
+      if (usedTokens + lineTokens > normalizedBudget && lines.length > 2) {
+        break;
+      }
+      lines.push(line);
+      usedTokens += lineTokens;
     }
 
+    if (lines.length === 2) {
+      return '';
+    }
     return lines.join('\n');
   }
 }

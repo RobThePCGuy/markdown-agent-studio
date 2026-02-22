@@ -77,10 +77,26 @@
 }
 
 .itemLabel {
-  flex: 1;
   font-size: var(--text-sm);
   color: var(--text-primary);
   font-family: var(--font-body);
+}
+
+.itemMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.itemHint {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .empty {
@@ -88,4 +104,16 @@
   text-align: center;
   color: var(--text-dim);
   font-size: var(--text-sm);
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  border-top: 1px solid var(--depth-3);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--font-body);
 }

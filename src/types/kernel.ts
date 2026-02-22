@@ -44,6 +44,9 @@ export interface KernelConfig {
   memoryTokenBudget?: number;
   wrapUpThreshold?: number;
   autonomousMaxCycles?: number;
+  autonomousResumeMission?: boolean;
+  autonomousStopWhenComplete?: boolean;
+  autonomousSeedTaskWhenIdle?: boolean;
   /** Minimum turns before an agent can stop without a nudge (0 = disabled). */
   minTurnsBeforeStop?: number;
   /** Max nudge prompts injected per session. */
@@ -62,6 +65,9 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   memoryEnabled: true,
   memoryTokenBudget: 2000,
   autonomousMaxCycles: 10,
+  autonomousResumeMission: true,
+  autonomousStopWhenComplete: false,
+  autonomousSeedTaskWhenIdle: true,
   minTurnsBeforeStop: 5,
   maxNudges: 3,
   forceReflection: true,

@@ -141,6 +141,15 @@ export class Kernel {
   get lastWorkingMemorySnapshot(): import('../types/memory').WorkingMemoryEntry[] {
     return this._workingMemorySnapshot;
   }
+  getPendingActivations(): Omit<Activation, 'id' | 'createdAt'>[] {
+    return this.queue.map(({ agentId, input, parentId, spawnDepth, priority }) => ({
+      agentId,
+      input,
+      parentId,
+      spawnDepth,
+      priority,
+    }));
+  }
 
   getActiveSession(activationId: string): AgentSession | undefined {
     return this.activeSessions.get(activationId);
@@ -342,7 +351,9 @@ export class Kernel {
         try {
           const memoryContext = await this.memoryManager.buildMemoryPrompt(
             activation.agentId,
-            activation.input
+            activation.input,
+            undefined,
+            this.deps.config.memoryTokenBudget,
           );
           if (memoryContext) {
             systemPrompt = memoryContext + '\n\n' + systemPrompt;
@@ -655,7 +666,9 @@ export class Kernel {
         try {
           const memoryContext = await this.memoryManager.buildMemoryPrompt(
             activation.agentId,
-            activation.input
+            activation.input,
+            undefined,
+            this.deps.config.memoryTokenBudget,
           );
           if (memoryContext) {
             systemPrompt = memoryContext + '\n\n' + systemPrompt;

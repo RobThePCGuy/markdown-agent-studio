@@ -1,9 +1,16 @@
-import { useState, useMemo, useEffect, useTransition } from 'react';
+import { useState, useMemo, useTransition, useCallback, useEffect, useRef } from 'react';
 import { useKernel } from '../../hooks/useKernel';
 import { useAgentRegistry, useProjectStore, useUI, diskSync, uiStore } from '../../stores/use-stores';
 import { audioEngine } from '../../core/audio-engine';
 import { useAudioEvents } from '../../hooks/useAudioEvents';
 import { DEMO_PROMPT, DEMO_AGENT } from '../../hooks/useOnboarding';
+import {
+  FOCUS_PROMPT_EVENT,
+  KILL_ALL_EVENT,
+  RUN_AUTONOMOUS_EVENT,
+  RUN_ONCE_EVENT,
+  TOGGLE_PAUSE_EVENT,
+} from '../../core/run-control-events';
 import styles from './TopBar.module.css';
 
 export function TopBar() {
@@ -18,12 +25,15 @@ export function TopBar() {
   const kickoffPrompt = kickoffPromptDraft ?? (agentsMap.has(DEMO_AGENT) ? DEMO_PROMPT : '');
   const soundEnabled = useUI((s) => s.soundEnabled);
   const [runMode, setRunMode] = useState<'once' | 'autonomous'>('once');
+  const [runModeAgent, setRunModeAgent] = useState<string>(selectedAgent);
   const [isOpeningProject, startProjectTransition] = useTransition();
+  const promptInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
+  if (runModeAgent !== selectedAgent) {
+    setRunModeAgent(selectedAgent);
     const profile = selectedAgent ? agentsMap.get(selectedAgent) : null;
     setRunMode(profile?.autonomousConfig ? 'autonomous' : 'once');
-  }, [selectedAgent, agentsMap]);
+  }
 
   const projectName = useProjectStore((s) => s.projectName);
   const syncStatus = useProjectStore((s) => s.syncStatus);
@@ -45,12 +55,48 @@ export function TopBar() {
     });
   };
 
-  const handleRun = () => {
+  const handleRun = useCallback((forcedMode?: 'once' | 'autonomous') => {
     const agentPath = selectedAgent || agents[0]?.path;
     const prompt = kickoffPrompt.trim();
     if (!agentPath || !prompt) return;
-    run(agentPath, prompt, runMode === 'autonomous' ? { autonomous: true } : undefined);
-  };
+    const mode = forcedMode ?? runMode;
+    run(agentPath, prompt, mode === 'autonomous' ? { autonomous: true } : undefined);
+  }, [selectedAgent, agents, kickoffPrompt, runMode, run]);
+
+  useEffect(() => {
+    const onRunOnce = () => handleRun('once');
+    const onRunAutonomous = () => handleRun('autonomous');
+    const onTogglePause = () => {
+      if (!isRunning) return;
+      if (isPaused) {
+        resume();
+      } else {
+        pause();
+      }
+    };
+    const onKillAll = () => {
+      if (!isRunning) return;
+      killAll();
+    };
+    const onFocusPrompt = () => {
+      promptInputRef.current?.focus();
+      promptInputRef.current?.select();
+    };
+
+    window.addEventListener(RUN_ONCE_EVENT, onRunOnce);
+    window.addEventListener(RUN_AUTONOMOUS_EVENT, onRunAutonomous);
+    window.addEventListener(TOGGLE_PAUSE_EVENT, onTogglePause);
+    window.addEventListener(KILL_ALL_EVENT, onKillAll);
+    window.addEventListener(FOCUS_PROMPT_EVENT, onFocusPrompt);
+
+    return () => {
+      window.removeEventListener(RUN_ONCE_EVENT, onRunOnce);
+      window.removeEventListener(RUN_AUTONOMOUS_EVENT, onRunAutonomous);
+      window.removeEventListener(TOGGLE_PAUSE_EVENT, onTogglePause);
+      window.removeEventListener(KILL_ALL_EVENT, onKillAll);
+      window.removeEventListener(FOCUS_PROMPT_EVENT, onFocusPrompt);
+    };
+  }, [handleRun, isRunning, isPaused, pause, resume, killAll]);
 
   return (
     <div className={styles.topbar}>
@@ -70,12 +116,14 @@ export function TopBar() {
       </select>
 
       <input
+        ref={promptInputRef}
         type="text"
         placeholder="What should the agent do?"
         value={kickoffPrompt}
         onChange={(e) => setKickoffPromptDraft(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && handleRun()}
         className={styles.promptInput}
+        title="Focus with Ctrl/Cmd+Shift+L"
       />
 
       <select
@@ -91,15 +139,39 @@ export function TopBar() {
       <div className={styles.divider} />
 
       {!isRunning ? (
-        <button onClick={handleRun} className={styles.btnRun}>Run</button>
+        <button
+          onClick={() => handleRun()}
+          className={styles.btnRun}
+          title="Run once (Ctrl/Cmd+Enter), autonomous (Ctrl/Cmd+Shift+Enter)"
+        >
+          Run
+        </button>
       ) : (
         <>
           {isPaused ? (
-            <button onClick={resume} className={`${styles.btnOutline} ${styles.blue}`}>Resume</button>
+            <button
+              onClick={resume}
+              className={`${styles.btnOutline} ${styles.blue}`}
+              title="Resume (Ctrl/Cmd+Shift+P)"
+            >
+              Resume
+            </button>
           ) : (
-            <button onClick={pause} className={`${styles.btnOutline} ${styles.orange}`}>Pause</button>
+            <button
+              onClick={pause}
+              className={`${styles.btnOutline} ${styles.orange}`}
+              title="Pause (Ctrl/Cmd+Shift+P)"
+            >
+              Pause
+            </button>
           )}
-          <button onClick={killAll} className={`${styles.btnOutline} ${styles.red}`}>Kill All</button>
+          <button
+            onClick={killAll}
+            className={`${styles.btnOutline} ${styles.red}`}
+            title="Kill all sessions (Ctrl/Cmd+Shift+K)"
+          >
+            Kill All
+          </button>
         </>
       )}
 

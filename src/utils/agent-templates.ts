@@ -9,6 +9,15 @@ export interface AgentTemplate {
   builtIn: boolean;
 }
 
+export function extractFrontmatterBlock(content: string): string {
+  const normalized = content.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  if (lines[0] !== '---') return '';
+  const closingIdx = lines.indexOf('---', 1);
+  if (closingIdx <= 0) return '';
+  return lines.slice(0, closingIdx + 1).join('\n');
+}
+
 export const BUILT_IN_TEMPLATES: AgentTemplate[] = [
   {
     id: 'builtin:blank',
@@ -41,6 +50,54 @@ Step-by-step instructions for the agent.
 
 # OUTPUT FORMAT
 Describe expected output format.
+`,
+  },
+  {
+    id: 'builtin:autonomous-learner',
+    name: 'Autonomous Learner',
+    description: 'Persistent autonomous mission with resumable cycles and memory continuity',
+    builtIn: true,
+    content: `---
+name: "Autonomous Learner"
+mode: autonomous
+model: "gemini-2.5-flash"
+autonomous:
+  max_cycles: 40
+  resume_mission: true
+  stop_when_complete: false
+  seed_task_when_idle: true
+reads:
+  - "**"
+writes:
+  - "**"
+permissions:
+  spawn_agents: true
+  edit_agents: false
+  delete_files: false
+  web_access: true
+  signal_parent: true
+  custom_tools: true
+gloves_off_triggers:
+  - emergency
+  - unblock now
+---
+
+# MISSION
+You continuously improve at a specialized objective over many autonomous cycles.
+
+# INSTRUCTIONS
+1. Start by reading task_queue_read and memory_read for existing context.
+2. Break goals into concrete tasks with task_queue_write.
+3. Use spawn_agent for deep subproblems when useful.
+4. Use web_search/web_fetch and custom tools to gather evidence.
+5. Write concrete outputs to artifacts/ and reusable lessons to memory_write.
+6. Keep task statuses current so the next cycle can resume cleanly.
+7. At cycle end, leave a concise cycle reflection and next-step tasks.
+
+# OUTPUT FORMAT
+- Primary deliverables in artifacts/*.md
+- Actionable memory entries with clear tags
+- Updated task queue with done/in_progress/pending states
 `,
   },
   {

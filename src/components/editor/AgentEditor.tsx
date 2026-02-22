@@ -25,16 +25,6 @@ export function AgentEditor() {
     };
   }, []);
 
-  // Sync content from VFS when editingFilePath changes (render-time state adjustment)
-  const [prevPath, setPrevPath] = useState(editingFilePath);
-  if (editingFilePath !== prevPath) {
-    setPrevPath(editingFilePath);
-    const newVfsContent = editingFilePath
-      ? vfsStore.getState().read(editingFilePath) ?? ''
-      : '';
-    setContent(newVfsContent);
-  }
-
   const runValidation = useCallback((value: string) => {
     const editor = editorRef.current;
     const monaco = monacoRef.current;
@@ -61,6 +51,16 @@ export function AgentEditor() {
 
     monaco.editor.setModelMarkers(model, 'agent-validator', markers);
   }, [editingFilePath]);
+
+  // Sync content from VFS when editingFilePath changes (render-time state adjustment)
+  const [prevPath, setPrevPath] = useState(editingFilePath);
+  if (editingFilePath !== prevPath) {
+    setPrevPath(editingFilePath);
+    const newVfsContent = editingFilePath
+      ? vfsStore.getState().read(editingFilePath) ?? ''
+      : '';
+    setContent(newVfsContent);
+  }
 
   const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;

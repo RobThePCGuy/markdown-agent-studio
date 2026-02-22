@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { BUILT_IN_TEMPLATES, getTemplates } from './agent-templates';
+import { BUILT_IN_TEMPLATES, extractFrontmatterBlock, getTemplates } from './agent-templates';
 
 describe('agent-templates', () => {
-  it('exports 6 built-in templates', () => {
-    expect(BUILT_IN_TEMPLATES).toHaveLength(6);
+  it('exports 7 built-in templates', () => {
+    expect(BUILT_IN_TEMPLATES).toHaveLength(7);
   });
 
   it('every built-in has required fields', () => {
@@ -31,7 +31,7 @@ describe('agent-templates', () => {
   it('getTemplates returns built-ins when VFS has no templates', () => {
     const files = new Map();
     const result = getTemplates(files);
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(7);
     expect(result.every((t) => t.builtIn)).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe('agent-templates', () => {
       content: '---\nname: "Custom"\n---\nDo stuff.',
     });
     const result = getTemplates(files);
-    expect(result).toHaveLength(7);
+    expect(result).toHaveLength(8);
     const custom = result.find((t) => t.id === 'templates/my-agent.md');
     expect(custom).toBeDefined();
     expect(custom!.builtIn).toBe(false);
@@ -59,5 +59,30 @@ describe('agent-templates', () => {
     const result = getTemplates(files);
     const t = result.find((t) => t.id === 'templates/no-name.md');
     expect(t!.name).toBe('no-name');
+  });
+
+  it('includes an autonomous learner built-in template', () => {
+    const template = BUILT_IN_TEMPLATES.find((t) => t.id === 'builtin:autonomous-learner');
+    expect(template).toBeDefined();
+    expect(template!.content).toContain('mode: autonomous');
+    expect(template!.content).toContain('autonomous:');
+    expect(template!.content).toContain('resume_mission: true');
+  });
+
+  it('extractFrontmatterBlock returns the YAML block with delimiters', () => {
+    const content = `---
+name: "Agent"
+mode: autonomous
+---
+
+# Body`;
+    expect(extractFrontmatterBlock(content)).toBe(`---
+name: "Agent"
+mode: autonomous
+---`);
+  });
+
+  it('extractFrontmatterBlock returns empty string for malformed content', () => {
+    expect(extractFrontmatterBlock('name: no delimiters')).toBe('');
   });
 });

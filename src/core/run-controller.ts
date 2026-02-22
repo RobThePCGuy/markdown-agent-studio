@@ -61,9 +61,13 @@ class RunController {
     this.emit();
   }
 
+  private hasUsableApiKey(apiKey: string | undefined): apiKey is string {
+    return Boolean(apiKey && apiKey !== 'your-api-key-here');
+  }
+
   private createKernel(config: KernelConfig): Kernel {
     const apiKey = uiStore.getState().apiKey;
-    const provider = apiKey && apiKey !== 'your-api-key-here'
+    const provider = this.hasUsableApiKey(apiKey)
       ? new GeminiProvider(apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
 
@@ -94,6 +98,8 @@ class RunController {
     if (this.state.isRunning) return;
 
     const config = uiStore.getState().kernelConfig;
+    // Keep per-run session context isolated for correct summarization.
+    sessionStore.getState().clearAll();
     const kernel = this.createKernel(config);
     kernel.enqueue({
       agentId: agentPath,
@@ -114,7 +120,7 @@ class RunController {
 
         // Run summarization in background
         const apiKey = uiStore.getState().apiKey;
-        if (apiKey && completedSessions.length > 0) {
+        if (this.hasUsableApiKey(apiKey) && completedSessions.length > 0) {
           const summarizeModel = config.model || 'gemini-2.0-flash';
           const summarizer = new Summarizer(
             this.memoryManager,
@@ -143,12 +149,28 @@ class RunController {
     if (this.state.isRunning) return;
 
     const config = uiStore.getState().kernelConfig;
+    // Ensure autonomous-cycle summarization only includes this autonomous run.
+    sessionStore.getState().clearAll();
 
-    // Resolve max cycles: settings > agent frontmatter > default 10
+    // Resolve autonomous controls: agent frontmatter overrides global settings.
     const agentProfile = agentRegistry.getState().get(agentPath);
-    const maxCycles = config.autonomousMaxCycles
-      ?? agentProfile?.autonomousConfig?.maxCycles
-      ?? 10;
+    const maxCycles = Math.max(1, Math.min(1000,
+      agentProfile?.autonomousConfig?.maxCycles
+      ?? config.autonomousMaxCycles
+      ?? 10,
+    ));
+    const stopWhenComplete =
+      agentProfile?.autonomousConfig?.stopWhenComplete
+      ?? config.autonomousStopWhenComplete
+      ?? false;
+    const resumeMission =
+      agentProfile?.autonomousConfig?.resumeMission
+      ?? config.autonomousResumeMission
+      ?? true;
+    const seedTaskWhenIdle =
+      agentProfile?.autonomousConfig?.seedTaskWhenIdle
+      ?? config.autonomousSeedTaskWhenIdle
+      ?? true;
 
     const runner = new AutonomousRunner(
       {
@@ -158,6 +180,9 @@ class RunController {
         agentPath,
         missionPrompt: input,
         kernelConfig: config,
+        resumeMission,
+        stopWhenComplete,
+        seedTaskWhenIdle,
       },
       {
         memoryManager: this.memoryManager,
@@ -178,6 +203,7 @@ class RunController {
         currentCycle: s.currentCycle,
         maxCycles: s.maxCycles,
         totalTokens: s.totalTokensAllCycles,
+        isPaused: runner.isPaused,
         activeCount: runner.activeSessionCount,
         queueCount: runner.queueLength,
       });

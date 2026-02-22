@@ -9,6 +9,7 @@ import { runController } from './run-controller';
 import { Summarizer } from './summarizer';
 import { SAMPLE_AGENTS } from './sample-project';
 import { agentRegistry, eventLogStore, memoryStore, sessionStore, uiStore, vfsStore } from '../stores/use-stores';
+import { GeminiProvider } from './gemini-provider';
 
 describe('Kernel', () => {
   let kernel: Kernel;
@@ -534,8 +535,27 @@ describe('RunController memory handoff regression', () => {
 
   it('passes kernel working-memory snapshot to summarizer', async () => {
     const summarizeSpy = vi.spyOn(Summarizer.prototype, 'summarize').mockResolvedValue();
+    vi.spyOn(GeminiProvider.prototype, 'chat').mockImplementation(async function* (_config, history) {
+      const hasWrittenPlan = history.some(
+        (m) => m.role === 'tool' && m.toolCall?.name === 'memory_write' && m.toolCall?.args?.key === 'project-plan',
+      );
+      if (!hasWrittenPlan) {
+        yield {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-project-plan',
+            name: 'memory_write',
+            args: { key: 'project-plan', value: 'Initial project plan', tags: 'plan' },
+          },
+        };
+        yield { type: 'done', tokenCount: 40 };
+        return;
+      }
+      yield { type: 'text', text: 'Plan recorded.' };
+      yield { type: 'done', tokenCount: 20 };
+    });
 
-    uiStore.getState().setApiKey('your-api-key-here');
+    uiStore.getState().setApiKey('test-api-key');
     uiStore.getState().setKernelConfig({
       maxConcurrency: 1,
       maxDepth: 0,
@@ -554,6 +574,49 @@ describe('RunController memory handoff regression', () => {
     const workingMemory = summarizeSpy.mock.calls[0][1] as Array<{ key: string }>;
     expect(workingMemory.length).toBeGreaterThan(0);
     expect(workingMemory.some((entry) => entry.key === 'project-plan')).toBe(true);
+  });
+
+  it('isolates summarization sessions per run', async () => {
+    const summarizeSpy = vi.spyOn(Summarizer.prototype, 'summarize').mockResolvedValue();
+    vi.spyOn(GeminiProvider.prototype, 'chat').mockImplementation(async function* (_config, history) {
+      const hasWrittenPlan = history.some(
+        (m) => m.role === 'tool' && m.toolCall?.name === 'memory_write' && m.toolCall?.args?.key === 'project-plan',
+      );
+      if (!hasWrittenPlan) {
+        yield {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-project-plan',
+            name: 'memory_write',
+            args: { key: 'project-plan', value: 'Initial project plan', tags: 'plan' },
+          },
+        };
+        yield { type: 'done', tokenCount: 40 };
+        return;
+      }
+      yield { type: 'text', text: 'Plan recorded.' };
+      yield { type: 'done', tokenCount: 20 };
+    });
+
+    uiStore.getState().setApiKey('test-api-key');
+    uiStore.getState().setKernelConfig({
+      maxConcurrency: 1,
+      maxDepth: 0,
+      maxFanout: 1,
+      tokenBudget: 10000,
+      memoryEnabled: true,
+    });
+
+    await runController.run('agents/project-lead.md', 'Build me a portfolio website');
+    await runController.run('agents/project-lead.md', 'Build me a portfolio website');
+
+    for (let i = 0; i < 50 && summarizeSpy.mock.calls.length < 2; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(summarizeSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const secondRunSessions = summarizeSpy.mock.calls[1][2] as Array<{ activationId: string }>;
+    expect(secondRunSessions).toHaveLength(1);
   });
 
   it('keeps summarization disabled when memory is off', async () => {

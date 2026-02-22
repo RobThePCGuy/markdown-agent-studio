@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useUI, useVFS, vfsStore, agentRegistry } from '../../stores/use-stores';
 import { TemplatePicker } from './TemplatePicker';
 import type { AgentTemplate } from '../../utils/agent-templates';
+import { ensureUniquePath, nextSequentialPath } from '../../utils/path-naming';
 import styles from './EditorToolbar.module.css';
 
 interface EditorToolbarProps {
@@ -37,9 +38,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
 
   const handleTemplateSelect = useCallback((template: AgentTemplate) => {
     if (editorDirty && !window.confirm('You have unsaved changes. Discard them?')) return;
-    const existing = [...filesMap.keys()].filter((p) => p.match(/^agents\/untitled-\d+\.md$/));
-    const nextNum = existing.length + 1;
-    const newPath = `agents/untitled-${nextNum}.md`;
+    const newPath = nextSequentialPath('agents/untitled', '.md', filesMap.keys());
     // Write to VFS first so the editor useEffect finds content when editingFilePath changes
     vfsStore.getState().write(newPath, template.content, {});
     agentRegistry.getState().registerFromFile(newPath, template.content);
@@ -51,7 +50,12 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
   const handlePathSubmit = useCallback(() => {
     if (!pathInput.trim() || !editingFilePath) return;
     const oldPath = editingFilePath;
-    const newPath = pathInput.trim();
+    const enteredPath = pathInput.trim();
+    const normalizedPath = enteredPath.endsWith('.md') ? enteredPath : `${enteredPath}.md`;
+    const newPath = ensureUniquePath(
+      normalizedPath,
+      [...filesMap.keys()].filter((path) => path !== oldPath),
+    );
 
     // Move content to new path
     vfsStore.getState().write(newPath, content, {});
@@ -67,7 +71,7 @@ export function EditorToolbar({ content, onContentChange }: EditorToolbarProps) 
     }
     setEditingFile(newPath);
     setEditingPath(false);
-  }, [pathInput, editingFilePath, content, setEditingFile]);
+  }, [pathInput, editingFilePath, content, setEditingFile, filesMap]);
 
   // Check if file was modified externally
   const vfsContent = editingFilePath ? filesMap.get(editingFilePath)?.content : null;

@@ -233,7 +233,7 @@ describe('Summarizer', () => {
     await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
 
     const contextArg = mockSummarizeFn.mock.calls[0][0];
-    expect(contextArg).toContain('## Files Created This Run');
+    expect(contextArg).toContain('## Files Touched This Run');
     expect(contextArg).toContain('research/findings.md');
     expect(contextArg).toContain('Key finding: X works best');
   });
@@ -241,7 +241,7 @@ describe('Summarizer', () => {
   it('excludes agent definition files from file context', async () => {
     const vfs = createVFSStore();
     vfs.getState().write('agents/researcher.md', '---\nname: researcher\n---', {});
-    vfs.getState().write('output.md', 'Some output', { authorAgentId: 'agent-1' });
+    vfs.getState().write('output.md', 'Some output', { authorAgentId: 'agent-1', activationId: 'act-1' });
     const summarizer = new Summarizer(manager, mockSummarizeFn, vfs);
     mockSummarizeFn.mockResolvedValue([]);
 
@@ -255,7 +255,7 @@ describe('Summarizer', () => {
   it('excludes memory/long-term-memory.json from file context', async () => {
     const vfs = createVFSStore();
     vfs.getState().write('memory/long-term-memory.json', '[{"id":"ltm-1"}]', {});
-    vfs.getState().write('report.md', 'Report content', { authorAgentId: 'agent-1' });
+    vfs.getState().write('report.md', 'Report content', { authorAgentId: 'agent-1', activationId: 'act-1' });
     const summarizer = new Summarizer(manager, mockSummarizeFn, vfs);
     mockSummarizeFn.mockResolvedValue([]);
 
@@ -264,6 +264,20 @@ describe('Summarizer', () => {
     const contextArg = mockSummarizeFn.mock.calls[0][0];
     expect(contextArg).not.toContain('long-term-memory.json');
     expect(contextArg).toContain('report.md');
+  });
+
+  it('excludes files not touched by this run activation ids', async () => {
+    const vfs = createVFSStore();
+    vfs.getState().write('artifacts/old.md', 'old data', { activationId: 'act-old' });
+    vfs.getState().write('artifacts/new.md', 'new data', { activationId: 'act-current' });
+    const summarizer = new Summarizer(manager, mockSummarizeFn, vfs);
+    mockSummarizeFn.mockResolvedValue([]);
+
+    await summarizer.summarize('run-1', [], [makeSession({ activationId: 'act-current' })]);
+
+    const contextArg = mockSummarizeFn.mock.calls[0][0];
+    expect(contextArg).not.toContain('artifacts/old.md');
+    expect(contextArg).toContain('artifacts/new.md');
   });
 
   it('works without VFS (backwards compatible)', async () => {

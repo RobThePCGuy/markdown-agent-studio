@@ -30,6 +30,9 @@ export interface AgentPolicy {
 
 export interface AutonomousConfig {
   maxCycles: number;
+  stopWhenComplete?: boolean;
+  resumeMission?: boolean;
+  seedTaskWhenIdle?: boolean;
 }
 
 export interface AgentProfile {

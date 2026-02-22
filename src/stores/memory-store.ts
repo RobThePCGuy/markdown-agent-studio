@@ -33,12 +33,17 @@ export function createMemoryStore() {
     write(input: WriteInput): void {
       const { runId } = get();
       if (runId === null) return;
+      const normalizedTags = [...new Set(
+        input.tags
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean),
+      )];
 
       const entry: WorkingMemoryEntry = {
         id: `wm-${++wmCounter}`,
         key: input.key,
         value: input.value,
-        tags: input.tags,
+        tags: normalizedTags,
         authorAgentId: input.authorAgentId,
         timestamp: Date.now(),
         runId,
@@ -58,9 +63,11 @@ export function createMemoryStore() {
       );
 
       if (tags && tags.length > 0) {
-        results = results.filter((e) =>
-          tags.some((t) => e.tags.includes(t)),
-        );
+        const normalizedTags = tags.map((t) => t.toLowerCase());
+        results = results.filter((e) => {
+          const entryTags = new Set(e.tags.map((tag) => tag.toLowerCase()));
+          return normalizedTags.some((t) => entryTags.has(t));
+        });
       }
 
       // Newest first

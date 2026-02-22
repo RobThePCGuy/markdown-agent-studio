@@ -6,14 +6,21 @@ import { createBuiltinRegistry } from './plugins';
 import { taskQueueReadPlugin } from './plugins/task-queue-read';
 import { taskQueueWritePlugin } from './plugins/task-queue-write';
 import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
+import {
+  prepareMissionState,
+  saveMissionState,
+  type AutonomousMissionState,
+  type PendingActivationSnapshot,
+} from './autonomous-state';
 import type { MemoryManager } from './memory-manager';
 import type { KernelConfig } from '../types';
-import type { TaskQueueState } from '../stores/task-queue-store';
+import type { TaskItem, TaskQueueState } from '../stores/task-queue-store';
 import type { VFSState } from '../stores/vfs-store';
 import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
 import type { SessionStoreState } from '../stores/session-store';
 import type { MemoryStoreState } from '../stores/memory-store';
+import { computeHash } from '../utils/vfs-helpers';
 
 type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
 
@@ -24,6 +31,9 @@ export interface AutonomousRunnerConfig {
   agentPath: string;
   missionPrompt: string;
   kernelConfig: KernelConfig;
+  resumeMission?: boolean;
+  stopWhenComplete?: boolean;
+  seedTaskWhenIdle?: boolean;
 }
 
 export interface AutonomousRunnerDeps {
@@ -43,13 +53,26 @@ export type AutonomousStateListener = (state: {
   totalTokensAllCycles: number;
 }) => void;
 
+function hasUsableApiKey(apiKey: string | undefined): apiKey is string {
+  return Boolean(apiKey && apiKey !== 'your-api-key-here');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class AutonomousRunner {
   private config: AutonomousRunnerConfig;
   private deps: AutonomousRunnerDeps;
   private currentKernel: Kernel | null = null;
   private _currentCycle = 0;
+  private _displayMaxCycle = 0;
   private _totalTokensAllCycles = 0;
+  private _baseTokensBeforeCycle = 0;
   private _stopped = false;
+  private _paused = false;
+  private missionState: AutonomousMissionState | null = null;
+  private missionStatePath: string | null = null;
   private listeners = new Set<AutonomousStateListener>();
 
   constructor(config: AutonomousRunnerConfig, deps: AutonomousRunnerDeps) {
@@ -68,7 +91,7 @@ export class AutonomousRunner {
   private emit(): void {
     const state = {
       currentCycle: this._currentCycle,
-      maxCycles: this.config.maxCycles,
+      maxCycles: this._displayMaxCycle || this.config.maxCycles,
       totalTokensAllCycles: this._totalTokensAllCycles,
     };
     for (const listener of this.listeners) {
@@ -77,11 +100,16 @@ export class AutonomousRunner {
   }
 
   async run(): Promise<void> {
-    // Clear task queue for a fresh autonomous run
-    this.deps.taskQueueStore.getState().clear();
-    const minCycles = this.config.minCycles ?? 1;
+    this.deps.sessionStore.getState().clearAll();
+    this.bootstrapMissionState();
 
-    for (let cycle = 1; cycle <= this.config.maxCycles; cycle++) {
+    const minCycles = this.config.minCycles ?? 1;
+    const stopWhenComplete = this.config.stopWhenComplete ?? false;
+    const seedTaskWhenIdle = this.config.seedTaskWhenIdle ?? true;
+    let stoppedAsComplete = false;
+
+    for (let cycle = this._currentCycle + 1; cycle <= this._displayMaxCycle; cycle++) {
+      await this.waitWhilePaused();
       if (this._stopped) break;
 
       this._currentCycle = cycle;
@@ -100,26 +128,67 @@ export class AutonomousRunner {
 
       await kernel.runUntilEmpty();
 
-      this._totalTokensAllCycles += kernel.totalTokens;
+      const pendingActivations = kernel.getPendingActivations();
+      if (pendingActivations.length > 0) {
+        this.promotePendingActivationsToTasks(pendingActivations, cycle);
+      }
+
+      this._totalTokensAllCycles = this._baseTokensBeforeCycle + kernel.totalTokens;
       this.emit();
+
+      await this.waitWhilePaused();
+
+      let summarized = false;
+      if (!this._stopped) {
+        summarized = await this.runSummarization(kernel);
+      }
+
+      const completeness = this._stopped ? 'incomplete' : this.assessCompletion(kernel);
+      const shouldStopForCompletion =
+        stopWhenComplete &&
+        completeness === 'complete' &&
+        cycle >= minCycles;
+
+      if (!shouldStopForCompletion && !this._stopped && seedTaskWhenIdle) {
+        this.seedTaskIfIdle(cycle);
+      }
+
+      const cycleNote = this.buildCycleNote(kernel, completeness, pendingActivations.length);
+      this.updateMissionState({
+        status: shouldStopForCompletion ? 'completed' : 'running',
+        totalCycles: cycle,
+        totalTokens: this._totalTokensAllCycles,
+        taskQueue: this.snapshotTaskQueue(),
+        pendingActivations,
+        cycleNotes: [...(this.missionState?.cycleNotes ?? []), cycleNote].slice(-12),
+        lastSummaryAt: summarized ? Date.now() : this.missionState?.lastSummaryAt,
+        lastError: undefined,
+      });
+      this.persistMissionState();
+
+      this.deps.sessionStore.getState().clearAll();
+      this.currentKernel = null;
 
       if (this._stopped) break;
 
-      // Post-cycle summarization
-      await this.runSummarization(kernel);
-
-      // Assess whether work is complete
-      const completeness = this.assessCompletion(kernel);
-      if (completeness === 'complete' && cycle >= minCycles) {
-        this.deps.sessionStore.getState().clearAll();
-        this.currentKernel = null;
+      if (shouldStopForCompletion) {
+        stoppedAsComplete = true;
         break;
       }
-
-      // Clear session store for next cycle (keeps VFS and task queue intact)
-      this.deps.sessionStore.getState().clearAll();
-      this.currentKernel = null;
     }
+
+    this.deps.sessionStore.getState().clearAll();
+    this.currentKernel = null;
+
+    this.updateMissionState({
+      status: this._stopped ? 'stopped' : (stoppedAsComplete ? 'completed' : 'paused'),
+      totalCycles: this._currentCycle,
+      totalTokens: this._totalTokensAllCycles,
+      taskQueue: this.snapshotTaskQueue(),
+      pendingActivations: [],
+      lastRunFinishedAt: Date.now(),
+    });
+    this.persistMissionState();
   }
 
   stop(): void {
@@ -128,15 +197,17 @@ export class AutonomousRunner {
   }
 
   pause(): void {
+    this._paused = true;
     this.currentKernel?.pause();
   }
 
   resume(): void {
+    this._paused = false;
     this.currentKernel?.resume();
   }
 
   get isPaused(): boolean {
-    return this.currentKernel?.isPaused ?? false;
+    return this._paused || (this.currentKernel?.isPaused ?? false);
   }
 
   get activeSessionCount(): number {
@@ -151,6 +222,70 @@ export class AutonomousRunner {
     return this.currentKernel?.totalTokens ?? 0;
   }
 
+  private bootstrapMissionState(): void {
+    const prepared = prepareMissionState(
+      this.deps.vfs,
+      this.config.agentPath,
+      this.config.missionPrompt,
+      this.config.resumeMission ?? true,
+    );
+
+    this.missionState = prepared.state;
+    this.missionStatePath = prepared.statePath;
+
+    if (prepared.resumed) {
+      this.deps.taskQueueStore.getState().replaceAll(prepared.state.taskQueue);
+      if (prepared.state.pendingActivations.length > 0) {
+        this.promotePendingActivationsToTasks(prepared.state.pendingActivations, prepared.state.totalCycles);
+      }
+    } else {
+      this.deps.taskQueueStore.getState().clear();
+    }
+
+    this._currentCycle = prepared.state.totalCycles;
+    this._totalTokensAllCycles = prepared.state.totalTokens;
+    this._displayMaxCycle = this._currentCycle + this.config.maxCycles;
+
+    this.updateMissionState({
+      status: 'running',
+      totalCycles: this._currentCycle,
+      totalTokens: this._totalTokensAllCycles,
+      taskQueue: this.snapshotTaskQueue(),
+      pendingActivations: [],
+      lastRunStartedAt: Date.now(),
+      lastError: undefined,
+    });
+    this.persistMissionState();
+    this.emit();
+  }
+
+  private updateMissionState(patch: Partial<AutonomousMissionState>): void {
+    if (!this.missionState) return;
+    this.missionState = {
+      ...this.missionState,
+      ...patch,
+      updatedAt: Date.now(),
+    };
+  }
+
+  private persistMissionState(): void {
+    if (!this.missionState || !this.missionStatePath) return;
+    saveMissionState(this.deps.vfs, this.missionStatePath, this.missionState);
+  }
+
+  private snapshotTaskQueue(): TaskItem[] {
+    return this.deps.taskQueueStore
+      .getState()
+      .getAll()
+      .map((task) => ({ ...task }));
+  }
+
+  private async waitWhilePaused(): Promise<void> {
+    while (this._paused && !this._stopped) {
+      await sleep(80);
+    }
+  }
+
   private buildCycleInput(cycle: number): string {
     const parts: string[] = [];
 
@@ -160,22 +295,35 @@ export class AutonomousRunner {
     parts.push('');
 
     // Cycle info
-    parts.push(`## Cycle ${cycle} of ${this.config.maxCycles}`);
+    parts.push(`## Cycle ${cycle}`);
+    parts.push(
+      `This launch will run until cycle ${this._displayMaxCycle} unless stopped sooner. ` +
+      `Use task_queue_write and memory_write to preserve continuity.`
+    );
     if (cycle > 1) {
       parts.push(
-        'This is a continuation. Your previous context was compressed into long-term memory. ' +
-        'Use memory_read to recall previous findings. Check the task queue for remaining work.'
+        'This is a continuation. Previous cycle context has been summarized into long-term memory. ' +
+        'Use memory_read to recall prior findings and continue unfinished work from the task queue.'
       );
     }
     parts.push('');
+
+    const notes = this.missionState?.cycleNotes ?? [];
+    if (notes.length > 0) {
+      parts.push('## Prior Cycle Notes');
+      for (const note of notes.slice(-4)) {
+        parts.push(`- ${note}`);
+      }
+      parts.push('');
+    }
 
     // Task queue state
     const tasks = this.deps.taskQueueStore.getState().getAll();
     if (tasks.length > 0) {
       parts.push('## Task Queue');
       for (const t of tasks) {
-        const notes = t.notes ? ` | ${t.notes}` : '';
-        parts.push(`- [${t.id}] (${t.status}) ${t.description}${notes}`);
+        const notesText = t.notes ? ` | ${t.notes}` : '';
+        parts.push(`- [${t.id}] (${t.status}) ${t.description}${notesText}`);
       }
       parts.push('');
     }
@@ -185,9 +333,9 @@ export class AutonomousRunner {
     parts.push(
       'Be thorough and persistent. Do NOT give up after a single attempt. ' +
       'If a tool call fails, try a different approach. If a search returns no results, ' +
-      'rephrase your query. If you are stuck, spawn a sub-agent to research the problem. ' +
-      'Use ALL available tools before concluding. Write all deliverables to files ' +
-      'using vfs_write - text responses alone are not enough.'
+      'rephrase your query. If you are stuck, spawn a sub-agent specialist to research the problem. ' +
+      'Use available custom tools where relevant. Write all deliverables to files ' +
+      'using vfs_write; text responses alone are not enough.'
     );
     parts.push('');
 
@@ -195,8 +343,8 @@ export class AutonomousRunner {
     parts.push('## Autonomous Mode Tools');
     parts.push(
       'You have access to task_queue_read and task_queue_write tools to manage a persistent task queue ' +
-      'that survives across cycles. Use these to track work items, maintain continuity, and plan future cycles. ' +
-      'Write deliverables and outputs as files using vfs_write. Use memory_write only for inter-agent notes that should persist to long-term memory.'
+      'that survives across cycles and future autonomous launches. Use these tools to track continuity. ' +
+      'Use memory_write for concise, reusable lessons that should survive context resets.'
     );
 
     return parts.join('\n');
@@ -206,7 +354,7 @@ export class AutonomousRunner {
     const { kernelConfig } = this.config;
     const { apiKey } = this.deps;
 
-    const provider = apiKey && apiKey !== 'your-api-key-here'
+    const provider = hasUsableApiKey(apiKey)
       ? new GeminiProvider(apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
 
@@ -221,6 +369,8 @@ export class AutonomousRunner {
       wrapUpThreshold: this.config.wrapUpThreshold,
     };
 
+    this._baseTokensBeforeCycle = this._totalTokensAllCycles;
+
     const kernel = new Kernel({
       aiProvider: provider,
       vfs: this.deps.vfs,
@@ -234,8 +384,7 @@ export class AutonomousRunner {
       taskQueueStore: this.deps.taskQueueStore,
       apiKey,
       onSessionUpdate: () => {
-        this._totalTokensAllCycles =
-          this._totalTokensAllCycles - (this.currentKernel?.totalTokens ?? 0) + kernel.totalTokens;
+        this._totalTokensAllCycles = this._baseTokensBeforeCycle + kernel.totalTokens;
         this.emit();
       },
       onBudgetWarning: (activationId: string) => {
@@ -254,9 +403,9 @@ export class AutonomousRunner {
       role: 'user',
       content:
         'CONTEXT LIMIT APPROACHING. You have 2-3 turns remaining in this cycle. ' +
-        'Write any final outputs as files using vfs_write. Save inter-agent notes using memory_write. ' +
+        'Write final outputs using vfs_write. Save reusable lessons with memory_write. ' +
         'Update or add remaining tasks using task_queue_write. ' +
-        'The next cycle will have access to your memories and task queue.\n\n' +
+        'The next cycle will resume from your memory and task queue.\n\n' +
         '## Required Reflection\n' +
         'Before ending, write a memory_write entry with key "cycle-reflection" that answers:\n' +
         '- What approaches worked in this cycle?\n' +
@@ -308,16 +457,93 @@ export class AutonomousRunner {
     return 'uncertain';
   }
 
-  private async runSummarization(kernel: Kernel): Promise<void> {
+  private buildCycleNote(
+    kernel: Kernel,
+    completeness: 'complete' | 'incomplete' | 'uncertain',
+    pendingActivationCount: number,
+  ): string {
+    const sessionCount = kernel.completedSessions.length;
+    const toolCalls = kernel.completedSessions.reduce((sum, s) => sum + s.toolCalls.length, 0);
+    const lastSession = kernel.completedSessions[kernel.completedSessions.length - 1];
+    const lastModel = lastSession
+      ? [...lastSession.history].reverse().find((m) => m.role === 'model')
+      : undefined;
+    const summary = lastModel?.content
+      ? this.compactText(lastModel.content, 180)
+      : 'No final model summary produced.';
+
+    const rolloverText = pendingActivationCount > 0
+      ? ` ${pendingActivationCount} pending activation(s) rolled into task queue.`
+      : '';
+
+    return `Cycle ${this._currentCycle}: ${completeness}. Sessions=${sessionCount}, tool_calls=${toolCalls}.${rolloverText} ${summary}`;
+  }
+
+  private compactText(input: string, maxChars: number): string {
+    const clean = input.replace(/\s+/g, ' ').trim();
+    if (clean.length <= maxChars) return clean;
+    return `${clean.slice(0, maxChars - 3)}...`;
+  }
+
+  private promotePendingActivationsToTasks(
+    pendingActivations: PendingActivationSnapshot[],
+    cycle: number,
+  ): void {
+    if (pendingActivations.length === 0) return;
+
+    const queueState = this.deps.taskQueueStore.getState();
+    const existingNotes = new Set(
+      queueState.getAll().map((t) => t.notes),
+    );
+
+    for (const pending of pendingActivations) {
+      const marker = `carryover:${computeHash(`${pending.agentId}:${pending.input}`)}`;
+      const alreadyTracked = [...existingNotes].some((note) => note.includes(marker));
+      if (alreadyTracked) continue;
+
+      const description =
+        `Resume ${pending.agentId}: ${this.compactText(pending.input, 120)}`;
+      const taskId = queueState.add(description, Math.max(0, pending.priority));
+      const notes =
+        `Recovered from cycle ${cycle} context rollover [${marker}]` +
+        (pending.parentId ? ` parent=${pending.parentId}` : '') +
+        ` depth=${pending.spawnDepth}`;
+      queueState.update(taskId, { status: 'pending', notes });
+      existingNotes.add(notes);
+    }
+  }
+
+  private seedTaskIfIdle(cycle: number): void {
+    const queueState = this.deps.taskQueueStore.getState();
+    const pending = queueState.getPending();
+    if (pending.length > 0) return;
+
+    const marker = `auto-seed:cycle-${cycle + 1}`;
+    const alreadySeeded = queueState.getAll().some((task) => task.notes.includes(marker));
+    if (alreadySeeded) return;
+
+    const taskId = queueState.add(
+      `Continue learning and improve mission strategy: ${this.compactText(this.config.missionPrompt, 130)}`,
+      0,
+    );
+    queueState.update(taskId, {
+      status: 'pending',
+      notes:
+        `Autonomous continuation task [${marker}]. ` +
+        'Try a new method, compare outcomes, and write concrete results to artifacts/.',
+    });
+  }
+
+  private async runSummarization(kernel: Kernel): Promise<boolean> {
     const { kernelConfig } = this.config;
-    if (kernelConfig.memoryEnabled === false) return;
+    if (kernelConfig.memoryEnabled === false) return false;
 
     const workingSnapshot = kernel.lastWorkingMemorySnapshot;
     const completedSessions = [...this.deps.sessionStore.getState().sessions.values()]
       .filter((s) => s.completedAt);
 
     const { apiKey } = this.deps;
-    if (!apiKey || completedSessions.length === 0) return;
+    if (!hasUsableApiKey(apiKey) || completedSessions.length === 0) return false;
 
     const summarizeModel = kernelConfig.model || 'gemini-2.0-flash';
     const summarizer = new Summarizer(
@@ -332,8 +558,10 @@ export class AutonomousRunner {
         workingSnapshot,
         completedSessions,
       );
+      return true;
     } catch {
       // Summarization is best-effort
+      return false;
     }
   }
 }

@@ -130,6 +130,18 @@ Do work.`;
     expect(modeDiag!.severity).toBe('warning');
   });
 
+  it('accepts autonomous mode without unknown-mode warning', () => {
+    const content = `---
+name: "Agent"
+mode: autonomous
+---
+
+Do work.`;
+
+    const diagnostics = validateAgentContent(content);
+    expect(diagnostics.find((d) => d.message.includes('Unknown safety mode'))).toBeUndefined();
+  });
+
   it('warns when gloves_off mode is set', () => {
     const content = `---
 name: "Agent"

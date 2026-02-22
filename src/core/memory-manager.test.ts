@@ -273,5 +273,30 @@ describe('MemoryManager', () => {
       const prompt = await mm.buildMemoryPrompt('a', 'test');
       expect(prompt).toBe('');
     });
+
+    it('respects tokenBudget by truncating memory lines', async () => {
+      await mm.store({
+        agentId: 'a',
+        type: 'fact',
+        content: 'alpha details alpha details alpha details alpha details',
+        tags: ['alpha'],
+        runId: 'r',
+      });
+      await mm.store({
+        agentId: 'a',
+        type: 'fact',
+        content: 'beta details beta details beta details beta details',
+        tags: ['beta'],
+        runId: 'r',
+      });
+
+      const prompt = await mm.buildMemoryPrompt('a', 'alpha beta', 15, 24);
+      const memoryLines = prompt
+        .split('\n')
+        .filter((line) => line.startsWith('- **['));
+
+      expect(memoryLines.length).toBe(1);
+      expect(prompt).toContain('## Memory Context');
+    });
   });
 });

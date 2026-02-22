@@ -9,6 +9,14 @@ import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useUI } from '../../stores/use-stores';
 import SettingsModal from '../settings/SettingsModal';
 import { CommandPalette } from '../command-palette/CommandPalette';
+import {
+  dispatchRunControlEvent,
+  FOCUS_PROMPT_EVENT,
+  KILL_ALL_EVENT,
+  RUN_AUTONOMOUS_EVENT,
+  RUN_ONCE_EVENT,
+  TOGGLE_PAUSE_EVENT,
+} from '../../core/run-control-events';
 import styles from './AppLayout.module.css';
 
 export function AppLayout() {
@@ -18,9 +26,43 @@ export function AppLayout() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      const hasMod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (!hasMod) return;
+
+      if (e.shiftKey && key === 'k') {
+        e.preventDefault();
+        dispatchRunControlEvent(KILL_ALL_EVENT);
+        return;
+      }
+
+      if (key === 'k') {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+        return;
+      }
+
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        dispatchRunControlEvent(RUN_AUTONOMOUS_EVENT);
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        dispatchRunControlEvent(RUN_ONCE_EVENT);
+        return;
+      }
+
+      if (e.shiftKey && key === 'p') {
+        e.preventDefault();
+        dispatchRunControlEvent(TOGGLE_PAUSE_EVENT);
+        return;
+      }
+
+      if (e.shiftKey && key === 'l') {
+        e.preventDefault();
+        dispatchRunControlEvent(FOCUS_PROMPT_EVENT);
       }
     };
     document.addEventListener('keydown', handler);

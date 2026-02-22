@@ -205,12 +205,17 @@ export class Summarizer {
     // VFS files section
     if (this.vfs) {
       const state = this.vfs.getState();
+      const activationIds = new Set(sessions.map((s) => s.activationId));
       const allPaths = state.getAllPaths();
       const filePaths = allPaths.filter(
-        (p) => !p.startsWith('agents/') && p !== 'memory/long-term-memory.json'
+        (p) =>
+          !p.startsWith('agents/') &&
+          p !== 'memory/long-term-memory.json' &&
+          (activationIds.size === 0 ||
+            state.getVersions(p).some((v) => v.activationId && activationIds.has(v.activationId)))
       );
       if (filePaths.length > 0) {
-        parts.push('## Files Created This Run');
+        parts.push('## Files Touched This Run');
         parts.push('');
         for (const path of filePaths) {
           const content = state.read(path);

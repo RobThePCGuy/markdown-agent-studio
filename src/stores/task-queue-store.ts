@@ -18,10 +18,26 @@ export interface TaskQueueState {
   remove: (id: string) => boolean;
   getAll: () => TaskItem[];
   getPending: () => TaskItem[];
+  replaceAll: (items: TaskItem[]) => void;
   clear: () => void;
 }
 
 let idCounter = 0;
+
+function extractTaskIdNumber(id: string): number {
+  const match = /^tq-(\d+)$/.exec(id);
+  if (!match) return 0;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function nextCounterFromTasks(items: TaskItem[]): number {
+  let maxId = 0;
+  for (const item of items) {
+    maxId = Math.max(maxId, extractTaskIdNumber(item.id));
+  }
+  return maxId;
+}
 
 export function createTaskQueueStore() {
   return createStore<TaskQueueState>((set, get) => ({
@@ -77,6 +93,15 @@ export function createTaskQueueStore() {
       return [...get().tasks.values()]
         .filter((t) => t.status === 'pending' || t.status === 'in_progress')
         .sort((a, b) => a.priority - b.priority);
+    },
+
+    replaceAll(items: TaskItem[]): void {
+      const deduped = new Map<string, TaskItem>();
+      for (const item of items) {
+        deduped.set(item.id, { ...item });
+      }
+      idCounter = Math.max(idCounter, nextCounterFromTasks([...deduped.values()]));
+      set({ tasks: deduped });
     },
 
     clear(): void {

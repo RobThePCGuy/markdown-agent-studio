@@ -192,4 +192,40 @@ Do work.`;
     expect(resolved.trigger).toBe('incident');
     expect(resolved.policy.permissions.webAccess).toBe(true);
   });
+
+  it('parses autonomous configuration including mission continuity options', () => {
+    const content = `---
+name: "Learner"
+mode: autonomous
+autonomous:
+  max_cycles: 24
+  stop_when_complete: false
+  resume_mission: true
+  seed_task_when_idle: true
+---
+
+Keep learning.`;
+
+    const profile = parseAgentFile('agents/learner.md', content);
+    expect(profile.autonomousConfig).toEqual({
+      maxCycles: 24,
+      stopWhenComplete: false,
+      resumeMission: true,
+      seedTaskWhenIdle: true,
+    });
+  });
+
+  it('accepts autonomous block even without mode=autonomous', () => {
+    const content = `---
+name: "Hybrid"
+safety_mode: balanced
+autonomous:
+  max_cycles: 7
+---
+
+Do work.`;
+
+    const profile = parseAgentFile('agents/hybrid.md', content);
+    expect(profile.autonomousConfig?.maxCycles).toBe(7);
+  });
 });

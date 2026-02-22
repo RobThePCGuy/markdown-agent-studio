@@ -299,14 +299,62 @@ export default function SettingsModal() {
             <input
               type="number"
               min={1}
-              max={100}
+              max={1000}
               defaultValue={kernelConfig.autonomousMaxCycles ?? 10}
               onChange={(e) => {
                 const v = e.target.valueAsNumber;
-                if (!isNaN(v)) uiStore.getState().setKernelConfig({ autonomousMaxCycles: Math.max(1, Math.min(100, v)) });
+                if (!isNaN(v)) uiStore.getState().setKernelConfig({ autonomousMaxCycles: Math.max(1, Math.min(1000, v)) });
               }}
               className={styles.input}
             />
+          </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Resume Previous Mission</span>
+            <select
+              value={kernelConfig.autonomousResumeMission !== false ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  autonomousResumeMission: e.target.value === 'on',
+                })
+              }
+              className={styles.select}
+            >
+              <option value="on">Enabled</option>
+              <option value="off">Disabled</option>
+            </select>
+          </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Stop When Complete</span>
+            <select
+              value={kernelConfig.autonomousStopWhenComplete === true ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  autonomousStopWhenComplete: e.target.value === 'on',
+                })
+              }
+              className={styles.select}
+            >
+              <option value="off">Disabled</option>
+              <option value="on">Enabled</option>
+            </select>
+          </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Seed Continuation Tasks</span>
+            <select
+              value={kernelConfig.autonomousSeedTaskWhenIdle !== false ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  autonomousSeedTaskWhenIdle: e.target.value === 'on',
+                })
+              }
+              className={styles.select}
+            >
+              <option value="on">Enabled</option>
+              <option value="off">Disabled</option>
+            </select>
           </label>
         </div>
 

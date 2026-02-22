@@ -12,7 +12,15 @@ Markdown Agent Studio is a browser IDE for defining, running, and observing mult
 - Edit Markdown files in Monaco with validation markers and template workflows.
 - Drag and drop `.md` files into the workspace (agent files with frontmatter are auto-registered).
 - Connect a local folder via File System Access (`showDirectoryPicker`) for disk-backed projects.
-- Use command palette (`Ctrl/Cmd + K`) for navigation and quick actions.
+- Use command palette (`Ctrl/Cmd + K`) for navigation and quick actions, including scoped search (`agent:`, `file:`, `action:`, `nav:`).
+- Control runs from anywhere with keyboard shortcuts: `Ctrl/Cmd+Enter` (run once), `Ctrl/Cmd+Shift+Enter` (autonomous), `Ctrl/Cmd+Shift+P` (pause/resume), `Ctrl/Cmd+Shift+K` (kill all), `Ctrl/Cmd+Shift+L` (focus prompt).
+- Filter workspace files directly in the explorer with kind toggles (`Agent/Artifact/Memory/Other`) and sort by `Name` or `Recent`.
+- Track freshness and editing state with per-file relative update metadata and unsaved markers in the explorer list.
+- Create quick starter files from explorer actions (`+A` agent, `+N` note).
+- Start from a built-in `Autonomous Learner` template and copy any template frontmatter with `Copy FM`.
+- Run persistent autonomous missions that resume from `memory/autonomous/*.json` with task queue continuity across launches.
+- Rollover incomplete cycle work into carryover tasks when context/token limits interrupt a cycle.
+- Tune autonomous continuity behavior from Settings (`Resume Previous Mission`, `Stop When Complete`, `Seed Continuation Tasks`).
 
 ## Run Modes
 
@@ -50,6 +58,17 @@ VITE_GEMINI_API_KEY=your_key_here
 Notes:
 - API key, kernel config, onboarding flag, and sound preference are persisted in browser `localStorage`.
 - Long-term memory is stored in IndexedDB (`mas-long-term-memory`) when available.
+
+## Autonomous Continuity
+
+- Autonomous runs are chunked into cycles. At the end of each cycle, working memory + session history are summarized into long-term memory (when an API key is set).
+- Mission progress is checkpointed to `memory/autonomous/*.json`, including:
+  - mission prompt and cycle counters
+  - cumulative token usage
+  - task queue snapshot
+  - short cycle notes for next-cycle context
+- If a cycle ends with queued activations (for example after token budget pause), those activations are preserved as carryover tasks so the next cycle can continue where it left off.
+- By default, autonomous mode resumes the previous mission for the same agent only when the mission prompt matches.
 
 ## NPM Package
 

@@ -50,10 +50,17 @@
   font-size: var(--text-sm);
   color: var(--text-primary);
   transition: background var(--transition-fast);
+  flex: 1;
+  min-width: 0;
 }
 
 .item:hover {
   background: var(--depth-4);
+}
+
+.itemRow {
+  display: flex;
+  align-items: stretch;
 }
 
 .itemName {
@@ -69,4 +76,24 @@
 .divider {
   border-top: 1px solid var(--depth-4);
   margin: var(--space-1) 0;
+}
+
+.copyBtn {
+  align-self: center;
+  margin-right: 8px;
+  padding: 3px 7px;
+  border: 1px solid var(--depth-4);
+  border-radius: var(--radius-sm);
+  background: var(--depth-2);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.copyBtn:hover {
+  border-color: var(--accent-secondary);
+  color: var(--text-primary);
 }

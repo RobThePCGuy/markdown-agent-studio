@@ -12,7 +12,7 @@ export interface AgentDiagnostic {
 }
 
 const KNOWN_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
-const KNOWN_MODES = ['safe', 'balanced', 'gloves_off', 'gloves-off', 'glovesoff', 'street', 'track'];
+const KNOWN_MODES = ['safe', 'balanced', 'autonomous', 'gloves_off', 'gloves-off', 'glovesoff', 'street', 'track'];
 
 function hasNonStringItems(value: unknown[]): boolean {
   return value.some((v) => typeof v !== 'string');
@@ -105,7 +105,7 @@ export function validateAgentContent(content: string, isAgent = true): AgentDiag
     if (typeof rawMode !== 'string') {
       diagnostics.push(fieldDiag(lines, modeLine, "Frontmatter field 'safety_mode'/'mode' should be a string.", 'warning'));
     } else if (!KNOWN_MODES.includes(rawMode.trim().toLowerCase())) {
-      diagnostics.push(fieldDiag(lines, modeLine, `Unknown safety mode '${rawMode}'. Known: safe, balanced, gloves_off.`, 'warning'));
+      diagnostics.push(fieldDiag(lines, modeLine, `Unknown safety mode '${rawMode}'. Known: safe, balanced, autonomous, gloves_off.`, 'warning'));
     } else {
       const normalized = rawMode.trim().toLowerCase();
       if (normalized === 'gloves_off' || normalized === 'gloves-off' || normalized === 'glovesoff' || normalized === 'track') {

@@ -1,19 +1,58 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useVFS, useAgentRegistry, useUI, useSessionStore, vfsStore, agentRegistry } from '../../stores/use-stores';
+import { duplicatePath, ensureUniquePath, nextSequentialPath } from '../../utils/path-naming';
+import { computeVisiblePaths, formatRelativeAge, type ExplorerSortMode } from '../../utils/workspace-explorer';
 import styles from './WorkspaceExplorer.module.css';
+
+type ExplorerKindFilter = 'agent' | 'artifact' | 'memory' | 'unknown';
+
+const KIND_FILTER_TOGGLES: Array<{ key: ExplorerKindFilter; label: string }> = [
+  { key: 'agent', label: 'Agent' },
+  { key: 'artifact', label: 'Artifact' },
+  { key: 'memory', label: 'Memory' },
+  { key: 'unknown', label: 'Other' },
+];
 
 export function WorkspaceExplorer() {
   const filesMap = useVFS((s) => s.files);
-  const allPaths = useMemo(() => [...filesMap.keys()].sort(), [filesMap]);
+  const allPaths = useMemo(() => [...filesMap.keys()], [filesMap]);
   const agents = useAgentRegistry((s) => s.agents);
   const sessions = useSessionStore((s) => s.sessions);
+  const selectedAgentId = useUI((s) => s.selectedAgentId);
   const selectedFile = useUI((s) => s.selectedFilePath);
   const setSelectedFile = useUI((s) => s.setSelectedFile);
   const setSelectedAgent = useUI((s) => s.setSelectedAgent);
   const openFileInEditor = useUI((s) => s.openFileInEditor);
   const editingFilePath = useUI((s) => s.editingFilePath);
+  const editorDirty = useUI((s) => s.editorDirty);
+  const setEditingFile = useUI((s) => s.setEditingFile);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [filterQuery, setFilterQuery] = useState('');
+  const [sortMode, setSortMode] = useState<ExplorerSortMode>('name');
+  const [kindFilters, setKindFilters] = useState<Record<ExplorerKindFilter, boolean>>({
+    agent: true,
+    artifact: true,
+    memory: true,
+    unknown: true,
+  });
+  const explorerFiles = useMemo(
+    () =>
+      new Map(
+        [...filesMap.entries()].map(([path, file]) => [
+          path,
+          { path, kind: file.kind, updatedAt: file.updatedAt },
+        ]),
+      ),
+    [filesMap],
+  );
+  const selectedKindFilters = useMemo(() => {
+    const next = new Set<ExplorerKindFilter>();
+    for (const key of Object.keys(kindFilters) as ExplorerKindFilter[]) {
+      if (kindFilters[key]) next.add(key);
+    }
+    return next;
+  }, [kindFilters]);
 
   const handleContextMenu = (e: React.MouseEvent, path: string) => {
     e.preventDefault();
@@ -36,7 +75,8 @@ export function WorkspaceExplorer() {
       reader.onload = () => {
         const content = reader.result as string;
         const hasAgent = content.trimStart().startsWith('---');
-        const path = hasAgent ? `agents/${file.name}` : `artifacts/${file.name}`;
+        const desiredPath = hasAgent ? `agents/${file.name}` : `artifacts/${file.name}`;
+        const path = ensureUniquePath(desiredPath, vfsStore.getState().getAllPaths());
         vfsStore.getState().write(path, content, {});
         if (path.startsWith('agents/')) {
           agentRegistry.getState().registerFromFile(path, content);
@@ -50,13 +90,24 @@ export function WorkspaceExplorer() {
     e.preventDefault();
   }, []);
 
-  const groups = new Map<string, string[]>();
-  for (const path of allPaths) {
-    const slash = path.indexOf('/');
-    const prefix = slash !== -1 ? path.slice(0, slash + 1) : '/';
-    if (!groups.has(prefix)) groups.set(prefix, []);
-    groups.get(prefix)!.push(path);
-  }
+  const visiblePaths = useMemo(() => {
+    return computeVisiblePaths(explorerFiles, filterQuery.trim(), selectedKindFilters, sortMode);
+  }, [explorerFiles, filterQuery, selectedKindFilters, sortMode]);
+
+  const groups = useMemo(() => {
+    const grouped = new Map<string, string[]>();
+    for (const path of visiblePaths) {
+      const slash = path.indexOf('/');
+      const prefix = slash !== -1 ? path.slice(0, slash + 1) : '/';
+      if (!grouped.has(prefix)) grouped.set(prefix, []);
+      grouped.get(prefix)!.push(path);
+    }
+    return grouped;
+  }, [visiblePaths]);
+
+  const toggleKindFilter = useCallback((kind: ExplorerKindFilter) => {
+    setKindFilters((current) => ({ ...current, [kind]: !current[kind] }));
+  }, []);
 
   const handleClick = (path: string) => {
     if (path.startsWith('agents/')) {
@@ -67,6 +118,23 @@ export function WorkspaceExplorer() {
     openFileInEditor(path);
   };
 
+  const createAgentFile = useCallback(() => {
+    const path = nextSequentialPath('agents/untitled', '.md', vfsStore.getState().getAllPaths());
+    const content = '---\nname: "Untitled Agent"\n---\n\nDescribe this agent\'s behavior here.';
+    vfsStore.getState().write(path, content, {});
+    agentRegistry.getState().registerFromFile(path, content);
+    setSelectedAgent(path);
+    openFileInEditor(path);
+  }, [openFileInEditor, setSelectedAgent]);
+
+  const createNoteFile = useCallback(() => {
+    const path = nextSequentialPath('artifacts/note', '.md', vfsStore.getState().getAllPaths());
+    const content = '# Notes\n\n';
+    vfsStore.getState().write(path, content, {});
+    setSelectedFile(path);
+    openFileInEditor(path);
+  }, [openFileInEditor, setSelectedFile]);
+
   return (
     <div
       className={styles.container}
@@ -76,20 +144,67 @@ export function WorkspaceExplorer() {
       <div className={styles.heading}>
         Workspace
         <button
-          onClick={() => {
-            const existing = allPaths.filter(p => p.startsWith('agents/untitled'));
-            const n = existing.length + 1;
-            const path = `agents/untitled-${n}.md`;
-            const content = '---\nname: "Untitled Agent"\n---\n\nDescribe this agent\'s behavior here.';
-            vfsStore.getState().write(path, content, {});
-            agentRegistry.getState().registerFromFile(path, content);
-            openFileInEditor(path);
-          }}
+          onClick={createAgentFile}
           className={styles.newFileBtn}
           title="New agent file"
         >
-          +
+          +A
         </button>
+        <button
+          onClick={createNoteFile}
+          className={styles.newFileBtn}
+          title="New note file"
+        >
+          +N
+        </button>
+      </div>
+
+      <input
+        type="text"
+        value={filterQuery}
+        onChange={(e) => setFilterQuery(e.target.value)}
+        placeholder="Filter files..."
+        className={styles.searchInput}
+      />
+
+      <div className={styles.controls}>
+        <div className={styles.controlRow}>
+          <span className={styles.controlLabel}>Kinds</span>
+          <div className={styles.toggleGroup}>
+            {KIND_FILTER_TOGGLES.map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                className={styles.toggleButton}
+                aria-pressed={kindFilters[key]}
+                onClick={() => toggleKindFilter(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className={styles.controlRow}>
+          <span className={styles.controlLabel}>Sort</span>
+          <div className={styles.toggleGroup}>
+            <button
+              type="button"
+              className={styles.toggleButton}
+              aria-pressed={sortMode === 'name'}
+              onClick={() => setSortMode('name')}
+            >
+              Name
+            </button>
+            <button
+              type="button"
+              className={styles.toggleButton}
+              aria-pressed={sortMode === 'recent'}
+              onClick={() => setSortMode('recent')}
+            >
+              Recent
+            </button>
+          </div>
+        </div>
       </div>
 
       {allPaths.length === 0 && (
@@ -98,13 +213,22 @@ export function WorkspaceExplorer() {
         </div>
       )}
 
+      {allPaths.length > 0 && visiblePaths.length === 0 && (
+        <div className={styles.emptyDrop}>
+          {filterQuery.trim() ? `No files match "${filterQuery.trim()}"` : 'No files match current filters'}
+        </div>
+      )}
+
       {[...groups.entries()].map(([prefix, paths]) => (
         <div key={prefix} className={styles.group}>
           <div className={styles.groupHeader}>{prefix}</div>
           {paths.map((path) => {
+            const file = filesMap.get(path);
             const filename = path.split('/').pop() ?? path;
             const isAgent = path.startsWith('agents/');
-            const isSelected = path === selectedFile || path === editingFilePath;
+            const isSelected = path === selectedFile || path === selectedAgentId || path === editingFilePath;
+            const isUnsaved = path === editingFilePath && editorDirty;
+            const updatedAtText = file ? formatRelativeAge(Date.now(), file.updatedAt) : '';
 
             let agentStatus: 'running' | 'paused' | 'error' | 'idle' | undefined;
             if (isAgent && agents.has(path)) {
@@ -141,6 +265,10 @@ export function WorkspaceExplorer() {
                   />
                 )}
                 <span className={styles.fileName}>{filename}</span>
+                <span className={styles.fileMeta}>
+                  {isUnsaved && <span className={styles.unsavedMarker}>Unsaved</span>}
+                  {updatedAtText && <span className={styles.updatedAt}>{updatedAtText}</span>}
+                </span>
               </div>
             );
           })}
@@ -155,17 +283,37 @@ export function WorkspaceExplorer() {
           <button
             className={styles.contextMenuItem}
             onClick={() => {
-              const oldName = contextMenu.path.split('/').pop() ?? '';
-              const newName = window.prompt('New name:', oldName);
+              const oldPath = contextMenu.path;
+              const oldName = oldPath.split('/').pop() ?? '';
+              const enteredName = window.prompt('New name:', oldName);
+              const newName = enteredName?.trim();
               if (newName && newName !== oldName) {
-                const prefix = contextMenu.path.includes('/') ? contextMenu.path.slice(0, contextMenu.path.lastIndexOf('/') + 1) : '';
-                const newPath = prefix + newName;
-                const content = vfsStore.getState().read(contextMenu.path);
+                const prefix = oldPath.includes('/') ? oldPath.slice(0, oldPath.lastIndexOf('/') + 1) : '';
+                const normalizedName = newName.endsWith('.md') ? newName : `${newName}.md`;
+                const desiredPath = `${prefix}${normalizedName}`;
+                const newPath = ensureUniquePath(
+                  desiredPath,
+                  vfsStore.getState().getAllPaths().filter((p) => p !== oldPath),
+                );
+                if (newPath === oldPath) {
+                  setContextMenu(null);
+                  return;
+                }
+                const content = vfsStore.getState().read(oldPath);
                 if (content !== undefined && content !== null) {
                   vfsStore.getState().write(newPath, content, {});
-                  vfsStore.getState().deleteFile(contextMenu.path);
-                  if (newPath.startsWith('agents/')) agentRegistry.getState().registerFromFile(newPath, content);
-                  if (contextMenu.path.startsWith('agents/')) agentRegistry.getState().unregister(contextMenu.path);
+                  vfsStore.getState().deleteFile(oldPath);
+
+                  if (newPath.startsWith('agents/')) {
+                    agentRegistry.getState().registerFromFile(newPath, content);
+                  }
+                  if (oldPath.startsWith('agents/')) {
+                    agentRegistry.getState().unregister(oldPath);
+                  }
+
+                  if (selectedFile === oldPath) setSelectedFile(newPath);
+                  if (selectedAgentId === oldPath) setSelectedAgent(newPath);
+                  if (editingFilePath === oldPath) setEditingFile(newPath);
                 }
               }
               setContextMenu(null);
@@ -178,7 +326,7 @@ export function WorkspaceExplorer() {
             onClick={() => {
               const content = vfsStore.getState().read(contextMenu.path);
               if (content !== undefined && content !== null) {
-                const newPath = contextMenu.path.replace(/\.md$/, '-copy.md');
+                const newPath = duplicatePath(contextMenu.path, vfsStore.getState().getAllPaths());
                 vfsStore.getState().write(newPath, content, {});
                 if (newPath.startsWith('agents/')) agentRegistry.getState().registerFromFile(newPath, content);
               }
@@ -191,8 +339,12 @@ export function WorkspaceExplorer() {
             className={`${styles.contextMenuItem} ${styles.danger}`}
             onClick={() => {
               if (window.confirm(`Delete ${contextMenu.path}?`)) {
-                vfsStore.getState().deleteFile(contextMenu.path);
-                if (contextMenu.path.startsWith('agents/')) agentRegistry.getState().unregister(contextMenu.path);
+                const path = contextMenu.path;
+                vfsStore.getState().deleteFile(path);
+                if (path.startsWith('agents/')) agentRegistry.getState().unregister(path);
+                if (selectedFile === path) setSelectedFile(null);
+                if (selectedAgentId === path) setSelectedAgent(null);
+                if (editingFilePath === path) setEditingFile(null);
               }
               setContextMenu(null);
             }}

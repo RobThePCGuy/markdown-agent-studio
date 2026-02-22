@@ -30,7 +30,7 @@ export const memoryWritePlugin: ToolPlugin = {
     const value = args.value as string;
     const rawTags = (args.tags as string) || '';
     const tags = rawTags
-      ? rawTags.split(',').map((t) => t.trim()).filter(Boolean)
+      ? rawTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
       : [];
 
     ctx.memoryStore.getState().write({
@@ -68,7 +68,7 @@ export const memoryReadPlugin: ToolPlugin = {
     const query = args.query as string;
     const rawTags = (args.tags as string) || '';
     const tags = rawTags
-      ? rawTags.split(',').map((t) => t.trim()).filter(Boolean)
+      ? rawTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
       : undefined;
 
     const results = ctx.memoryStore.getState().read(query, tags);
