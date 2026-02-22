@@ -273,7 +273,7 @@ export class AutonomousRunner {
   private assessCompletion(kernel: Kernel): 'complete' | 'incomplete' | 'uncertain' {
     // Check for pending tasks in the queue
     const tasks = this.deps.taskQueueStore.getState().getAll();
-    const pendingTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'in-progress');
+    const pendingTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress');
     if (pendingTasks.length > 0) return 'incomplete';
 
     // Examine completed sessions

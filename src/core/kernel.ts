@@ -887,7 +887,7 @@ export class Kernel {
             maxDepth: this.deps.config.maxDepth,
             maxFanout: this.deps.config.maxFanout,
             childCount: this.childCounts.get(activation.agentId) ?? 0,
-            policy: 'default',
+
             apiKey: this.deps.apiKey,
             preferredModel: this.resolvePreferredModel(),
             memoryStore: this.memoryStore,
