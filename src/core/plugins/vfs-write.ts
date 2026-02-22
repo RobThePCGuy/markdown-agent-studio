@@ -2,7 +2,7 @@ import type { ToolPlugin } from '../tool-plugin';
 
 export const vfsWritePlugin: ToolPlugin = {
   name: 'vfs_write',
-  description: 'Write content to a file in the virtual filesystem.',
+  description: 'Create or update a persistent file. Use this for all deliverables, reports, code, and outputs that should be saved. Files persist across runs and are visible in the workspace file explorer.',
   parameters: {
     path: { type: 'string', description: 'File path to write', required: true },
     content: { type: 'string', description: 'Content to write', required: true },

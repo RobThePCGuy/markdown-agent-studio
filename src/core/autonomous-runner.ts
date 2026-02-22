@@ -175,7 +175,7 @@ export class AutonomousRunner {
     parts.push(
       'You have access to task_queue_read and task_queue_write tools to manage a persistent task queue ' +
       'that survives across cycles. Use these to track work items, maintain continuity, and plan future cycles. ' +
-      'Use memory_write to save important findings to long-term memory before the cycle ends.'
+      'Write deliverables and outputs as files using vfs_write. Use memory_write only for inter-agent notes that should persist to long-term memory.'
     );
 
     return parts.join('\n');
@@ -233,7 +233,7 @@ export class AutonomousRunner {
       role: 'user',
       content:
         'CONTEXT LIMIT APPROACHING. You have 2-3 turns remaining in this cycle. ' +
-        'Save your important findings using memory_write. ' +
+        'Write any final outputs as files using vfs_write. Save inter-agent notes using memory_write. ' +
         'Update or add remaining tasks using task_queue_write. ' +
         'The next cycle will have access to your memories and task queue.',
     });

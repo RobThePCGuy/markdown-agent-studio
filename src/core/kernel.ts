@@ -14,6 +14,11 @@ import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { MemoryManager } from './memory-manager';
 
+const WORKSPACE_PREAMBLE =
+  'You are an agent in a multi-agent workspace with access to a virtual filesystem and shared memory.\n' +
+  'Always write final deliverables, reports, and code as files using vfs_write -- these persist across runs.\n' +
+  'Use memory_write only for temporary inter-agent coordination during a run (it is cleared when the run ends).\n';
+
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
 const QUOTA_ERROR_PATTERNS = [
@@ -285,8 +290,8 @@ export class Kernel {
     try {
       const MAX_AGENT_TURNS = 25;
 
-      // Inject long-term memory context into system prompt
-      let systemPrompt = profile.systemPrompt;
+      // Inject workspace preamble and long-term memory context into system prompt
+      let systemPrompt = WORKSPACE_PREAMBLE + '\n' + profile.systemPrompt;
       if (this.memoryManager && this.deps.config.memoryEnabled !== false) {
         try {
           const memoryContext = await this.memoryManager.buildMemoryPrompt(
@@ -548,8 +553,8 @@ export class Kernel {
     try {
       const MAX_AGENT_TURNS = 25;
 
-      // Inject long-term memory context into system prompt
-      let systemPrompt = profile.systemPrompt;
+      // Inject workspace preamble and long-term memory context into system prompt
+      let systemPrompt = WORKSPACE_PREAMBLE + '\n' + profile.systemPrompt;
       if (this.memoryManager && this.deps.config.memoryEnabled !== false) {
         try {
           const memoryContext = await this.memoryManager.buildMemoryPrompt(

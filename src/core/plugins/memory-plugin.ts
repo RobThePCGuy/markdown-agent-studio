@@ -3,8 +3,8 @@ import type { ToolPlugin } from '../tool-plugin';
 export const memoryWritePlugin: ToolPlugin = {
   name: 'memory_write',
   description:
-    'Write an entry to shared working memory so other agents in this run can read it. ' +
-    'Use this to share findings, intermediate results, or any data another agent might need.',
+    'Write a temporary entry to shared working memory. Other agents in the current run can read it via memory_read. ' +
+    'Working memory is cleared when the run ends -- use this only for inter-agent coordination during a run. For final outputs use vfs_write instead.',
   parameters: {
     key: {
       type: 'string',
@@ -48,7 +48,7 @@ export const memoryReadPlugin: ToolPlugin = {
   name: 'memory_read',
   description:
     'Search shared working memory for entries written by any agent in this run. ' +
-    'IMPORTANT: Always check working memory BEFORE doing web searches - another agent may have already found what you need.',
+    'Check here before doing web searches -- another agent may have already found what you need. Note: working memory is temporary and cleared when the run ends.',
   parameters: {
     query: {
       type: 'string',
