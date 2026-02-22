@@ -21,28 +21,31 @@ export type SummarizeFn = (context: string) => Promise<ExtractedMemory[]>;
 // System prompt for the LLM summarizer
 // ---------------------------------------------------------------------------
 
-export const SUMMARIZER_SYSTEM_PROMPT = `You are a memory extraction system. Your job is to analyze a completed agent run (working memory and conversation history) and extract 3-8 structured memories worth retaining for future runs.
+export const SUMMARIZER_SYSTEM_PROMPT = `You are a knowledge extraction system. Analyze a completed agent run (files produced, working memory, and conversation history) and extract structured memories worth retaining for future runs.
 
-Each memory must be one of these 5 types:
-- "fact": A verified piece of knowledge about the project, codebase, or domain (e.g. "The API uses JWT authentication with RS256 signing").
-- "procedure": A step-by-step process or workflow that was discovered or confirmed (e.g. "To deploy, run build then push to the deploy branch").
-- "observation": A pattern, trend, or notable behavior observed during the run (e.g. "The test suite takes ~4 minutes and flakes on CI about 10% of the time").
-- "mistake": An error, misunderstanding, or failed approach that should be avoided in the future. PRIORITIZE THESE - they are the most valuable for preventing repeated failures (e.g. "Do not use fs.writeFileSync in the renderer process - it causes the app to freeze").
+Each memory must be one of these types:
+- "skill": A technique, method, or capability the agent demonstrated or learned (e.g. "Use web_search then vfs_write to research and document a topic systematically").
+- "fact": A verified piece of knowledge about the domain or project (e.g. "The API uses JWT authentication with RS256 signing").
+- "procedure": A step-by-step workflow that was discovered or confirmed (e.g. "To deploy, run build then push to the deploy branch").
+- "observation": A pattern, trend, or notable behavior observed (e.g. "The test suite takes ~4 minutes and flakes on CI about 10% of the time").
+- "mistake": An error or failed approach that should be avoided. PRIORITIZE THESE - they prevent repeated failures (e.g. "Do not use fs.writeFileSync in the renderer process - it causes the app to freeze"). Identify the misconception, then express as actionable advice.
 - "preference": A user or project preference for style, tooling, or approach (e.g. "User prefers functional components over class components").
 
 Guidelines:
-- Extract 3-8 memories. Fewer is better if quality is high.
-- Prioritize mistakes above all other types - learning from failures is the most valuable outcome.
-- Each memory should be self-contained and useful without additional context.
+- Extract as many memories as the content warrants. Quality over quantity, but do not artificially limit yourself.
+- Each memory must be self-contained and useful without additional context.
+- Use specific dates (not "today" or "recently") since memories persist indefinitely.
+- For files: extract the KEY KNOWLEDGE from their contents, not just "a file was created." What did the agent learn?
+- For mistakes: identify the misconception, then express as actionable advice.
 - Tags should be lowercase, short, and relevant for future retrieval.
 - Do NOT include trivial or overly generic observations.
 - Return ONLY a JSON array of objects with { type, content, tags } fields. No other text.
 
 Example output:
 [
-  { "type": "mistake", "content": "Forgot to await the database connection before querying - caused silent failures", "tags": ["database", "async", "error"] },
-  { "type": "fact", "content": "The project uses Vitest for testing with the jsdom environment", "tags": ["testing", "vitest", "config"] },
-  { "type": "preference", "content": "User wants all API responses wrapped in a Result type", "tags": ["api", "types", "style"] }
+  { "type": "skill", "content": "Research workflow: use web_search to gather sources, then vfs_write to save structured findings as markdown files", "tags": ["research", "workflow", "web_search", "vfs_write"] },
+  { "type": "mistake", "content": "Do not call signal_parent when operating as a root agent - check if a parent exists first to avoid errors", "tags": ["agent_hierarchy", "error", "root_agent"] },
+  { "type": "fact", "content": "The project uses Vitest for testing with the jsdom environment", "tags": ["testing", "vitest", "config"] }
 ]`;
 
 // ---------------------------------------------------------------------------
