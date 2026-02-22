@@ -173,7 +173,7 @@ export class Summarizer {
         const existing = await this.manager.getAll();
         const consolidationContext = this.buildConsolidationContext(extracted, existing);
         const result = await this.consolidateFn(consolidationContext);
-        await this.applyConsolidation(result, extracted, agentId, runId);
+        await this.applyConsolidation(result, agentId, runId);
         return;
       } catch {
         // Fall through to legacy add-all behavior
@@ -302,7 +302,6 @@ export class Summarizer {
 
   private async applyConsolidation(
     result: ConsolidationResult,
-    candidates: ExtractedMemory[],
     agentId: string,
     runId: string,
   ): Promise<void> {
