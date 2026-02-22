@@ -222,7 +222,7 @@ tools:
     prompt: "Analyze the following content and extract 3-5 key insights:\\n\\n{{content}}"
   - name: fact_check
     description: Verify claims against available information
-    model: gemini-3-flash-preview
+    model: gemini-2.5-flash
     parameters:
       claim:
         type: string

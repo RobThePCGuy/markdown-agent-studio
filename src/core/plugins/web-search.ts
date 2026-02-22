@@ -19,7 +19,7 @@ export const webSearchPlugin: ToolPlugin = {
     try {
       const client = new GoogleGenerativeAI(ctx.apiKey);
       const model = client.getGenerativeModel({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         // googleSearch is the correct tool for Gemini 2.0+; the installed SDK
         // types only export googleSearchRetrieval (older models), so we cast.
         tools: [{ googleSearch: {} } as unknown as Tool],

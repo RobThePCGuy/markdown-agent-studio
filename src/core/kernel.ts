@@ -13,7 +13,7 @@ import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
 import type { MemoryManager } from './memory-manager';
 
-const DEFAULT_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
 const QUOTA_ERROR_PATTERNS = [
   /quota/i,

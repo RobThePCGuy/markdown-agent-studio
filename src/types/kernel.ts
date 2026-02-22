@@ -49,7 +49,6 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxDepth: 5,
   maxFanout: 5,
   tokenBudget: 250000,
-  model: 'gemini-3-flash-preview',
   memoryEnabled: true,
   memoryTokenBudget: 2000,
 };

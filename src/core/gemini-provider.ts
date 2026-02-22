@@ -36,7 +36,7 @@ export class GeminiProvider implements AIProvider {
 
     try {
       const model = this.client.getGenerativeModel({
-        model: config.model ?? 'gemini-3-flash-preview',
+        model: config.model ?? 'gemini-2.5-flash',
         systemInstruction: config.systemPrompt,
       });
 

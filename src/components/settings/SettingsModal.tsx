@@ -77,7 +77,7 @@ export default function SettingsModal() {
     close();
   };
 
-  const model = kernelConfig.model ?? 'gemini-3-flash-preview';
+  const model = kernelConfig.model ?? '';
 
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick}>
@@ -124,6 +124,7 @@ export default function SettingsModal() {
               onChange={(e) => uiStore.getState().setKernelConfig({ model: e.target.value })}
               className={styles.select}
             >
+              <option value="" disabled>Select a model</option>
               <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
               <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
               <option value="gemini-2.5-flash">gemini-2.5-flash</option>
