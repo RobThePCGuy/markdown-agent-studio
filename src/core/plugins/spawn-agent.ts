@@ -1,14 +1,15 @@
 import matter from 'gray-matter';
 import type { ToolPlugin } from '../tool-plugin';
 
-function normalizeSpawnedAgentContent(content: string, preferredModel: string): string {
+function normalizeSpawnedAgentContent(content: string, preferredModel: string | undefined): string {
   try {
     const parsed = matter(content);
     const fm = { ...(parsed.data as Record<string, unknown>) };
-    const model = typeof fm.model === 'string' ? fm.model.trim() : '';
     const mode = fm.safety_mode ?? fm.mode;
 
-    if (!model || model !== preferredModel) {
+    // Only inject model when the user has explicitly set one in settings.
+    // If no preference, leave whatever model the agent content specifies (or none).
+    if (preferredModel) {
       fm.model = preferredModel;
     }
 
@@ -39,7 +40,7 @@ export const spawnAgentPlugin: ToolPlugin = {
     const rawContent = args.content as string;
     const task = args.task as string;
     const { vfs, registry, eventLog } = ctx;
-    const preferredModel = ctx.preferredModel ?? 'gemini-2.5-flash';
+    const preferredModel = ctx.preferredModel;
 
     // Agent files must be markdown
     const basename = filename.includes('/') ? filename.split('/').pop()! : filename;

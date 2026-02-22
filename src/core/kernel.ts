@@ -683,26 +683,27 @@ export class Kernel {
     });
   }
 
-  private resolvePreferredModel(): string {
+  /** Returns the user's explicitly configured model, or undefined if none set. */
+  private resolvePreferredModel(): string | undefined {
     const configured = typeof this.deps.config.model === 'string' ? this.deps.config.model.trim() : '';
     if (configured && !LEGACY_GEMINI_MODEL.test(configured)) {
       return configured;
     }
-    return DEFAULT_MODEL;
+    return undefined;
   }
 
   private resolveSessionModel(profileModel: string | undefined): string {
     // Settings (config) model takes priority - it's the user's explicit global choice.
-    // Agent profile model is only used as a per-agent fallback when no config model is set.
     const preferred = this.resolvePreferredModel();
-    if (preferred !== DEFAULT_MODEL) {
+    if (preferred) {
       return preferred;
     }
+    // Agent profile model is used as a per-agent fallback when no config model is set.
     const profile = typeof profileModel === 'string' ? profileModel.trim() : '';
     if (profile && !LEGACY_GEMINI_MODEL.test(profile)) {
       return profile;
     }
-    return preferred;
+    return DEFAULT_MODEL;
   }
 
   private isQuotaError(message: unknown): boolean {
