@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useMemoryStore } from '../../stores/use-stores';
+import { useMemoryStore, vfsStore } from '../../stores/use-stores';
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
 import type { LongTermMemory } from '../../types/memory';
@@ -11,6 +11,7 @@ const typeColors: Record<string, string> = {
   observation: 'var(--status-green)',
   mistake: 'var(--status-red)',
   preference: 'var(--status-purple)',
+  skill: 'var(--status-yellow)',
 };
 
 export function MemoryPanel() {
@@ -22,7 +23,7 @@ export function MemoryPanel() {
 
   useEffect(() => {
     if (activeView === 'longterm') {
-      const db = createMemoryDB();
+      const db = createMemoryDB(vfsStore);
       const mgr = new MemoryManager(db);
       mgr.getAll().then(setLongTermMemories).catch(() => {});
     }

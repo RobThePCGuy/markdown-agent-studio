@@ -1,4 +1,4 @@
-export type MemoryType = 'fact' | 'procedure' | 'observation' | 'mistake' | 'preference';
+export type MemoryType = 'fact' | 'procedure' | 'observation' | 'mistake' | 'preference' | 'skill';
 
 export interface WorkingMemoryEntry {
   id: string;
