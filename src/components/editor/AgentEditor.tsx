@@ -13,7 +13,9 @@ export function AgentEditor() {
   const setEditorDirty = useUI((s) => s.setEditorDirty);
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(() =>
+    editingFilePath ? vfsStore.getState().read(editingFilePath) ?? '' : ''
+  );
   const validateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clean up debounce timer on unmount

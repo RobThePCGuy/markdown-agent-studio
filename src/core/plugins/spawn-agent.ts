@@ -1,8 +1,6 @@
 import matter from 'gray-matter';
 import type { ToolPlugin } from '../tool-plugin';
 
-const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
-
 function normalizeSpawnedAgentContent(content: string, preferredModel: string): string {
   try {
     const parsed = matter(content);
@@ -10,7 +8,7 @@ function normalizeSpawnedAgentContent(content: string, preferredModel: string): 
     const model = typeof fm.model === 'string' ? fm.model.trim() : '';
     const mode = fm.safety_mode ?? fm.mode;
 
-    if (!model || LEGACY_GEMINI_MODEL.test(model)) {
+    if (!model || model !== preferredModel) {
       fm.model = preferredModel;
     }
 

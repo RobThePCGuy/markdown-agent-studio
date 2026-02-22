@@ -1,7 +1,6 @@
 import type { ToolPlugin, ToolParameter } from '../tool-plugin';
 import type { CustomToolDef } from '../../types/agent';
 
-const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
 const DEFAULT_MODEL = 'gemini-3-flash-preview';
 
 function substituteTemplate(template: string, args: Record<string, unknown>): string {
@@ -11,14 +10,15 @@ function substituteTemplate(template: string, args: Record<string, unknown>): st
 }
 
 function resolveWorkerModel(model: string | undefined, preferredModel: string | undefined): string {
-  const requestedModel = typeof model === 'string' ? model.trim() : '';
-  if (requestedModel && !LEGACY_GEMINI_MODEL.test(requestedModel)) {
-    return requestedModel;
-  }
-
+  // User's preferred model (from settings) takes priority over tool def model
   const preferred = typeof preferredModel === 'string' ? preferredModel.trim() : '';
   if (preferred) {
     return preferred;
+  }
+
+  const requestedModel = typeof model === 'string' ? model.trim() : '';
+  if (requestedModel) {
+    return requestedModel;
   }
 
   return DEFAULT_MODEL;
