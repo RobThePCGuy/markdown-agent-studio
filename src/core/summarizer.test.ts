@@ -5,6 +5,7 @@ import { MemoryManager, _resetLtmCounter } from './memory-manager';
 import { InMemoryMemoryDB } from './memory-db';
 import type { WorkingMemoryEntry } from '../types/memory';
 import type { LiveSession } from '../types/session';
+import { createVFSStore } from '../stores/vfs-store';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -218,5 +219,60 @@ describe('Summarizer', () => {
     for (let i = 10; i < 30; i++) {
       expect(contextArg).toContain(`msg_${String(i).padStart(3, '0')}_end`);
     }
+  });
+
+  it('includes VFS file contents in context when files are provided', async () => {
+    const vfs = createVFSStore();
+    vfs.getState().write('research/findings.md', '# Research\nKey finding: X works best', {
+      authorAgentId: 'agent-1',
+      activationId: 'act-1',
+    });
+    const summarizer = new Summarizer(manager, mockSummarizeFn, vfs);
+    mockSummarizeFn.mockResolvedValue([]);
+
+    await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+    const contextArg = mockSummarizeFn.mock.calls[0][0];
+    expect(contextArg).toContain('## Files Created This Run');
+    expect(contextArg).toContain('research/findings.md');
+    expect(contextArg).toContain('Key finding: X works best');
+  });
+
+  it('excludes agent definition files from file context', async () => {
+    const vfs = createVFSStore();
+    vfs.getState().write('agents/researcher.md', '---\nname: researcher\n---', {});
+    vfs.getState().write('output.md', 'Some output', { authorAgentId: 'agent-1' });
+    const summarizer = new Summarizer(manager, mockSummarizeFn, vfs);
+    mockSummarizeFn.mockResolvedValue([]);
+
+    await summarizer.summarize('run-1', [], [makeSession()]);
+
+    const contextArg = mockSummarizeFn.mock.calls[0][0];
+    expect(contextArg).not.toContain('agents/researcher.md');
+    expect(contextArg).toContain('output.md');
+  });
+
+  it('excludes memory/long-term-memory.json from file context', async () => {
+    const vfs = createVFSStore();
+    vfs.getState().write('memory/long-term-memory.json', '[{"id":"ltm-1"}]', {});
+    vfs.getState().write('report.md', 'Report content', { authorAgentId: 'agent-1' });
+    const summarizer = new Summarizer(manager, mockSummarizeFn, vfs);
+    mockSummarizeFn.mockResolvedValue([]);
+
+    await summarizer.summarize('run-1', [], [makeSession()]);
+
+    const contextArg = mockSummarizeFn.mock.calls[0][0];
+    expect(contextArg).not.toContain('long-term-memory.json');
+    expect(contextArg).toContain('report.md');
+  });
+
+  it('works without VFS (backwards compatible)', async () => {
+    const summarizer = new Summarizer(manager, mockSummarizeFn);
+    mockSummarizeFn.mockResolvedValue(sampleExtracted);
+
+    await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+    const all = await manager.getAll();
+    expect(all).toHaveLength(2);
   });
 });

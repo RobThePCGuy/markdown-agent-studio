@@ -1,6 +1,9 @@
 import type { MemoryManager } from './memory-manager';
 import type { WorkingMemoryEntry, MemoryType } from '../types/memory';
 import type { LiveSession } from '../types/session';
+import type { VFSState } from '../stores/vfs-store';
+
+type Store<T> = { getState(): T };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,10 +55,12 @@ const MAX_MESSAGE_CHARS = 500;
 export class Summarizer {
   private manager: MemoryManager;
   private summarizeFn: SummarizeFn;
+  private vfs?: Store<VFSState>;
 
-  constructor(manager: MemoryManager, summarizeFn: SummarizeFn) {
+  constructor(manager: MemoryManager, summarizeFn: SummarizeFn, vfs?: Store<VFSState>) {
     this.manager = manager;
     this.summarizeFn = summarizeFn;
+    this.vfs = vfs;
   }
 
   /**
@@ -109,6 +114,27 @@ export class Summarizer {
     sessions: LiveSession[],
   ): string {
     const parts: string[] = [];
+
+    // VFS files section
+    if (this.vfs) {
+      const state = this.vfs.getState();
+      const allPaths = state.getAllPaths();
+      const filePaths = allPaths.filter(
+        (p) => !p.startsWith('agents/') && p !== 'memory/long-term-memory.json'
+      );
+      if (filePaths.length > 0) {
+        parts.push('## Files Created This Run');
+        parts.push('');
+        for (const path of filePaths) {
+          const content = state.read(path);
+          if (content !== null) {
+            parts.push(`### ${path}`);
+            parts.push(content);
+            parts.push('');
+          }
+        }
+      }
+    }
 
     // Working memory section
     if (workingMemory.length > 0) {
