@@ -8,6 +8,28 @@ import type { LiveSession } from '../types/session';
 import { createVFSStore } from '../stores/vfs-store';
 
 // ---------------------------------------------------------------------------
+// Deterministic fake embedding generator for VectorMemoryDB tests
+// ---------------------------------------------------------------------------
+
+function fakeEmbed(text: string): number[] {
+  const arr = new Array(384);
+  for (let i = 0; i < 384; i++) {
+    arr[i] = ((text.charCodeAt(i % text.length) + i) % 100) / 100;
+  }
+  return arr;
+}
+
+vi.mock('./embedding-engine', () => {
+  return {
+    EmbeddingEngine: class MockEmbeddingEngine {
+      embed = async (text: string) => fakeEmbed(text);
+      embedBatch = async (texts: string[]) => texts.map((t) => fakeEmbed(t));
+      isReady = () => true;
+    },
+  };
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -415,6 +437,54 @@ describe('Summarizer', () => {
 
       const all = await manager.getAll();
       expect(all).toHaveLength(2);
+    });
+
+    it('uses vector similarity per candidate when VectorMemoryDB is used', async () => {
+      const { VectorMemoryDB } = await import('./vector-memory-db');
+      const vectorDb = new VectorMemoryDB({ inMemory: true });
+      await vectorDb.init();
+
+      // Seed the vector DB with an existing memory
+      await vectorDb.put({
+        id: 'ltm-existing-1',
+        agentId: 'agent-1',
+        type: 'fact',
+        content: 'TypeScript uses structural typing',
+        tags: ['typescript'],
+        createdAt: 1000,
+        lastAccessedAt: 2000,
+        accessCount: 3,
+        runId: 'run-0',
+      });
+
+      const vectorManager = new MemoryManager(vectorDb);
+
+      const candidates: ExtractedMemory[] = [
+        { type: 'fact', content: 'TypeScript supports generics', tags: ['typescript', 'generics'] },
+      ];
+      mockSummarizeFn.mockResolvedValue(candidates);
+
+      const mockConsolidateFn = vi.fn().mockResolvedValue({
+        operations: [
+          { action: 'ADD', type: 'fact', content: 'TypeScript supports generics', tags: ['typescript', 'generics'] },
+        ],
+      });
+
+      const summarizer = new Summarizer(vectorManager, mockSummarizeFn, undefined, mockConsolidateFn);
+      await summarizer.summarize('run-1', [makeWorkingMemory()], [makeSession()]);
+
+      expect(mockConsolidateFn).toHaveBeenCalledOnce();
+      const consolidateArg = mockConsolidateFn.mock.calls[0][0];
+
+      // Should use the vector-based format with per-candidate similarity
+      expect(consolidateArg).toContain('similar matches per candidate');
+      // Should NOT contain the fallback "Existing Long-Term Memories" header
+      expect(consolidateArg).not.toContain('Existing Long-Term Memories');
+      // Should contain the candidate listing
+      expect(consolidateArg).toContain('TypeScript supports generics');
+      // Should contain similar existing memories found via semantic search
+      expect(consolidateArg).toContain('Similar existing:');
+      expect(consolidateArg).toContain('ltm-existing-1');
     });
   });
 });

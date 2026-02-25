@@ -19,6 +19,11 @@ export class MemoryManager {
     this.db = db;
   }
 
+  /** Expose the underlying database (used by Summarizer for type detection). */
+  getDB(): MemoryDB {
+    return this.db;
+  }
+
   async store(input: StoreInput): Promise<LongTermMemory> {
     const now = Date.now();
     const entry: LongTermMemory = {

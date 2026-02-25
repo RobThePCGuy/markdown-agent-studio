@@ -2,6 +2,7 @@ import type { MemoryManager } from './memory-manager';
 import type { WorkingMemoryEntry, MemoryType, LongTermMemory } from '../types/memory';
 import type { LiveSession } from '../types/session';
 import type { VFSState } from '../stores/vfs-store';
+import { VectorMemoryDB } from './vector-memory-db';
 
 type Store<T> = { getState(): T };
 
@@ -171,7 +172,7 @@ export class Summarizer {
     if (this.consolidateFn) {
       try {
         const existing = await this.manager.getAll();
-        const consolidationContext = this.buildConsolidationContext(extracted, existing);
+        const consolidationContext = await this.buildConsolidationContext(extracted, existing, agentId);
         const result = await this.consolidateFn(consolidationContext);
         await this.applyConsolidation(result, agentId, runId);
         return;
@@ -267,10 +268,11 @@ export class Summarizer {
     return parts.join('\n');
   }
 
-  private buildConsolidationContext(
+  private async buildConsolidationContext(
     candidates: ExtractedMemory[],
     existing: LongTermMemory[],
-  ): string {
+    agentId: string,
+  ): Promise<string> {
     const parts: string[] = [];
 
     // Capacity calculation
@@ -284,7 +286,34 @@ export class Summarizer {
     parts.push(`Tier: ${tier}`);
     parts.push('');
 
-    // Existing memories
+    // If the manager uses vector storage, find similar memories per candidate
+    const db = this.manager.getDB();
+    if (db instanceof VectorMemoryDB) {
+      parts.push('## Existing Memories (similar matches per candidate)');
+      parts.push('');
+      for (let i = 0; i < candidates.length; i++) {
+        const similar = await db.semanticSearch(candidates[i].content, agentId, 3);
+        if (similar.length > 0) {
+          parts.push(`Candidate ${i}: "${candidates[i].content}"`);
+          parts.push('Similar existing:');
+          for (const s of similar) {
+            parts.push(`  - [${s.id}] ${s.content}`);
+          }
+          parts.push('');
+        }
+      }
+
+      parts.push('## Candidates');
+      parts.push('');
+      for (let i = 0; i < candidates.length; i++) {
+        const c = candidates[i];
+        parts.push(`${i}: [${c.type}] ${c.content} (tags: ${c.tags.join(', ')})`);
+      }
+
+      return parts.join('\n');
+    }
+
+    // Fallback: list all existing memories (non-vector databases)
     if (existing.length > 0) {
       parts.push('## Existing Long-Term Memories');
       parts.push('');
