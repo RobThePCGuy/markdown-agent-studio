@@ -8,6 +8,8 @@ import { signalParentPlugin } from './signal-parent';
 import { webFetchPlugin } from './web-fetch';
 import { webSearchPlugin } from './web-search';
 import { memoryWritePlugin, memoryReadPlugin } from './memory-plugin';
+import { knowledgeQueryPlugin } from './knowledge-query';
+import { knowledgeContributePlugin } from './knowledge-contribute';
 
 export function createBuiltinRegistry(): ToolPluginRegistry {
   const registry = new ToolPluginRegistry();
@@ -21,6 +23,8 @@ export function createBuiltinRegistry(): ToolPluginRegistry {
   registry.register(webSearchPlugin);
   registry.register(memoryWritePlugin);
   registry.register(memoryReadPlugin);
+  registry.register(knowledgeQueryPlugin);
+  registry.register(knowledgeContributePlugin);
   return registry;
 }
 
@@ -35,4 +39,6 @@ export {
   webSearchPlugin,
   memoryWritePlugin,
   memoryReadPlugin,
+  knowledgeQueryPlugin,
+  knowledgeContributePlugin,
 };

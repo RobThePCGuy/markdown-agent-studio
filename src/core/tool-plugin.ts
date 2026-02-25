@@ -33,6 +33,10 @@ export interface ToolContext {
   preferredModel?: string;
   memoryStore?: Store<MemoryStoreState>;
   taskQueueStore?: Store<TaskQueueState>;
+  vectorStore?: {
+    semanticSearch: (query: string, agentId: string, limit?: number) => Promise<any[]>;
+    markShared: (id: string, shared: boolean) => Promise<void>;
+  };
 }
 
 export interface ToolPlugin {
