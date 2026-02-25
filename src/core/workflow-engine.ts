@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, WorkflowStep } from './workflow-parser';
+import type { WorkflowDefinition } from './workflow-parser';
 
 type StepRunner = (
   stepId: string,

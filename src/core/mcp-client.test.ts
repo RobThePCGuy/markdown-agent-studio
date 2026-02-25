@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { MCPClientManager, type MCPServerConfig } from './mcp-client';
+import { describe, it, expect } from 'vitest';
+import { MCPClientManager } from './mcp-client';
 
 describe('MCPClientManager', () => {
   it('can be instantiated', () => {

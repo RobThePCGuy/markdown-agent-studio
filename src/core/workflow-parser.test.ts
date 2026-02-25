@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseWorkflow, type WorkflowDefinition } from './workflow-parser';
+import { parseWorkflow } from './workflow-parser';
 
 const SAMPLE_WORKFLOW = `---
 name: Research Pipeline

@@ -25,9 +25,9 @@ export class EmbeddingEngine {
    */
   async embed(text: string): Promise<number[]> {
     const pipe = await this._getPipeline();
-    const output = await pipe(text, { pooling: 'mean', normalize: true });
+    const output = await pipe(text, { pooling: 'mean', normalize: true } as any);
     this._ready = true;
-    return Array.from(output.data as Float32Array).slice(0, EMBEDDING_DIM);
+    return Array.from((output as any).data as Float32Array).slice(0, EMBEDDING_DIM);
   }
 
   /**

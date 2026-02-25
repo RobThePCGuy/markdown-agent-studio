@@ -74,7 +74,7 @@ export class MCPClientManager {
   async callTool(
     serverName: string,
     toolName: string,
-    args: Record<string, unknown>
+    _args: Record<string, unknown>
   ): Promise<string> {
     const server = this.servers.get(serverName);
     if (!server || !server.connected) {

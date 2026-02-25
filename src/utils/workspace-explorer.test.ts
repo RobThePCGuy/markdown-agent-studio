@@ -5,10 +5,11 @@ import {
   type WorkspaceExplorerFile,
 } from './workspace-explorer';
 
-const allKinds = new Set<'agent' | 'memory' | 'artifact' | 'unknown'>([
+const allKinds = new Set<'agent' | 'memory' | 'artifact' | 'workflow' | 'unknown'>([
   'agent',
   'memory',
   'artifact',
+  'workflow',
   'unknown',
 ]);
 
@@ -30,7 +31,7 @@ describe('computeVisiblePaths', () => {
   });
 
   it('filters by selected kinds', () => {
-    const filters = new Set<'agent' | 'memory' | 'artifact' | 'unknown'>(['artifact', 'unknown']);
+    const filters = new Set<'agent' | 'memory' | 'artifact' | 'workflow' | 'unknown'>(['artifact', 'unknown']);
     const result = computeVisiblePaths(files, '', filters, 'name');
     expect(result).toEqual(['artifacts/report.md', 'unknown/readme.md']);
   });

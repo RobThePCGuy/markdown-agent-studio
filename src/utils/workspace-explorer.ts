@@ -2,14 +2,14 @@ export type ExplorerSortMode = 'name' | 'recent';
 
 export interface WorkspaceExplorerFile {
   path: string;
-  kind: 'agent' | 'memory' | 'artifact' | 'unknown';
+  kind: 'agent' | 'memory' | 'artifact' | 'workflow' | 'unknown';
   updatedAt: number;
 }
 
 export function computeVisiblePaths(
   files: Map<string, WorkspaceExplorerFile>,
   query: string,
-  kindFilters: Set<'agent' | 'memory' | 'artifact' | 'unknown'>,
+  kindFilters: Set<'agent' | 'memory' | 'artifact' | 'workflow' | 'unknown'>,
   sortMode: ExplorerSortMode,
 ): string[] {
   if (kindFilters.size === 0) {
