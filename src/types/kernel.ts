@@ -55,6 +55,8 @@ export interface KernelConfig {
   forceReflection?: boolean;
   /** Auto-write tool failures to working memory. */
   autoRecordFailures?: boolean;
+  /** Use vector-backed (LanceDB + embeddings) memory instead of JSON-based. */
+  useVectorMemory?: boolean;
 }
 
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
@@ -72,4 +74,5 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxNudges: 3,
   forceReflection: true,
   autoRecordFailures: true,
+  useVectorMemory: false,
 };

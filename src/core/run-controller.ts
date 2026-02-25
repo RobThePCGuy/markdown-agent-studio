@@ -28,6 +28,15 @@ class RunController {
   private kernel: Kernel | null = null;
   private autonomousRunner: AutonomousRunner | null = null;
   private memoryManager = new MemoryManager(createMemoryDB(vfsStore));
+
+  /** Re-create the memory DB (and manager) based on the current kernel config. */
+  private refreshMemoryManager(config: KernelConfig): void {
+    const db = createMemoryDB(vfsStore, {
+      useVectorStore: config.useVectorMemory ?? false,
+    });
+    this.memoryManager = new MemoryManager(db);
+  }
+
   private state: RunControllerState = {
     isRunning: false,
     isPaused: false,
@@ -98,6 +107,7 @@ class RunController {
     if (this.state.isRunning) return;
 
     const config = uiStore.getState().kernelConfig;
+    this.refreshMemoryManager(config);
     // Keep per-run session context isolated for correct summarization.
     sessionStore.getState().clearAll();
     const kernel = this.createKernel(config);
@@ -149,6 +159,7 @@ class RunController {
     if (this.state.isRunning) return;
 
     const config = uiStore.getState().kernelConfig;
+    this.refreshMemoryManager(config);
     // Ensure autonomous-cycle summarization only includes this autonomous run.
     sessionStore.getState().clearAll();
 

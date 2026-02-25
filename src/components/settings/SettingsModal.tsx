@@ -263,6 +263,22 @@ export default function SettingsModal() {
           </label>
 
           <label className={styles.label}>
+            <span className={styles.labelText}>Vector Memory (Semantic Search)</span>
+            <select
+              className={styles.select}
+              value={kernelConfig.useVectorMemory ? 'on' : 'off'}
+              onChange={(e) =>
+                uiStore.getState().setKernelConfig({
+                  useVectorMemory: e.target.value === 'on',
+                })
+              }
+            >
+              <option value="off">Off (JSON-based)</option>
+              <option value="on">On (LanceDB + Embeddings)</option>
+            </select>
+          </label>
+
+          <label className={styles.label}>
             <span className={styles.labelText}>Memory Token Budget</span>
             <input
               type="number"
