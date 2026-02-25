@@ -1,5 +1,6 @@
 import type { LongTermMemory, MemoryType } from '../types/memory';
 import type { MemoryDB } from './memory-db';
+import { VectorMemoryDB } from './vector-memory-db';
 
 let ltmCounter = 0;
 
@@ -49,6 +50,20 @@ export class MemoryManager {
     taskContext: string,
     maxEntries = 15,
   ): Promise<LongTermMemory[]> {
+    // Use semantic search if database supports it
+    if (this.db instanceof VectorMemoryDB) {
+      const results = await this.db.semanticSearch(taskContext, agentId, maxEntries);
+      // Update access tracking on retrieved results
+      const now = Date.now();
+      for (const mem of results) {
+        mem.accessCount = (mem.accessCount || 0) + 1;
+        mem.lastAccessedAt = now;
+        await this.db.put(mem);
+      }
+      return results;
+    }
+
+    // Fallback: keyword scoring for non-vector databases
     const all = await this.db.getAll();
 
     // Filter: agentId matches OR memory is global
