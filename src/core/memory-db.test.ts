@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InMemoryMemoryDB, VFSMemoryDB } from './memory-db';
+import { InMemoryMemoryDB, VFSMemoryDB, createMemoryDB } from './memory-db';
+import { VectorMemoryDB } from './vector-memory-db';
 import type { LongTermMemory } from '../types/memory';
 import type { VFSState } from '../stores/vfs-store';
 
@@ -204,5 +205,16 @@ describe('VFSMemoryDB', () => {
     const all = await db2.getAll();
     expect(all).toHaveLength(1);
     expect(all[0].content).toBe('survives');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createMemoryDB factory
+// ---------------------------------------------------------------------------
+
+describe('createMemoryDB factory', () => {
+  it('returns VectorMemoryDB when useVectorStore option is true', () => {
+    const db = createMemoryDB(undefined, { useVectorStore: true });
+    expect(db).toBeInstanceOf(VectorMemoryDB);
   });
 });

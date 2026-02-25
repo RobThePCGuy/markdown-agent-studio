@@ -1,5 +1,6 @@
 import type { LongTermMemory } from '../types/memory';
 import type { VFSState } from '../stores/vfs-store';
+import { VectorMemoryDB } from './vector-memory-db';
 
 type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
 
@@ -196,7 +197,17 @@ export class VFSMemoryDB implements MemoryDB {
 // Factory
 // ---------------------------------------------------------------------------
 
-export function createMemoryDB(vfs?: Store<VFSState>): MemoryDB {
+export interface MemoryDBOptions {
+  useVectorStore?: boolean;
+}
+
+export function createMemoryDB(
+  vfs?: Store<VFSState>,
+  options: MemoryDBOptions = {},
+): MemoryDB {
+  if (options.useVectorStore) {
+    return new VectorMemoryDB({ inMemory: true });
+  }
   if (vfs) {
     return new VFSMemoryDB(vfs);
   }
