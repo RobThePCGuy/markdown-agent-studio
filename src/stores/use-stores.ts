@@ -7,6 +7,7 @@ import { createSessionStore, type SessionStoreState } from './session-store';
 import { createProjectStore, type ProjectState } from './project-store';
 import { createMemoryStore, type MemoryStoreState } from './memory-store';
 import { createTaskQueueStore, type TaskQueueState } from './task-queue-store';
+import { createPubSubStore } from './pub-sub-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
@@ -19,6 +20,7 @@ export const sessionStore = createSessionStore();
 export const projectStore = createProjectStore();
 export const memoryStore = createMemoryStore();
 export const taskQueueStore = createTaskQueueStore();
+export const pubSubStore = createPubSubStore();
 export const diskSync = new DiskSync(vfsStore, projectStore, agentRegistry);
 
 // UI state store
