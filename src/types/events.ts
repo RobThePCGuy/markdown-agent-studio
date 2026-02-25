@@ -8,7 +8,18 @@ export type EventType =
   | 'warning'
   | 'error'
   | 'abort'
-  | 'complete';
+  | 'complete'
+  | 'mcp_connect'
+  | 'mcp_disconnect'
+  | 'mcp_tool_call'
+  | 'channel_publish'
+  | 'channel_subscribe'
+  | 'blackboard_write'
+  | 'blackboard_read'
+  | 'delegate'
+  | 'workflow_start'
+  | 'workflow_step'
+  | 'workflow_complete';
 
 export interface EventLogEntry {
   id: string;

@@ -2,6 +2,7 @@ import type { FileKind } from '../types';
 
 export function deriveKind(path: string): FileKind {
   if (path.startsWith('agents/')) return 'agent';
+  if (path.startsWith('workflows/') && path.endsWith('.md')) return 'workflow';
   if (path.startsWith('memory/')) return 'memory';
   if (path.startsWith('artifacts/')) return 'artifact';
   return 'unknown';

@@ -1,4 +1,4 @@
-export type FileKind = 'agent' | 'memory' | 'artifact' | 'unknown';
+export type FileKind = 'agent' | 'memory' | 'artifact' | 'workflow' | 'unknown';
 
 export interface FileVersion {
   timestamp: number;
