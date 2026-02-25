@@ -10,6 +10,9 @@ import { webSearchPlugin } from './web-search';
 import { memoryWritePlugin, memoryReadPlugin } from './memory-plugin';
 import { knowledgeQueryPlugin } from './knowledge-query';
 import { knowledgeContributePlugin } from './knowledge-contribute';
+import { publishPlugin, subscribePlugin } from './pub-sub-plugin';
+import { blackboardWritePlugin, blackboardReadPlugin } from './blackboard-plugin';
+import { delegatePlugin } from './delegate-plugin';
 
 export function createBuiltinRegistry(): ToolPluginRegistry {
   const registry = new ToolPluginRegistry();
@@ -25,6 +28,11 @@ export function createBuiltinRegistry(): ToolPluginRegistry {
   registry.register(memoryReadPlugin);
   registry.register(knowledgeQueryPlugin);
   registry.register(knowledgeContributePlugin);
+  registry.register(publishPlugin);
+  registry.register(subscribePlugin);
+  registry.register(blackboardWritePlugin);
+  registry.register(blackboardReadPlugin);
+  registry.register(delegatePlugin);
   return registry;
 }
 
@@ -41,4 +49,9 @@ export {
   memoryReadPlugin,
   knowledgeQueryPlugin,
   knowledgeContributePlugin,
+  publishPlugin,
+  subscribePlugin,
+  blackboardWritePlugin,
+  blackboardReadPlugin,
+  delegatePlugin,
 };
