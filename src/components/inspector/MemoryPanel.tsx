@@ -3,6 +3,7 @@ import { useMemoryStore, vfsStore } from '../../stores/use-stores';
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
 import type { LongTermMemory } from '../../types/memory';
+import SharedKnowledgePanel from './SharedKnowledgePanel';
 import styles from './MemoryPanel.module.css';
 
 const typeColors: Record<string, string> = {
@@ -18,7 +19,7 @@ export function MemoryPanel() {
   const workingEntries = useMemoryStore((s) => s.entries);
   const runId = useMemoryStore((s) => s.runId);
   const [longTermMemories, setLongTermMemories] = useState<LongTermMemory[]>([]);
-  const [activeView, setActiveView] = useState<'working' | 'longterm'>('working');
+  const [activeView, setActiveView] = useState<'working' | 'longterm' | 'shared'>('working');
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   useEffect(() => {
@@ -43,6 +44,12 @@ export function MemoryPanel() {
           className={`${styles.tab}${activeView === 'longterm' ? ` ${styles.active}` : ''}`}
         >
           Long-Term ({longTermMemories.length})
+        </button>
+        <button
+          onClick={() => setActiveView('shared')}
+          className={`${styles.tab}${activeView === 'shared' ? ` ${styles.active}` : ''}`}
+        >
+          Shared
         </button>
         {activeView === 'longterm' && (
           <button
@@ -113,6 +120,10 @@ export function MemoryPanel() {
               </div>
             ))}
           </>
+        )}
+
+        {activeView === 'shared' && (
+          <SharedKnowledgePanel />
         )}
       </div>
     </div>
