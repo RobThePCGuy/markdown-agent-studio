@@ -8,11 +8,13 @@ import { ToolHandler } from './tool-handler';
 import { ToolPluginRegistry } from './tool-plugin';
 import { createBuiltinRegistry } from './plugins';
 import { createCustomToolPlugin } from './plugins/custom-tool-plugin';
+import { createMCPBridgePlugins } from './plugins/mcp-bridge-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { MemoryManager } from './memory-manager';
+import type { MCPClientManager } from './mcp-client';
 
 const WORKSPACE_PREAMBLE =
   'You are an agent in a multi-agent workspace with access to a virtual filesystem and shared memory.\n' +
@@ -84,6 +86,7 @@ interface KernelDeps {
   memoryManager?: MemoryManager;
   toolRegistry?: ToolPluginRegistry;
   taskQueueStore?: Store<TaskQueueState>;
+  mcpManager?: MCPClientManager;
   apiKey?: string;
   onSessionUpdate?: (session: AgentSession) => void;
   onStreamChunk?: (agentId: string, chunk: StreamChunk) => void;
@@ -295,11 +298,25 @@ export class Kernel {
       return;
     }
 
-    // Build per-agent tool list (built-in + custom)
+    // Build per-agent tool list (built-in + custom + MCP)
     let sessionRegistry = this.deps.toolRegistry!;
     if (profile.customTools && profile.customTools.length > 0) {
       const customPlugins = profile.customTools.map(createCustomToolPlugin);
       sessionRegistry = this.deps.toolRegistry!.cloneWith(customPlugins);
+    }
+
+    if (profile.mcpServers && this.deps.mcpManager) {
+      for (const serverConfig of profile.mcpServers) {
+        await this.deps.mcpManager.connect(serverConfig);
+      }
+      const mcpTools = this.deps.mcpManager.getTools();
+      const bridgePlugins = createMCPBridgePlugins(
+        mcpTools,
+        (server, tool, args) => this.deps.mcpManager!.callTool(server, tool, args)
+      );
+      if (bridgePlugins.length > 0) {
+        sessionRegistry = sessionRegistry.cloneWith(bridgePlugins);
+      }
     }
 
     const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
@@ -620,11 +637,25 @@ export class Kernel {
       return 'Error: Agent profile not found.';
     }
 
-    // Build per-agent tool list (built-in + custom)
+    // Build per-agent tool list (built-in + custom + MCP)
     let sessionRegistry = this.deps.toolRegistry!;
     if (profile.customTools && profile.customTools.length > 0) {
       const customPlugins = profile.customTools.map(createCustomToolPlugin);
       sessionRegistry = this.deps.toolRegistry!.cloneWith(customPlugins);
+    }
+
+    if (profile.mcpServers && this.deps.mcpManager) {
+      for (const serverConfig of profile.mcpServers) {
+        await this.deps.mcpManager.connect(serverConfig);
+      }
+      const mcpTools = this.deps.mcpManager.getTools();
+      const bridgePlugins = createMCPBridgePlugins(
+        mcpTools,
+        (server, tool, args) => this.deps.mcpManager!.callTool(server, tool, args)
+      );
+      if (bridgePlugins.length > 0) {
+        sessionRegistry = sessionRegistry.cloneWith(bridgePlugins);
+      }
     }
 
     const policyResolution = resolvePolicyForInput(profile.policy, activation.input);

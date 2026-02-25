@@ -8,6 +8,7 @@ import type {
   CustomToolDef,
 } from '../types';
 import { computeHash } from './vfs-helpers';
+import { MCPClientManager } from '../core/mcp-client';
 
 const MODE_ALIASES: Record<string, AgentExecutionMode> = {
   safe: 'safe',
@@ -409,6 +410,10 @@ export function parseAgentFile(path: string, content: string): AgentProfile {
     const parsed = matter(content);
     const fm = parsed.data as Record<string, unknown>;
 
+    const mcpServers = fm.mcp_servers
+      ? MCPClientManager.parseServerConfigs(fm.mcp_servers as unknown[])
+      : undefined;
+
     return {
       id: typeof fm.id === 'string' ? fm.id : path,
       path,
@@ -420,6 +425,7 @@ export function parseAgentFile(path: string, content: string): AgentProfile {
       policy: parseAgentPolicy(fm),
       customTools: parseCustomTools(fm.tools),
       autonomousConfig: parseAutonomousConfig(fm),
+      mcpServers: mcpServers && mcpServers.length > 0 ? mcpServers : undefined,
     };
   } catch {
     return {

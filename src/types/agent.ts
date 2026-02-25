@@ -1,3 +1,5 @@
+import type { MCPServerConfig } from '../core/mcp-client';
+
 export interface CustomToolDef {
   name: string;
   description: string;
@@ -46,4 +48,5 @@ export interface AgentProfile {
   policy: AgentPolicy;
   customTools?: CustomToolDef[];
   autonomousConfig?: AutonomousConfig;
+  mcpServers?: MCPServerConfig[];
 }

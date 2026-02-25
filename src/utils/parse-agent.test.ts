@@ -229,3 +229,33 @@ Do work.`;
     expect(profile.autonomousConfig?.maxCycles).toBe(7);
   });
 });
+
+describe('parseMCPServers', () => {
+  it('parses mcp_servers from frontmatter', () => {
+    const md = `---
+name: Test Agent
+mcp_servers:
+  - name: vault
+    transport: http
+    url: http://localhost:3000
+  - name: db
+    transport: stdio
+    command: npx my-db-server
+---
+System prompt here`;
+
+    const profile = parseAgentFile('agents/test.md', md);
+    expect(profile.mcpServers).toHaveLength(2);
+    expect(profile.mcpServers![0].name).toBe('vault');
+    expect(profile.mcpServers![1].transport).toBe('stdio');
+  });
+
+  it('returns undefined when no mcp_servers', () => {
+    const md = `---
+name: Basic Agent
+---
+Prompt`;
+    const profile = parseAgentFile('agents/basic.md', md);
+    expect(profile.mcpServers).toBeUndefined();
+  });
+});
