@@ -37,6 +37,8 @@ export interface ToolContext {
     semanticSearch: (query: string, agentId: string, limit?: number) => Promise<any[]>;
     markShared: (id: string, shared: boolean) => Promise<void>;
   };
+  pubSubStore?: any; // Store<PubSubState> - imported type would create circular dep
+  blackboard?: Map<string, unknown>;
 }
 
 export interface ToolPlugin {
