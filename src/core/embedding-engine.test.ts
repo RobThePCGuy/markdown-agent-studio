@@ -132,7 +132,9 @@ describe('EmbeddingEngine (mocked)', () => {
 // Set EMBEDDING_INTEGRATION=1 env var to enable.
 // ---------------------------------------------------------------------------
 
-const INTEGRATION = (globalThis as any).process?.env?.EMBEDDING_INTEGRATION === '1';
+const INTEGRATION = (globalThis as Record<string, unknown>).process
+  ? ((globalThis as Record<string, unknown>).process as { env?: Record<string, string> }).env?.EMBEDDING_INTEGRATION === '1'
+  : false;
 
 describe.skipIf(!INTEGRATION)('EmbeddingEngine (integration - real model)', () => {
   let engine: EmbeddingEngineType;

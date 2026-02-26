@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createMCPBridgePlugins } from './mcp-bridge-plugin';
 import type { MCPTool } from '../mcp-client';
+import type { ToolContext } from '../tool-plugin';
 
 describe('createMCPBridgePlugins', () => {
   it('creates a ToolPlugin for each MCP tool', () => {
@@ -23,7 +24,7 @@ describe('createMCPBridgePlugins', () => {
     const callTool = vi.fn().mockResolvedValue('result from mcp');
     const plugins = createMCPBridgePlugins(tools, callTool);
 
-    const ctx = {} as any;
+    const ctx = {} as unknown as ToolContext;
     const result = await plugins[0].handler({ q: 'test' }, ctx);
 
     expect(callTool).toHaveBeenCalledWith('vault', 'query', { q: 'test' });

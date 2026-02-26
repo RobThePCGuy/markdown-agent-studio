@@ -35,7 +35,7 @@ export interface ToolContext {
   memoryStore?: Store<MemoryStoreState>;
   taskQueueStore?: Store<TaskQueueState>;
   vectorStore?: {
-    semanticSearch: (query: string, agentId: string, limit?: number) => Promise<any[]>;
+    semanticSearch: (query: string, agentId: string, limit?: number) => Promise<{ type: string; content: string; tags: string[]; agentId: string }[]>;
     markShared: (id: string, shared: boolean) => Promise<void>;
   };
   pubSubStore?: Store<PubSubState>;

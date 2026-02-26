@@ -26,7 +26,7 @@ export function parseWorkflow(path: string, markdown: string): WorkflowDefinitio
   const trigger = fm.trigger === 'auto' ? 'auto' : 'manual';
 
   const rawSteps = Array.isArray(fm.steps) ? fm.steps : [];
-  const steps: WorkflowStep[] = rawSteps.map((s: any) => ({
+  const steps: WorkflowStep[] = rawSteps.map((s: Record<string, unknown>) => ({
     id: String(s.id || ''),
     agent: String(s.agent || ''),
     prompt: String(s.prompt || ''),

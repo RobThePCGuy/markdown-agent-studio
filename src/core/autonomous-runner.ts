@@ -1,7 +1,7 @@
 import { Kernel } from './kernel';
-import { GeminiProvider } from './gemini-provider';
 import { ScriptedAIProvider } from './scripted-provider';
 import { DEMO_SCRIPT } from './demo-script';
+import { createProvider } from './provider-factory';
 import { createBuiltinRegistry } from './plugins';
 import { taskQueueReadPlugin } from './plugins/task-queue-read';
 import { taskQueueWritePlugin } from './plugins/task-queue-write';
@@ -22,6 +22,7 @@ import type { SessionStoreState } from '../stores/session-store';
 import type { MemoryStoreState } from '../stores/memory-store';
 import { MCPClientManager, type MCPServerConfig } from './mcp-client';
 import { computeHash } from '../utils/vfs-helpers';
+import type { ProviderType } from '../stores/use-stores';
 
 type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
 
@@ -46,6 +47,7 @@ export interface AutonomousRunnerDeps {
   sessionStore: Store<SessionStoreState>;
   memoryStore: Store<MemoryStoreState>;
   apiKey: string;
+  providerType: ProviderType;
   globalMcpServers?: MCPServerConfig[];
 }
 
@@ -357,7 +359,7 @@ export class AutonomousRunner {
     const { apiKey } = this.deps;
 
     const provider = hasUsableApiKey(apiKey)
-      ? new GeminiProvider(apiKey)
+      ? createProvider(this.deps.providerType, apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
 
     // Clone builtin registry and add task queue tools

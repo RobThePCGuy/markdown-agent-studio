@@ -79,6 +79,7 @@
     }
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@dagrejs/dagre": "^2.0.4",
     "@google/generative-ai": "^0.24.1",
     "@lancedb/lancedb": "^0.26.2",
@@ -89,6 +90,7 @@
     "allotment": "^1.20.5",
     "buffer": "^6.0.3",
     "gray-matter": "^4.0.3",
+    "openai": "^6.25.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",

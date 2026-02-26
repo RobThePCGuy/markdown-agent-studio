@@ -133,8 +133,8 @@ export class WorkflowEngine {
 function resolveTemplate(template: string, context: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\.(\w+)\}/g, (match, stepId, key) => {
     const stepOutput = context[stepId];
-    if (stepOutput && typeof stepOutput === 'object' && key in (stepOutput as any)) {
-      return String((stepOutput as any)[key]);
+    if (stepOutput && typeof stepOutput === 'object' && key in (stepOutput as Record<string, unknown>)) {
+      return String((stepOutput as Record<string, unknown>)[key]);
     }
     return match;
   }).replace(/\{(\w+)\}/g, (match, key) => {

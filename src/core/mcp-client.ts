@@ -208,7 +208,7 @@ export class MCPClientManager {
    */
   static async createWithGlobalServers(
     globalServers: MCPServerConfig[],
-    eventLog: { getState(): { append(entry: Record<string, unknown>): void } },
+    eventLog: { getState(): { append(entry: { type: string; agentId: string; activationId: string; data: Record<string, unknown> }): void } },
   ): Promise<MCPClientManager> {
     const manager = new MCPClientManager();
     if (globalServers.length === 0) return manager;

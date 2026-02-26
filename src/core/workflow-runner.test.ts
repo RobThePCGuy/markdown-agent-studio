@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createStepRunner } from './workflow-runner';
 import { WorkflowEngine } from './workflow-engine';
 import type { WorkflowDefinition } from './workflow-parser';
+import type { WorkflowRunnerDeps } from './workflow-runner';
 
 function createMockDeps() {
   const appendFn = vi.fn();
@@ -25,7 +26,7 @@ describe('createStepRunner', () => {
   });
 
   it('calls kernel.runSessionAndReturn with correct activation shape', async () => {
-    const runner = createStepRunner(deps as any);
+    const runner = createStepRunner(deps as unknown as WorkflowRunnerDeps);
     await runner('step-1', 'Do something', 'agents/writer.md', {});
 
     expect(deps.kernel.runSessionAndReturn).toHaveBeenCalledWith({
@@ -37,7 +38,7 @@ describe('createStepRunner', () => {
   });
 
   it('emits workflow_step events (running + completed)', async () => {
-    const runner = createStepRunner(deps as any);
+    const runner = createStepRunner(deps as unknown as WorkflowRunnerDeps);
     await runner('step-1', 'Do something', 'agents/writer.md', {});
 
     expect(deps._appendFn).toHaveBeenCalledTimes(2);
@@ -57,7 +58,7 @@ describe('createStepRunner', () => {
   it('propagates kernel errors', async () => {
     deps.kernel.runSessionAndReturn.mockRejectedValue(new Error('kernel boom'));
 
-    const runner = createStepRunner(deps as any);
+    const runner = createStepRunner(deps as unknown as WorkflowRunnerDeps);
     await expect(
       runner('step-1', 'Do something', 'agents/writer.md', {}),
     ).rejects.toThrow('kernel boom');
@@ -65,7 +66,7 @@ describe('createStepRunner', () => {
 
   it('returns result and text in output', async () => {
     deps.kernel.runSessionAndReturn.mockResolvedValue('analysis output');
-    const runner = createStepRunner(deps as any);
+    const runner = createStepRunner(deps as unknown as WorkflowRunnerDeps);
     const output = await runner('step-1', 'Analyze', 'agents/analyst.md', {});
 
     expect(output).toEqual({
@@ -86,10 +87,10 @@ describe('WorkflowEngine + StepRunner integration', () => {
     };
 
     const stepRunner = createStepRunner({
-      kernel: mockKernel as any,
+      kernel: mockKernel,
       eventLog: { getState: () => ({ append: appendFn }) },
       workflowPath: 'workflows/chain.md',
-    } as any);
+    } as unknown as WorkflowRunnerDeps);
 
     const engine = new WorkflowEngine({ runStep: stepRunner });
 
@@ -127,10 +128,10 @@ describe('WorkflowEngine + StepRunner integration', () => {
     };
 
     const stepRunner = createStepRunner({
-      kernel: mockKernel as any,
+      kernel: mockKernel,
       eventLog: { getState: () => ({ append: vi.fn() }) },
       workflowPath: 'workflows/abort.md',
-    } as any);
+    } as unknown as WorkflowRunnerDeps);
 
     const engine = new WorkflowEngine({ runStep: stepRunner });
 
@@ -161,10 +162,10 @@ describe('WorkflowEngine + StepRunner integration', () => {
     };
 
     const stepRunner = createStepRunner({
-      kernel: mockKernel as any,
+      kernel: mockKernel,
       eventLog: { getState: () => ({ append: vi.fn() }) },
       workflowPath: 'workflows/template.md',
-    } as any);
+    } as unknown as WorkflowRunnerDeps);
 
     const engine = new WorkflowEngine({ runStep: stepRunner });
 

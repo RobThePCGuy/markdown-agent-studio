@@ -20,7 +20,7 @@ export function useKernel() {
 
   const runWorkflow = useCallback(async (
     workflowPath: string,
-    variables?: Record<string, unknown>,
+    variables?: Record<string, string>,
   ) => {
     await runController.runWorkflow(workflowPath, variables);
   }, []);
@@ -43,10 +43,6 @@ export function useKernel() {
 
   const killAll = useCallback(() => {
     runController.killAll();
-  }, []);
-
-  const runWorkflow = useCallback(async (workflowPath: string, variables?: Record<string, string>) => {
-    await runController.runWorkflow(workflowPath, variables);
   }, []);
 
   return {

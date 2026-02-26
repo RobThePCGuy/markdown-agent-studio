@@ -1,7 +1,7 @@
 import { Kernel } from './kernel';
-import { GeminiProvider } from './gemini-provider';
 import { ScriptedAIProvider } from './scripted-provider';
 import { DEMO_SCRIPT } from './demo-script';
+import { createProvider } from './provider-factory';
 import { agentRegistry, eventLogStore, sessionStore, uiStore, vfsStore, memoryStore, taskQueueStore } from '../stores/use-stores';
 import type { KernelConfig } from '../types';
 import type { EventLogEntry } from '../types/events';
@@ -14,7 +14,6 @@ import { MCPClientManager } from './mcp-client';
 import { WorkflowEngine } from './workflow-engine';
 import { parseWorkflow } from './workflow-parser';
 import { extractWorkflowVariables } from './workflow-variables';
-import { createStepRunner } from './workflow-runner';
 
 export interface RunControllerState {
   isRunning: boolean;
@@ -90,9 +89,9 @@ class RunController {
   }
 
   private async createKernel(config: KernelConfig): Promise<Kernel> {
-    const apiKey = uiStore.getState().apiKey;
+    const { apiKey, provider: providerType } = uiStore.getState();
     const provider = this.hasUsableApiKey(apiKey)
-      ? new GeminiProvider(apiKey)
+      ? createProvider(providerType, apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
 
     // Pre-connect global MCP servers (skips stdio with warning)
@@ -226,6 +225,7 @@ class RunController {
         sessionStore,
         memoryStore,
         apiKey: uiStore.getState().apiKey,
+        providerType: uiStore.getState().provider,
         globalMcpServers: uiStore.getState().globalMcpServers,
       },
     );

@@ -55,6 +55,17 @@ export class GeminiProvider implements AIProvider {
         // response with thought signatures) and append function responses.
         contents = [...this.sessionContents.get(config.sessionId)!];
 
+        // Determine which function names the model called in its last Content
+        const lastContent = contents[contents.length - 1];
+        const calledNames = new Set<string>();
+        if (lastContent?.role === 'model') {
+          for (const part of lastContent.parts ?? []) {
+            if (part.functionCall) {
+              calledNames.add(part.functionCall.name);
+            }
+          }
+        }
+
         // Extract trailing tool messages from kernel history
         const toolMsgs: Message[] = [];
         for (let i = history.length - 1; i >= 0; i--) {
@@ -62,11 +73,14 @@ export class GeminiProvider implements AIProvider {
           else break;
         }
 
+        // Only include tool results whose names match the model's function calls
+        const matchedToolMsgs = toolMsgs.filter(t => calledNames.has(t.toolCall!.name));
+
         // Append as a single "function" role Content (matches SDK convention)
-        if (toolMsgs.length > 0) {
+        if (matchedToolMsgs.length > 0) {
           contents.push({
             role: 'function',
-            parts: toolMsgs.map(t => ({
+            parts: matchedToolMsgs.map(t => ({
               functionResponse: {
                 name: t.toolCall!.name,
                 response: { result: t.content },

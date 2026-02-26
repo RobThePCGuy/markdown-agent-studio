@@ -17,7 +17,7 @@ describe('PubSubStore', () => {
     store.getState().publish('findings', { text: 'found something' }, 'agent-a');
     const messages = store.getState().getMessages('findings');
     expect(messages).toHaveLength(1);
-    expect((messages[0].data as any).text).toBe('found something');
+    expect((messages[0].data as Record<string, unknown>).text).toBe('found something');
     expect(messages[0].authorAgentId).toBe('agent-a');
   });
 

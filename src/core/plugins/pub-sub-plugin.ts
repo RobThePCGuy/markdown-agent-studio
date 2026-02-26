@@ -40,7 +40,7 @@ export const subscribePlugin: ToolPlugin = {
       if (pending.length === 0) return `Subscribed to "${channel}". No pending messages.`;
       state.ack(channel, ctx.currentAgentId);
       return `Subscribed to "${channel}". Pending messages:\n` +
-        pending.map((m: any) => `- [${m.authorAgentId}]: ${String(m.data)}`).join('\n');
+        pending.map((m: { authorAgentId: string; data: unknown }) => `- [${m.authorAgentId}]: ${String(m.data)}`).join('\n');
     }
 
     return `Subscribed to channel "${channel}".`;

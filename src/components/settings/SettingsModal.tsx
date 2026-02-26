@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } from '../../stores/use-stores';
+import type { ProviderType } from '../../stores/use-stores';
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
 import { loadSampleProject } from '../../core/sample-project';
+import { useProviderModels } from '../../hooks/useProviderModels';
 import type { MCPServerConfig } from '../../core/mcp-client';
 import styles from './SettingsModal.module.css';
 
@@ -13,8 +15,11 @@ import styles from './SettingsModal.module.css';
 
 export default function SettingsModal() {
   const open = useUI((s) => s.settingsOpen);
-  const apiKey = useUI((s) => s.apiKey);
+  const provider = useUI((s) => s.provider);
+  const providerApiKeys = useUI(useShallow((s) => s.providerApiKeys));
+  const currentApiKey = providerApiKeys[provider] ?? '';
   const kernelConfig = useUI(useShallow((s) => s.kernelConfig));
+  const { models: availableModels, loading: modelsLoading } = useProviderModels(provider, currentApiKey);
 
   const globalMcpServers = useUI(useShallow((s) => s.globalMcpServers));
 
@@ -110,13 +115,26 @@ export default function SettingsModal() {
           <h3 className={styles.sectionTitle}>API Configuration</h3>
 
           <label className={styles.label}>
+            <span className={styles.labelText}>Provider</span>
+            <select
+              value={provider}
+              onChange={(e) => uiStore.getState().setProvider(e.target.value as ProviderType)}
+              className={styles.select}
+            >
+              <option value="gemini">Gemini</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+            </select>
+          </label>
+
+          <label className={styles.label}>
             <span className={styles.labelText}>API Key</span>
             <div className={styles.inputRow}>
               <input
                 type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => uiStore.getState().setApiKey(e.target.value)}
-                placeholder="Enter your Gemini API key"
+                value={currentApiKey}
+                onChange={(e) => uiStore.getState().setProviderApiKey(provider, e.target.value)}
+                placeholder={`Enter your ${provider === 'gemini' ? 'Gemini' : provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key`}
                 className={`${styles.input} ${styles.flexGrow}`}
               />
               <button
@@ -129,18 +147,16 @@ export default function SettingsModal() {
           </label>
 
           <label className={styles.label}>
-            <span className={styles.labelText}>Model</span>
+            <span className={styles.labelText}>Model{modelsLoading ? ' (loading...)' : ''}</span>
             <select
               value={model}
               onChange={(e) => uiStore.getState().setKernelConfig({ model: e.target.value })}
               className={styles.select}
             >
               <option value="" disabled>Select a model</option>
-              <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-              <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-              <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+              {availableModels.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
           </label>
         </div>

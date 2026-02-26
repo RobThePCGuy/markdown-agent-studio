@@ -35,7 +35,7 @@ export const knowledgeQueryPlugin: ToolPlugin = {
 
     return results
       .map(
-        (r: any, i: number) =>
+        (r: { type: string; content: string; tags: string[]; agentId: string }, i: number) =>
           `${i + 1}. [${r.type}] ${r.content}\n   Tags: ${r.tags.join(', ')} | From: ${r.agentId}`,
       )
       .join('\n---\n');

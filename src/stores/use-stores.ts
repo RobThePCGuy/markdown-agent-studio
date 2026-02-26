@@ -24,6 +24,9 @@ export const taskQueueStore = createTaskQueueStore();
 export const pubSubStore = createPubSubStore();
 export const diskSync = new DiskSync(vfsStore, projectStore, agentRegistry);
 
+// AI provider type
+export type ProviderType = 'gemini' | 'anthropic' | 'openai';
+
 // UI state store
 export interface UIState {
   selectedAgentId: string | null;
@@ -31,6 +34,8 @@ export interface UIState {
   activeTab: 'graph' | 'editor';
   kernelConfig: KernelConfig;
   apiKey: string;
+  provider: ProviderType;
+  providerApiKeys: Record<string, string>;
   editingFilePath: string | null;
   editorDirty: boolean;
   settingsOpen: boolean;
@@ -47,6 +52,8 @@ export interface UIState {
   setActiveTab: (tab: 'graph' | 'editor') => void;
   setKernelConfig: (config: Partial<KernelConfig>) => void;
   setApiKey: (key: string) => void;
+  setProvider: (provider: ProviderType) => void;
+  setProviderApiKey: (provider: string, key: string) => void;
   setEditingFile: (path: string | null) => void;
   setEditorDirty: (dirty: boolean) => void;
   openFileInEditor: (path: string) => void;
@@ -63,6 +70,21 @@ export interface UIState {
 const persistedApiKey = (() => {
   try { return localStorage.getItem('mas-api-key') ?? import.meta.env.VITE_GEMINI_API_KEY ?? ''; }
   catch { return import.meta.env.VITE_GEMINI_API_KEY ?? ''; }
+})();
+
+const persistedProvider = (() => {
+  try { return (localStorage.getItem('mas-provider') as ProviderType) ?? 'gemini'; }
+  catch { return 'gemini' as ProviderType; }
+})();
+
+const persistedProviderApiKeys: Record<string, string> = (() => {
+  try {
+    const raw = localStorage.getItem('mas-provider-api-keys');
+    const keys: Record<string, string> = raw ? JSON.parse(raw) : {};
+    // Migrate existing apiKey to gemini slot if not already present
+    if (!keys.gemini && persistedApiKey) keys.gemini = persistedApiKey;
+    return keys;
+  } catch { return persistedApiKey ? { gemini: persistedApiKey } : {}; }
 })();
 
 const persistedConfig = (() => {
@@ -90,6 +112,8 @@ export const uiStore = createStore<UIState>((set) => ({
   activeTab: 'graph',
   kernelConfig: persistedConfig,
   apiKey: persistedApiKey,
+  provider: persistedProvider,
+  providerApiKeys: persistedProviderApiKeys,
   editingFilePath: null,
   editorDirty: false,
   settingsOpen: false,
@@ -108,6 +132,27 @@ export const uiStore = createStore<UIState>((set) => ({
   setApiKey: (key) => {
     try { localStorage.setItem('mas-api-key', key); } catch { /* localStorage may be unavailable */ }
     set({ apiKey: key });
+  },
+  setProvider: (provider) => {
+    try { localStorage.setItem('mas-provider', provider); } catch { /* localStorage may be unavailable */ }
+    // Sync apiKey to the selected provider's key for backwards compatibility
+    set((s) => {
+      const key = s.providerApiKeys[provider] ?? '';
+      try { localStorage.setItem('mas-api-key', key); } catch { /* */ }
+      return { provider, apiKey: key };
+    });
+  },
+  setProviderApiKey: (provider, key) => {
+    set((s) => {
+      const next = { ...s.providerApiKeys, [provider]: key };
+      try { localStorage.setItem('mas-provider-api-keys', JSON.stringify(next)); } catch { /* */ }
+      // If updating the active provider, also sync apiKey
+      if (provider === s.provider) {
+        try { localStorage.setItem('mas-api-key', key); } catch { /* */ }
+        return { providerApiKeys: next, apiKey: key };
+      }
+      return { providerApiKeys: next };
+    });
   },
   setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
   setEditorDirty: (dirty) => set({ editorDirty: dirty }),

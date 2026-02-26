@@ -21,8 +21,8 @@ function schemaToParams(schema: Record<string, unknown>): Record<string, ToolPar
   const params: Record<string, ToolParameter> = {};
   if (!schema || typeof schema !== 'object') return params;
 
-  const properties = (schema as any).properties ?? schema;
-  const required = new Set((schema as any).required ?? []);
+  const properties = (schema.properties as Record<string, unknown>) ?? schema;
+  const required = new Set((schema.required as string[]) ?? []);
 
   for (const [key, val] of Object.entries(properties)) {
     if (!val || typeof val !== 'object') continue;

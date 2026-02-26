@@ -10,6 +10,7 @@
   --accent-primary: #e0a650;
   --accent-primary-dim: rgba(224,166,80,0.15);
   --accent-secondary: #89b4fa;
+  --accent: var(--accent-primary);
 
   /* Status */
   --status-green: #a6e3a1;

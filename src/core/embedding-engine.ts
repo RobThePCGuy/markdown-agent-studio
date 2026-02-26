@@ -25,9 +25,10 @@ export class EmbeddingEngine {
    */
   async embed(text: string): Promise<number[]> {
     const pipe = await this._getPipeline();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Transformers.js pipeline types don't expose pooling/normalize options
     const output = await pipe(text, { pooling: 'mean', normalize: true } as any);
     this._ready = true;
-    return Array.from((output as any).data as Float32Array).slice(0, EMBEDDING_DIM);
+    return Array.from((output as { data: Float32Array }).data).slice(0, EMBEDDING_DIM);
   }
 
   /**
