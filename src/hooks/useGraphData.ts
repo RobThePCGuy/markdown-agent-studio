@@ -192,6 +192,37 @@ export function useGraphData() {
 
     dagre.layout(g);
 
+    // --- Detect active workflow and collect workflow-related agent paths ---
+    let activeWorkflowName: string | undefined;
+    const workflowAgentPaths = new Set<string>();
+
+    // Find the last workflow_start and check if there's a matching workflow_complete after it
+    const workflowStartEvents = entries.filter((e) => e.type === 'workflow_start');
+    const workflowCompleteEvents = entries.filter((e) => e.type === 'workflow_complete');
+
+    if (workflowStartEvents.length > 0) {
+      const lastStart = workflowStartEvents[workflowStartEvents.length - 1];
+      const lastStartPath = lastStart.data.workflowPath as string;
+      const matchingComplete = workflowCompleteEvents.find(
+        (e) => (e.data.workflowPath as string) === lastStartPath && e.timestamp > lastStart.timestamp,
+      );
+      if (!matchingComplete) {
+        // Workflow is active
+        activeWorkflowName = (lastStart.data.name as string) ?? lastStartPath;
+        // Collect agent paths from workflow_step events for this workflow
+        const stepEvents = entries.filter(
+          (e) =>
+            e.type === 'workflow_step' &&
+            (e.data.workflowPath as string) === lastStartPath &&
+            e.timestamp >= lastStart.timestamp,
+        );
+        for (const step of stepEvents) {
+          const agentPath = step.data.agentPath as string | undefined;
+          if (agentPath) workflowAgentPaths.add(agentPath);
+        }
+      }
+    }
+
     const agentNodes: Node<GraphNodeData>[] = agents
       .sort((a, b) => a.path.localeCompare(b.path))
       .map((agent) => {
@@ -223,18 +254,51 @@ export function useGraphData() {
         };
       });
 
-    const nodeIds = new Set(agentNodes.map((n) => n.id));
-    const basePositionByAgent = new Map(
-      agentNodes.map((n) => {
-        const dagreNode = g.node(n.id);
-        return [
-          n.id,
-          {
-            x: dagreNode ? dagreNode.x - 110 : 0,
-            y: dagreNode ? dagreNode.y - 60 : 0,
+    // --- Apply vertical offset for workflow agents ---
+    const workflowLabelNodes: Node[] = [];
+    if (activeWorkflowName && workflowAgentPaths.size > 0) {
+      // Compute maxAgentY from all non-workflow agent positions
+      let maxAgentY = 0;
+      for (const node of agentNodes) {
+        if (!workflowAgentPaths.has(node.id)) {
+          maxAgentY = Math.max(maxAgentY, node.position.y);
+        }
+      }
+
+      // Offset workflow agent nodes below manual agents
+      let firstWorkflowAgentX = Infinity;
+      for (const node of agentNodes) {
+        if (workflowAgentPaths.has(node.id)) {
+          node.position.y += maxAgentY + 200;
+          firstWorkflowAgentX = Math.min(firstWorkflowAgentX, node.position.x);
+        }
+      }
+
+      // Add a label node at the top of the workflow area
+      if (firstWorkflowAgentX !== Infinity) {
+        workflowLabelNodes.push({
+          id: 'workflow-label',
+          type: 'default',
+          draggable: false,
+          selectable: false,
+          position: { x: firstWorkflowAgentX, y: maxAgentY + 140 },
+          data: { label: `Workflow: ${activeWorkflowName}` },
+          style: {
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-dim)',
+            fontSize: '11px',
+            fontFamily: 'var(--font-body)',
+            width: 'auto',
           },
-        ];
-      }),
+        });
+      }
+    }
+
+    const nodeIds = new Set(agentNodes.map((n) => n.id));
+    // Use the (possibly offset) agent node positions so activity nodes follow workflow agents
+    const basePositionByAgent = new Map(
+      agentNodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
     );
 
     const edges: Edge<GraphEdgeData>[] = [];
@@ -392,6 +456,6 @@ export function useGraphData() {
       }
     }
 
-    return { nodes: [...agentNodes, ...activityNodes], edges };
+    return { nodes: [...agentNodes, ...workflowLabelNodes, ...activityNodes], edges };
   }, [agentsMap, entries, sessions, selectedAgentId, memoryEntries]);
 }

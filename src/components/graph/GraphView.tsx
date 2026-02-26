@@ -20,6 +20,7 @@ import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
 import { RunTimeline } from './RunTimeline';
 import { useOnboarding } from '../../hooks/useOnboarding';
+import { useKernel } from '../../hooks/useKernel';
 import styles from './GraphView.module.css';
 
 const nodeTypes: NodeTypes = {
@@ -32,6 +33,7 @@ function GraphViewInner() {
   const sessions = useSessionStore((s) => s.sessions);
   const events = useEventLog((s) => s.entries);
   const { showWelcome, dismissWelcome } = useOnboarding();
+  const { isWorkflow, workflowCompletedSteps, workflowStepCount, totalTokens } = useKernel();
   const [nodes, setNodes, onNodesChange] = useNodesState(derivedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(derivedEdges);
   const [searchQuery, setSearchQuery] = useState('');
@@ -173,6 +175,20 @@ function GraphViewInner() {
           <span className={styles.hudLabel}>errors</span>
           <span className={styles.hudValue}>{errorsCount}</span>
         </div>
+        {isWorkflow && (
+          <>
+            <div className={styles.hudGroup}>
+              <span className={styles.hudDot} style={{ background: 'var(--accent-primary)' }} />
+              <span className={styles.hudLabel}>workflow</span>
+              <span className={styles.hudValue}>Step {workflowCompletedSteps ?? 0}/{workflowStepCount ?? 0}</span>
+            </div>
+            <div className={styles.hudGroup}>
+              <span className={styles.hudDot} style={{ background: 'var(--accent-primary)' }} />
+              <span className={styles.hudLabel}>tokens</span>
+              <span className={styles.hudValue}>{Math.round((totalTokens ?? 0) / 1000)}K</span>
+            </div>
+          </>
+        )}
         <div className={styles.hudSearch}>
           <input
             type="text"

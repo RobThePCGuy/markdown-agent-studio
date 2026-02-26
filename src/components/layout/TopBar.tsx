@@ -17,7 +17,7 @@ export function TopBar() {
   useAudioEvents();
   const agentsMap = useAgentRegistry((s) => s.agents);
   const agents = useMemo(() => [...agentsMap.values()], [agentsMap]);
-  const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount, isAutonomous, currentCycle, maxCycles } = useKernel();
+  const { run, pause, resume, killAll, isRunning, isPaused, totalTokens, activeCount, queueCount, isAutonomous, currentCycle, maxCycles, isWorkflow, workflowCompletedSteps, workflowStepCount } = useKernel();
   const selectedAgentId = useUI((s) => s.selectedAgentId);
   const setSelectedAgent = useUI((s) => s.setSelectedAgent);
   const [kickoffPromptDraft, setKickoffPromptDraft] = useState<string | null>(null);
@@ -176,6 +176,7 @@ export function TopBar() {
       )}
 
       <span className={styles.stats}>
+        {isRunning && isWorkflow && `Step ${workflowCompletedSteps ?? 0}/${workflowStepCount ?? 0} | `}
         {isRunning && isAutonomous && `Cycle ${currentCycle}/${maxCycles} | `}
         {isRunning ? `${activeCount} active, ${queueCount} queued, ` : ''}
         {Math.round(totalTokens / 1000)}K tokens

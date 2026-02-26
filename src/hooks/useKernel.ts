@@ -38,8 +38,13 @@ export function useKernel() {
     runController.killAll();
   }, []);
 
+  const runWorkflow = useCallback(async (workflowPath: string, variables?: Record<string, string>) => {
+    await runController.runWorkflow(workflowPath, variables);
+  }, []);
+
   return {
     run,
+    runWorkflow,
     replayFromEvent,
     restoreFromEvent,
     pause,

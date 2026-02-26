@@ -1,15 +1,17 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { useVFS, useAgentRegistry, useUI, useSessionStore, vfsStore, agentRegistry } from '../../stores/use-stores';
+import { useVFS, useAgentRegistry, useUI, useSessionStore, vfsStore, agentRegistry, eventLogStore } from '../../stores/use-stores';
 import { duplicatePath, ensureUniquePath, nextSequentialPath } from '../../utils/path-naming';
 import { computeVisiblePaths, formatRelativeAge, type ExplorerSortMode } from '../../utils/workspace-explorer';
+import { runController } from '../../core/run-controller';
 import styles from './WorkspaceExplorer.module.css';
 
-type ExplorerKindFilter = 'agent' | 'artifact' | 'memory' | 'unknown';
+type ExplorerKindFilter = 'agent' | 'artifact' | 'memory' | 'workflow' | 'unknown';
 
 const KIND_FILTER_TOGGLES: Array<{ key: ExplorerKindFilter; label: string }> = [
   { key: 'agent', label: 'Agent' },
   { key: 'artifact', label: 'Artifact' },
   { key: 'memory', label: 'Memory' },
+  { key: 'workflow', label: 'Workflow' },
   { key: 'unknown', label: 'Other' },
 ];
 
@@ -34,6 +36,7 @@ export function WorkspaceExplorer() {
     agent: true,
     artifact: true,
     memory: true,
+    workflow: true,
     unknown: true,
   });
   const explorerFiles = useMemo(
@@ -135,6 +138,26 @@ export function WorkspaceExplorer() {
     openFileInEditor(path);
   }, [openFileInEditor, setSelectedFile]);
 
+  const createWorkflowFile = useCallback(() => {
+    const path = nextSequentialPath('workflows/untitled', '.md', vfsStore.getState().getAllPaths());
+    const content = [
+      '---',
+      'name: "Untitled Workflow"',
+      'description: ""',
+      'trigger: manual',
+      'steps:',
+      '  - id: step1',
+      '    agent: agents/your-agent.md',
+      '    prompt: "Your prompt here"',
+      '    depends_on: []',
+      '    outputs: [result]',
+      '---',
+    ].join('\n');
+    vfsStore.getState().write(path, content, {});
+    setSelectedFile(path);
+    openFileInEditor(path);
+  }, [openFileInEditor, setSelectedFile]);
+
   return (
     <div
       className={styles.container}
@@ -156,6 +179,13 @@ export function WorkspaceExplorer() {
           title="New note file"
         >
           +N
+        </button>
+        <button
+          onClick={createWorkflowFile}
+          className={styles.newFileBtn}
+          title="New workflow file"
+        >
+          +W
         </button>
       </div>
 
@@ -335,6 +365,39 @@ export function WorkspaceExplorer() {
           >
             Duplicate
           </button>
+          {contextMenu.path.startsWith('workflows/') && (
+            <button
+              className={styles.contextMenuItem}
+              onClick={() => {
+                runController.runWorkflow(contextMenu.path);
+                setContextMenu(null);
+              }}
+            >
+              Run Workflow
+            </button>
+          )}
+          {contextMenu.path.startsWith('workflows/') && (() => {
+            const entries = eventLogStore.getState().entries;
+            let hasFailedRun = false;
+            for (let i = entries.length - 1; i >= 0; i--) {
+              const e = entries[i];
+              if (e.type === 'workflow_complete' && e.data.workflowPath === contextMenu.path && e.data.status === 'failed') {
+                hasFailedRun = true;
+                break;
+              }
+            }
+            return hasFailedRun ? (
+              <button
+                className={styles.contextMenuItem}
+                onClick={() => {
+                  runController.resumeWorkflow(contextMenu.path);
+                  setContextMenu(null);
+                }}
+              >
+                Resume Workflow
+              </button>
+            ) : null;
+          })()}
           <button
             className={`${styles.contextMenuItem} ${styles.danger}`}
             onClick={() => {
