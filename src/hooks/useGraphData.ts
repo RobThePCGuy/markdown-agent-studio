@@ -35,8 +35,15 @@ export type GraphActivityNodeData = Record<string, unknown> & {
   recent: boolean;
 };
 
-type GraphNodeData = GraphAgentNodeData | GraphActivityNodeData;
-type GraphEdgeKind = 'spawn' | 'signal' | 'activity';
+export type GraphWorkflowStepNodeData = Record<string, unknown> & {
+  kind: 'workflowStep';
+  stepId: string;
+  agent: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+};
+
+type GraphNodeData = GraphAgentNodeData | GraphActivityNodeData | GraphWorkflowStepNodeData;
+type GraphEdgeKind = 'spawn' | 'signal' | 'activity' | 'workflowDep' | 'workflowAgent';
 
 export type GraphEdgeData = Record<string, unknown> & {
   kind: GraphEdgeKind;
@@ -192,37 +199,6 @@ export function useGraphData() {
 
     dagre.layout(g);
 
-    // --- Detect active workflow and collect workflow-related agent paths ---
-    let activeWorkflowName: string | undefined;
-    const workflowAgentPaths = new Set<string>();
-
-    // Find the last workflow_start and check if there's a matching workflow_complete after it
-    const workflowStartEvents = entries.filter((e) => e.type === 'workflow_start');
-    const workflowCompleteEvents = entries.filter((e) => e.type === 'workflow_complete');
-
-    if (workflowStartEvents.length > 0) {
-      const lastStart = workflowStartEvents[workflowStartEvents.length - 1];
-      const lastStartPath = lastStart.data.workflowPath as string;
-      const matchingComplete = workflowCompleteEvents.find(
-        (e) => (e.data.workflowPath as string) === lastStartPath && e.timestamp > lastStart.timestamp,
-      );
-      if (!matchingComplete) {
-        // Workflow is active
-        activeWorkflowName = (lastStart.data.name as string) ?? lastStartPath;
-        // Collect agent paths from workflow_step events for this workflow
-        const stepEvents = entries.filter(
-          (e) =>
-            e.type === 'workflow_step' &&
-            (e.data.workflowPath as string) === lastStartPath &&
-            e.timestamp >= lastStart.timestamp,
-        );
-        for (const step of stepEvents) {
-          const agentPath = step.data.agentPath as string | undefined;
-          if (agentPath) workflowAgentPaths.add(agentPath);
-        }
-      }
-    }
-
     const agentNodes: Node<GraphNodeData>[] = agents
       .sort((a, b) => a.path.localeCompare(b.path))
       .map((agent) => {
@@ -253,47 +229,6 @@ export function useGraphData() {
           },
         };
       });
-
-    // --- Apply vertical offset for workflow agents ---
-    const workflowLabelNodes: Node[] = [];
-    if (activeWorkflowName && workflowAgentPaths.size > 0) {
-      // Compute maxAgentY from all non-workflow agent positions
-      let maxAgentY = 0;
-      for (const node of agentNodes) {
-        if (!workflowAgentPaths.has(node.id)) {
-          maxAgentY = Math.max(maxAgentY, node.position.y);
-        }
-      }
-
-      // Offset workflow agent nodes below manual agents
-      let firstWorkflowAgentX = Infinity;
-      for (const node of agentNodes) {
-        if (workflowAgentPaths.has(node.id)) {
-          node.position.y += maxAgentY + 200;
-          firstWorkflowAgentX = Math.min(firstWorkflowAgentX, node.position.x);
-        }
-      }
-
-      // Add a label node at the top of the workflow area
-      if (firstWorkflowAgentX !== Infinity) {
-        workflowLabelNodes.push({
-          id: 'workflow-label',
-          type: 'default',
-          draggable: false,
-          selectable: false,
-          position: { x: firstWorkflowAgentX, y: maxAgentY + 140 },
-          data: { label: `Workflow: ${activeWorkflowName}` },
-          style: {
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-dim)',
-            fontSize: '11px',
-            fontFamily: 'var(--font-body)',
-            width: 'auto',
-          },
-        });
-      }
-    }
 
     const nodeIds = new Set(agentNodes.map((n) => n.id));
     // Use the (possibly offset) agent node positions so activity nodes follow workflow agents
@@ -456,6 +391,132 @@ export function useGraphData() {
       }
     }
 
-    return { nodes: [...agentNodes, ...workflowLabelNodes, ...activityNodes], edges };
+    // --- Workflow step nodes ---
+    const workflowStepNodes: Node<GraphNodeData>[] = [];
+
+    // Find the most recent active workflow (workflow_start without matching workflow_complete)
+    const workflowStarts = entries.filter((e) => e.type === 'workflow_start');
+    const workflowCompletes = new Set(
+      entries.filter((e) => e.type === 'workflow_complete').map((e) => e.data.workflowPath),
+    );
+
+    const activeWorkflow = workflowStarts
+      .filter((e) => !workflowCompletes.has(e.data.workflowPath as string))
+      .at(-1);
+
+    const activeWorkflowName = activeWorkflow
+      ? (activeWorkflow.data.name as string)
+      : undefined;
+
+    // Only render step nodes while a workflow is actively running
+    if (activeWorkflow) {
+      const stepIds = activeWorkflow.data.steps as string[] | undefined;
+      if (stepIds && stepIds.length > 0) {
+        // Build status map from workflow_step events
+        const stepStatuses = new Map<string, 'pending' | 'running' | 'completed' | 'failed'>();
+        const stepAgents = new Map<string, string>();
+        for (const entry of entries) {
+          if (entry.type !== 'workflow_step') continue;
+          const sid = entry.data.stepId as string;
+          const status = entry.data.status as string;
+          if (sid && status) {
+            stepStatuses.set(sid, status as 'running' | 'completed' | 'failed');
+          }
+          const agent = entry.agentId;
+          if (sid && agent) {
+            stepAgents.set(sid, agent);
+          }
+        }
+
+        // If workflow completed with errors, mark incomplete steps as failed
+        const workflowFailed = entries.some(
+          (e) => e.type === 'error' && e.activationId === `wf-${activeWorkflow.data.workflowPath}`,
+        );
+
+        // Place workflow steps below agent nodes (minimum 200px from top)
+        const maxAgentY = agentNodes.reduce((max, n) => Math.max(max, n.position.y), 0);
+        const workflowBaseY = Math.max(200, maxAgentY + 200);
+        const stepSpacing = 160;
+        const startX = Math.max(
+          0,
+          (agentNodes.reduce((sum, n) => sum + n.position.x, 0) / Math.max(agentNodes.length, 1)) - ((stepIds.length - 1) * stepSpacing) / 2,
+        );
+
+        for (let i = 0; i < stepIds.length; i++) {
+          const sid = stepIds[i];
+          let status = stepStatuses.get(sid) ?? 'pending';
+          if (workflowFailed && status === 'pending') {
+            status = 'pending'; // keep as pending if workflow failed before reaching this step
+          }
+          const agent = stepAgents.get(sid) ?? '';
+
+          const nodeId = `wf-step-${sid}`;
+          workflowStepNodes.push({
+            id: nodeId,
+            type: 'workflowStepNode',
+            draggable: true,
+            selectable: false,
+            position: { x: startX + i * stepSpacing, y: workflowBaseY },
+            data: {
+              kind: 'workflowStep',
+              stepId: sid,
+              agent,
+              status,
+            },
+          });
+
+          // Add dependency edges between consecutive steps
+          if (i > 0) {
+            const prevNodeId = `wf-step-${stepIds[i - 1]}`;
+            const prevStatus = stepStatuses.get(stepIds[i - 1]) ?? 'pending';
+            edges.push({
+              id: `edge-wf-dep-${stepIds[i - 1]}-${sid}`,
+              source: prevNodeId,
+              target: nodeId,
+              style: {
+                stroke: prevStatus === 'completed' ? '#89dceb' : '#585b70',
+                strokeDasharray: '6 4',
+                strokeWidth: 1.6,
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 10,
+                height: 10,
+                color: prevStatus === 'completed' ? '#89dceb' : '#585b70',
+              },
+              data: { kind: 'workflowDep' as const, recent: false },
+            });
+          }
+
+          // Add dashed edge from step to its agent node (if agent exists in graph)
+          if (agent && nodeIds.has(agent)) {
+            edges.push({
+              id: `edge-wf-agent-${sid}`,
+              source: nodeId,
+              target: agent,
+              style: {
+                stroke: '#cba6f7',
+                strokeDasharray: '4 4',
+                strokeWidth: 1.2,
+                opacity: 0.5,
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                width: 10,
+                height: 10,
+                color: '#cba6f7',
+              },
+              data: { kind: 'workflowAgent' as const, recent: false },
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      nodes: [...agentNodes, ...activityNodes, ...workflowStepNodes],
+      edges,
+      activeWorkflowName,
+    };
   }, [agentsMap, entries, sessions, selectedAgentId, memoryEntries]);
 }

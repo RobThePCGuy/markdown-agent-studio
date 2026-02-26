@@ -5,6 +5,7 @@ import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
 import type { MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
+import type { PubSubState } from '../stores/pub-sub-store';
 
 type Store<T> = { getState(): T };
 
@@ -37,7 +38,7 @@ export interface ToolContext {
     semanticSearch: (query: string, agentId: string, limit?: number) => Promise<any[]>;
     markShared: (id: string, shared: boolean) => Promise<void>;
   };
-  pubSubStore?: any; // Store<PubSubState> - imported type would create circular dep
+  pubSubStore?: Store<PubSubState>;
   blackboard?: Map<string, unknown>;
 }
 

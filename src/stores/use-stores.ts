@@ -55,6 +55,9 @@ export interface UIState {
   setShowWelcome: (show: boolean) => void;
   setGlobalMcpServers: (servers: MCPServerConfig[]) => void;
   setWorkflowVariableModal: (modal: UIState['workflowVariableModal']) => void;
+  addMcpServer: (server: MCPServerConfig) => void;
+  removeMcpServer: (name: string) => void;
+  updateMcpServer: (name: string, server: MCPServerConfig) => void;
 }
 
 const persistedApiKey = (() => {
@@ -120,6 +123,22 @@ export const uiStore = createStore<UIState>((set) => ({
     set({ globalMcpServers: servers });
   },
   setWorkflowVariableModal: (modal) => set({ workflowVariableModal: modal }),
+  addMcpServer: (server) => set((s) => {
+    if (s.globalMcpServers.some((srv) => srv.name === server.name)) return s;
+    const next = [...s.globalMcpServers, server];
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(next)); } catch { /* */ }
+    return { globalMcpServers: next };
+  }),
+  removeMcpServer: (name) => set((s) => {
+    const next = s.globalMcpServers.filter((srv) => srv.name !== name);
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(next)); } catch { /* */ }
+    return { globalMcpServers: next };
+  }),
+  updateMcpServer: (name, server) => set((s) => {
+    const next = s.globalMcpServers.map((srv) => (srv.name === name ? server : srv));
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(next)); } catch { /* */ }
+    return { globalMcpServers: next };
+  }),
 }));
 
 // React hooks

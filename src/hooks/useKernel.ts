@@ -18,6 +18,13 @@ export function useKernel() {
     }
   }, []);
 
+  const runWorkflow = useCallback(async (
+    workflowPath: string,
+    variables?: Record<string, unknown>,
+  ) => {
+    await runController.runWorkflow(workflowPath, variables);
+  }, []);
+
   const replayFromEvent = useCallback(async (eventId: string) => {
     return runController.replayFromEvent(eventId);
   }, []);

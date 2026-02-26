@@ -14,6 +14,7 @@ import { MCPClientManager } from './mcp-client';
 import { WorkflowEngine } from './workflow-engine';
 import { parseWorkflow } from './workflow-parser';
 import { extractWorkflowVariables } from './workflow-variables';
+import { createStepRunner } from './workflow-runner';
 
 export interface RunControllerState {
   isRunning: boolean;
@@ -36,6 +37,7 @@ type Listener = (state: RunControllerState) => void;
 class RunController {
   private kernel: Kernel | null = null;
   private autonomousRunner: AutonomousRunner | null = null;
+  private workflowAbort: AbortController | null = null;
   private memoryManager = new MemoryManager(createMemoryDB(vfsStore));
 
   /** Re-create the memory DB (and manager) based on the current kernel config. */
@@ -269,7 +271,7 @@ class RunController {
     if (this.state.isRunning) return;
 
     // 1. Read and parse workflow
-    const content = vfsStore.getState().readFile(workflowPath);
+    const content = vfsStore.getState().read(workflowPath);
     if (!content) return;
     const workflow = parseWorkflow(workflowPath, content);
 
@@ -289,6 +291,9 @@ class RunController {
     const config = uiStore.getState().kernelConfig;
     this.refreshMemoryManager(config);
     sessionStore.getState().clearAll();
+
+    const abort = new AbortController();
+    this.workflowAbort = abort;
 
     // 4. Set running state
     const stepCount = workflow.executionOrder.length;
@@ -374,7 +379,7 @@ class RunController {
 
     try {
       // 7. Execute workflow
-      const outputs = await engine.execute(workflow, variables ?? {});
+      const outputs = await engine.execute(workflow, variables ?? {}, abort.signal);
 
       // 8. Write output file
       let totalTokens = 0;
@@ -406,7 +411,7 @@ class RunController {
         stepSections,
       ].join('\n');
 
-      vfsStore.getState().writeFile(outputPath, outputContent);
+      vfsStore.getState().write(outputPath, outputContent, { authorAgentId: 'system', activationId: 'system' });
 
       // 9. Emit workflow_complete event
       const perStepTokens: Record<string, number> = {};
@@ -465,6 +470,7 @@ class RunController {
         },
       });
     } finally {
+      this.workflowAbort = null;
       this.setState({
         isRunning: false,
         isPaused: false,
@@ -495,13 +501,16 @@ class RunController {
     const variables = (failedEvent.data.variables as Record<string, string>) ?? {};
 
     // Read and parse the workflow
-    const content = vfsStore.getState().readFile(workflowPath);
+    const content = vfsStore.getState().read(workflowPath);
     if (!content) return;
     const workflow = parseWorkflow(workflowPath, content);
 
     const config = uiStore.getState().kernelConfig;
     this.refreshMemoryManager(config);
     sessionStore.getState().clearAll();
+
+    const abort = new AbortController();
+    this.workflowAbort = abort;
 
     // Determine which steps were completed
     const statuses = failedEvent.data.perStepTokens as Record<string, number> | undefined;
@@ -605,7 +614,7 @@ class RunController {
         stepSections,
       ].join('\n');
 
-      vfsStore.getState().writeFile(outputPath, outputContent);
+      vfsStore.getState().write(outputPath, outputContent, { authorAgentId: 'system', activationId: 'system' });
 
       const perStepTokens: Record<string, number> = {};
       for (const [id, t] of stepTokens) perStepTokens[id] = t;
@@ -627,9 +636,11 @@ class RunController {
         data: { workflowPath, name: workflow.name, status: 'failed', error: err instanceof Error ? err.message : String(err), totalTokens, perStepTokens, completedSteps: this.state.workflowCompletedSteps ?? 0, totalSteps: stepCount, variables },
       });
     } finally {
+      this.workflowAbort = null;
       this.setState({ isRunning: false, isPaused: false, isWorkflow: false, workflowName: undefined, workflowStepCount: undefined, workflowCompletedSteps: undefined });
     }
   }
+
 
   pause(): void {
     if (this.autonomousRunner) {
@@ -650,6 +661,10 @@ class RunController {
   }
 
   killAll(): void {
+    if (this.workflowAbort) {
+      this.workflowAbort.abort();
+      this.workflowAbort = null;
+    }
     if (this.autonomousRunner) {
       this.autonomousRunner.stop();
       this.autonomousRunner = null;
