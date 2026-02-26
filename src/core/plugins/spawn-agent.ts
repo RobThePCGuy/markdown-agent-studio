@@ -7,7 +7,7 @@ function normalizeSpawnedAgentContent(content: string, preferredModel: string | 
     const fm = { ...(parsed.data as Record<string, unknown>) };
     const mode = fm.safety_mode ?? fm.mode;
 
-    // Only inject model when the user has explicitly set one in settings.
+    // Only inject model when there's an explicit preference (global setting or parent agent model).
     // If no preference, leave whatever model the agent content specifies (or none).
     if (preferredModel) {
       fm.model = preferredModel;

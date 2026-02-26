@@ -368,26 +368,26 @@ export class Kernel {
       });
     }
 
-    const toolHandler = new ToolHandler({
-      pluginRegistry: sessionRegistry,
-      vfs: this.deps.vfs,
-      agentRegistry: this.deps.agentRegistry,
-      eventLog: this.deps.eventLog,
-      onSpawnActivation: (act) => this.enqueue(act),
-      onRunSessionAndReturn: (act) => this.runSessionAndReturn(act),
-      currentAgentId: activation.agentId,
-      currentActivationId: activation.id,
-      parentAgentId: activation.parentId,
-      spawnDepth: activation.spawnDepth,
-      maxDepth: this.deps.config.maxDepth,
-      maxFanout: this.deps.config.maxFanout,
-      childCount: this.childCounts.get(activation.agentId) ?? 0,
-      policy: policyResolution.policy,
-      apiKey: this.deps.apiKey,
-      preferredModel: this.resolvePreferredModel(),
-      memoryStore: this.memoryStore,
-      taskQueueStore: this.deps.taskQueueStore,
-    });
+      const toolHandler = new ToolHandler({
+        pluginRegistry: sessionRegistry,
+        vfs: this.deps.vfs,
+        agentRegistry: this.deps.agentRegistry,
+        eventLog: this.deps.eventLog,
+        onSpawnActivation: (act) => this.enqueue(act),
+        onRunSessionAndReturn: (act) => this.runSessionAndReturn(act),
+        currentAgentId: activation.agentId,
+        currentActivationId: activation.id,
+        parentAgentId: activation.parentId,
+        spawnDepth: activation.spawnDepth,
+        maxDepth: this.deps.config.maxDepth,
+        maxFanout: this.deps.config.maxFanout,
+        childCount: this.childCounts.get(activation.agentId) ?? 0,
+        policy: policyResolution.policy,
+        apiKey: this.deps.apiKey,
+        preferredModel: this.resolveSpawnModel(profile.model),
+        memoryStore: this.memoryStore,
+        taskQueueStore: this.deps.taskQueueStore,
+      });
 
     let finalText = '';
 
@@ -675,7 +675,7 @@ export class Kernel {
             childCount: this.childCounts.get(activation.agentId) ?? 0,
 
             apiKey: this.deps.apiKey,
-            preferredModel: this.resolvePreferredModel(),
+            preferredModel: this.resolveSpawnModel(profileModel),
             memoryStore: this.memoryStore,
             taskQueueStore: this.deps.taskQueueStore,
           });
@@ -764,6 +764,17 @@ export class Kernel {
     const configured = typeof this.deps.config.model === 'string' ? this.deps.config.model.trim() : '';
     if (configured && !LEGACY_GEMINI_MODEL.test(configured)) {
       return configured;
+    }
+    return undefined;
+  }
+
+  /** Returns the model to inject into spawned agents (config model or parent model). */
+  private resolveSpawnModel(profileModel: string | undefined): string | undefined {
+    const preferred = this.resolvePreferredModel();
+    if (preferred) return preferred;
+    const profile = typeof profileModel === 'string' ? profileModel.trim() : '';
+    if (profile && !LEGACY_GEMINI_MODEL.test(profile)) {
+      return profile;
     }
     return undefined;
   }
