@@ -4,6 +4,7 @@ import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } 
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
 import { loadSampleProject } from '../../core/sample-project';
+import type { MCPServerConfig } from '../../core/mcp-client';
 import styles from './SettingsModal.module.css';
 
 // ---------------------------------------------------------------------------
@@ -15,8 +16,13 @@ export default function SettingsModal() {
   const apiKey = useUI((s) => s.apiKey);
   const kernelConfig = useUI(useShallow((s) => s.kernelConfig));
 
+  const globalMcpServers = useUI(useShallow((s) => s.globalMcpServers));
+
   const [showKey, setShowKey] = useState(false);
   const [clearConfirm, setClearConfirm] = useState('');
+  const [mcpName, setMcpName] = useState('');
+  const [mcpTransport, setMcpTransport] = useState<'http' | 'sse'>('http');
+  const [mcpUrl, setMcpUrl] = useState('');
 
   // Close on Escape
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -372,6 +378,126 @@ export default function SettingsModal() {
               <option value="off">Disabled</option>
             </select>
           </label>
+        </div>
+
+        <hr className={styles.divider} />
+
+        {/* Section: MCP Servers */}
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>MCP Servers</h3>
+
+          {globalMcpServers.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {globalMcpServers.map((server, i) => (
+                <div
+                  key={`${server.name}-${i}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 0',
+                    borderBottom: '1px solid var(--depth-4)',
+                  }}
+                >
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>
+                    {server.name}
+                    <span style={{ color: 'var(--text-dim)', marginLeft: 6, fontSize: 12 }}>
+                      ({server.transport})
+                    </span>
+                    {server.transport === 'stdio' && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 11,
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          background: 'rgba(250, 200, 80, 0.15)',
+                          color: '#e8a735',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Browser N/A
+                      </span>
+                    )}
+                  </span>
+                  {server.url && (
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {server.url}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => {
+                      const updated = globalMcpServers.filter((_, idx) => idx !== i);
+                      uiStore.getState().setGlobalMcpServers(updated);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--status-red)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      padding: '0 4px',
+                    }}
+                    aria-label={`Remove server ${server.name}`}
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label className={styles.label}>
+              <span className={styles.labelText}>Server Name</span>
+              <input
+                type="text"
+                placeholder="e.g. my-mcp-server"
+                value={mcpName}
+                onChange={(e) => setMcpName(e.target.value)}
+                className={styles.input}
+              />
+            </label>
+            <label className={styles.label}>
+              <span className={styles.labelText}>Transport</span>
+              <select
+                value={mcpTransport}
+                onChange={(e) => setMcpTransport(e.target.value as 'http' | 'sse')}
+                className={styles.select}
+              >
+                <option value="http">http</option>
+                <option value="sse">sse</option>
+                <option value="stdio" disabled>(N/A in browser)</option>
+              </select>
+            </label>
+            <label className={styles.label}>
+              <span className={styles.labelText}>URL</span>
+              <input
+                type="text"
+                placeholder="https://..."
+                value={mcpUrl}
+                onChange={(e) => setMcpUrl(e.target.value)}
+                className={styles.input}
+              />
+            </label>
+            <button
+              disabled={!mcpName.trim() || !mcpUrl.trim()}
+              onClick={() => {
+                const newServer: MCPServerConfig = {
+                  name: mcpName.trim(),
+                  transport: mcpTransport,
+                  url: mcpUrl.trim(),
+                };
+                uiStore.getState().setGlobalMcpServers([...globalMcpServers, newServer]);
+                setMcpName('');
+                setMcpUrl('');
+                setMcpTransport('http');
+              }}
+              className={styles.outlineBtn}
+            >
+              Add Server
+            </button>
+          </div>
         </div>
 
         <hr className={styles.divider} />

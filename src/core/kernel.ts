@@ -14,7 +14,7 @@ import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { MemoryManager } from './memory-manager';
-import type { MCPClientManager } from './mcp-client';
+import { MCPClientManager } from './mcp-client';
 
 const WORKSPACE_PREAMBLE =
   'You are an agent in a multi-agent workspace with access to a virtual filesystem and shared memory.\n' +
@@ -306,7 +306,18 @@ export class Kernel {
     }
 
     if (profile.mcpServers && this.deps.mcpManager) {
-      for (const serverConfig of profile.mcpServers) {
+      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(profile.mcpServers);
+      for (const server of skipped) {
+        this.deps.eventLog.getState().append({
+          type: 'warning',
+          agentId: activation.agentId,
+          activationId: activation.id,
+          data: {
+            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
+          },
+        });
+      }
+      for (const serverConfig of compatible) {
         await this.deps.mcpManager.connect(serverConfig);
       }
       const mcpTools = this.deps.mcpManager.getTools();
@@ -645,7 +656,18 @@ export class Kernel {
     }
 
     if (profile.mcpServers && this.deps.mcpManager) {
-      for (const serverConfig of profile.mcpServers) {
+      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(profile.mcpServers);
+      for (const server of skipped) {
+        this.deps.eventLog.getState().append({
+          type: 'warning',
+          agentId: activation.agentId,
+          activationId: activation.id,
+          data: {
+            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
+          },
+        });
+      }
+      for (const serverConfig of compatible) {
         await this.deps.mcpManager.connect(serverConfig);
       }
       const mcpTools = this.deps.mcpManager.getTools();

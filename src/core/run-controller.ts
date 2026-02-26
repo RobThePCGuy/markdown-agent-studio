@@ -9,6 +9,7 @@ import { MemoryManager } from './memory-manager';
 import { createMemoryDB } from './memory-db';
 import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
 import { AutonomousRunner } from './autonomous-runner';
+import { MCPClientManager } from './mcp-client';
 
 export interface RunControllerState {
   isRunning: boolean;
@@ -74,11 +75,37 @@ class RunController {
     return Boolean(apiKey && apiKey !== 'your-api-key-here');
   }
 
-  private createKernel(config: KernelConfig): Kernel {
+  private async createKernel(config: KernelConfig): Promise<Kernel> {
     const apiKey = uiStore.getState().apiKey;
     const provider = this.hasUsableApiKey(apiKey)
       ? new GeminiProvider(apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
+
+    // Instantiate MCPClientManager and pre-connect global servers
+    const mcpManager = new MCPClientManager();
+    const globalServers = uiStore.getState().globalMcpServers;
+    if (globalServers.length > 0) {
+      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(globalServers);
+      for (const server of skipped) {
+        eventLogStore.getState().append({
+          type: 'warning',
+          agentId: 'system',
+          activationId: 'system',
+          data: {
+            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
+          },
+        });
+      }
+      for (const server of compatible) {
+        await mcpManager.connect(server);
+        eventLogStore.getState().append({
+          type: 'mcp_connect',
+          agentId: 'system',
+          activationId: 'system',
+          data: { serverName: server.name, transport: server.transport },
+        });
+      }
+    }
 
     const kernel = new Kernel({
       aiProvider: provider,
@@ -89,6 +116,7 @@ class RunController {
       sessionStore,
       memoryStore: config.memoryEnabled !== false ? memoryStore : undefined,
       memoryManager: config.memoryEnabled !== false ? this.memoryManager : undefined,
+      mcpManager,
       apiKey,
       onSessionUpdate: () => {
         this.setState({
@@ -110,7 +138,7 @@ class RunController {
     this.refreshMemoryManager(config);
     // Keep per-run session context isolated for correct summarization.
     sessionStore.getState().clearAll();
-    const kernel = this.createKernel(config);
+    const kernel = await this.createKernel(config);
     kernel.enqueue({
       agentId: agentPath,
       input,
@@ -204,6 +232,7 @@ class RunController {
         sessionStore,
         memoryStore,
         apiKey: uiStore.getState().apiKey,
+        globalMcpServers: uiStore.getState().globalMcpServers,
       },
     );
 

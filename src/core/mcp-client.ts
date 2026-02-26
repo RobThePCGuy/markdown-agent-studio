@@ -23,6 +23,22 @@ interface ConnectedServer {
 export class MCPClientManager {
   private servers = new Map<string, ConnectedServer>();
 
+  static filterBrowserCompatible(configs: MCPServerConfig[]): {
+    compatible: MCPServerConfig[];
+    skipped: MCPServerConfig[];
+  } {
+    const compatible: MCPServerConfig[] = [];
+    const skipped: MCPServerConfig[] = [];
+    for (const cfg of configs) {
+      if (cfg.transport === 'stdio') {
+        skipped.push(cfg);
+      } else {
+        compatible.push(cfg);
+      }
+    }
+    return { compatible, skipped };
+  }
+
   static parseServerConfigs(raw: unknown[]): MCPServerConfig[] {
     if (!Array.isArray(raw)) return [];
     return raw.filter((item): item is MCPServerConfig => {

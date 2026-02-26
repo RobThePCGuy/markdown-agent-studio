@@ -11,6 +11,7 @@ import { createPubSubStore } from './pub-sub-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
+import type { MCPServerConfig } from '../core/mcp-client';
 
 // Singleton vanilla stores
 export const vfsStore = createVFSStore();
@@ -35,6 +36,7 @@ export interface UIState {
   settingsOpen: boolean;
   soundEnabled: boolean;
   showWelcome: boolean;
+  globalMcpServers: MCPServerConfig[];
   setSelectedAgent: (id: string | null) => void;
   setSelectedFile: (path: string | null) => void;
   setActiveTab: (tab: 'graph' | 'editor') => void;
@@ -46,6 +48,7 @@ export interface UIState {
   setSettingsOpen: (open: boolean) => void;
   setSoundEnabled: (enabled: boolean) => void;
   setShowWelcome: (show: boolean) => void;
+  setGlobalMcpServers: (servers: MCPServerConfig[]) => void;
 }
 
 const persistedApiKey = (() => {
@@ -65,6 +68,13 @@ const persistedSoundEnabled = (() => {
   catch { return false; }
 })();
 
+const persistedMcpServers: MCPServerConfig[] = (() => {
+  try {
+    const raw = localStorage.getItem('mas-mcp-servers');
+    return raw ? JSON.parse(raw) as MCPServerConfig[] : [];
+  } catch { return []; }
+})();
+
 export const uiStore = createStore<UIState>((set) => ({
   selectedAgentId: null,
   selectedFilePath: null,
@@ -76,6 +86,7 @@ export const uiStore = createStore<UIState>((set) => ({
   settingsOpen: false,
   soundEnabled: persistedSoundEnabled,
   showWelcome: false,
+  globalMcpServers: persistedMcpServers,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -97,6 +108,10 @@ export const uiStore = createStore<UIState>((set) => ({
     set({ soundEnabled: enabled });
   },
   setShowWelcome: (show) => set({ showWelcome: show }),
+  setGlobalMcpServers: (servers) => {
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(servers)); } catch { /* localStorage may be unavailable */ }
+    set({ globalMcpServers: servers });
+  },
 }));
 
 // React hooks

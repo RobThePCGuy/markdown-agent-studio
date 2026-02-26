@@ -20,6 +20,7 @@ import type { AgentRegistryState } from '../stores/agent-registry';
 import type { EventLogState } from '../stores/event-log';
 import type { SessionStoreState } from '../stores/session-store';
 import type { MemoryStoreState } from '../stores/memory-store';
+import { MCPClientManager, type MCPServerConfig } from './mcp-client';
 import { computeHash } from '../utils/vfs-helpers';
 
 type Store<T> = { getState(): T; subscribe(listener: (state: T) => void): () => void };
@@ -45,6 +46,7 @@ export interface AutonomousRunnerDeps {
   sessionStore: Store<SessionStoreState>;
   memoryStore: Store<MemoryStoreState>;
   apiKey: string;
+  globalMcpServers?: MCPServerConfig[];
 }
 
 export type AutonomousStateListener = (state: {
@@ -116,7 +118,7 @@ export class AutonomousRunner {
       this.emit();
 
       const cycleInput = this.buildCycleInput(cycle);
-      const kernel = this.createCycleKernel();
+      const kernel = await this.createCycleKernel();
       this.currentKernel = kernel;
 
       kernel.enqueue({
@@ -350,7 +352,7 @@ export class AutonomousRunner {
     return parts.join('\n');
   }
 
-  private createCycleKernel(): Kernel {
+  private async createCycleKernel(): Promise<Kernel> {
     const { kernelConfig } = this.config;
     const { apiKey } = this.deps;
 
@@ -371,6 +373,32 @@ export class AutonomousRunner {
 
     this._baseTokensBeforeCycle = this._totalTokensAllCycles;
 
+    // Instantiate MCPClientManager and pre-connect global servers
+    const mcpManager = new MCPClientManager();
+    const globalServers = this.deps.globalMcpServers ?? [];
+    if (globalServers.length > 0) {
+      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(globalServers);
+      for (const server of skipped) {
+        this.deps.eventLog.getState().append({
+          type: 'warning',
+          agentId: 'system',
+          activationId: 'system',
+          data: {
+            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
+          },
+        });
+      }
+      for (const server of compatible) {
+        await mcpManager.connect(server);
+        this.deps.eventLog.getState().append({
+          type: 'mcp_connect',
+          agentId: 'system',
+          activationId: 'system',
+          data: { serverName: server.name, transport: server.transport },
+        });
+      }
+    }
+
     const kernel = new Kernel({
       aiProvider: provider,
       vfs: this.deps.vfs,
@@ -382,6 +410,7 @@ export class AutonomousRunner {
       memoryManager: kernelConfig.memoryEnabled !== false ? this.deps.memoryManager : undefined,
       toolRegistry: registry,
       taskQueueStore: this.deps.taskQueueStore,
+      mcpManager,
       apiKey,
       onSessionUpdate: () => {
         this._totalTokensAllCycles = this._baseTokensBeforeCycle + kernel.totalTokens;
