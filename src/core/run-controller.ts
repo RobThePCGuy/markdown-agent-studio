@@ -278,7 +278,6 @@ class RunController {
     // 3. If variables needed but not provided, show modal and return
     if (requiredVars.length > 0 && !variables) {
       uiStore.getState().setWorkflowVariableModal({
-        open: true,
         workflowPath,
         variables: requiredVars,
         onSubmit: (values) => { this.runWorkflow(workflowPath, values); },

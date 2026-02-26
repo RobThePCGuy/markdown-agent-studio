@@ -38,7 +38,6 @@ export interface UIState {
   showWelcome: boolean;
   globalMcpServers: MCPServerConfig[];
   workflowVariableModal: {
-    open: boolean;
     workflowPath: string;
     variables: string[];
     onSubmit: (values: Record<string, string>) => void;
