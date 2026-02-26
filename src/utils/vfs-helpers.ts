@@ -5,6 +5,7 @@ export function deriveKind(path: string): FileKind {
   if (path.startsWith('workflows/') && path.endsWith('.md')) return 'workflow';
   if (path.startsWith('memory/')) return 'memory';
   if (path.startsWith('artifacts/')) return 'artifact';
+  if (path.startsWith('outputs/')) return 'artifact';
   return 'unknown';
 }
 
