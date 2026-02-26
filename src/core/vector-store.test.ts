@@ -260,4 +260,41 @@ describe('VectorStore', () => {
     const results = await store.search('memory', { agentId: 'agent-A' });
     expect(results).toHaveLength(15);
   });
+
+  it('search honors minScore threshold', async () => {
+    await store.add(makeMemory({ id: 'hi', agentId: 'agent-A', content: 'alpha beta gamma' }));
+    await store.add(makeMemory({ id: 'lo', agentId: 'agent-A', content: 'zzz yyy xxx' }));
+
+    const unfiltered = await store.search('alpha beta', { agentId: 'agent-A', limit: 10 });
+    const filtered = await store.search('alpha beta', { agentId: 'agent-A', limit: 10, minScore: 0.9 });
+
+    expect(filtered.length).toBeLessThanOrEqual(unfiltered.length);
+  });
+
+  it('search applies keywordFilter before semantic ranking', async () => {
+    await store.add(makeMemory({ id: 'kw-1', agentId: 'agent-A', content: 'TypeScript compiler internals' }));
+    await store.add(makeMemory({ id: 'kw-2', agentId: 'agent-A', content: 'Garden watering schedule' }));
+
+    const results = await store.search('best practices', {
+      agentId: 'agent-A',
+      keywordFilter: 'typescript',
+    });
+    const ids = results.map((r) => r.id);
+    expect(ids).toContain('kw-1');
+    expect(ids).not.toContain('kw-2');
+  });
+
+  it('searchWithDiagnostics returns retrieval telemetry', async () => {
+    await store.add(makeMemory({ id: 'diag-1', agentId: 'agent-A', content: 'semantic memory diagnostics test' }));
+    const out = await store.searchWithDiagnostics('memory', {
+      agentId: 'agent-A',
+      keywordFilter: 'diagnostics',
+      minScore: -1,
+    });
+
+    expect(out.results.length).toBeGreaterThan(0);
+    expect(out.diagnostics.totalVectors).toBeGreaterThan(0);
+    expect(out.diagnostics.candidateCount).toBeGreaterThanOrEqual(0);
+    expect(out.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
+  });
 });

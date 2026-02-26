@@ -57,6 +57,8 @@ export interface KernelConfig {
   autoRecordFailures?: boolean;
   /** Use vector-backed (LanceDB + embeddings) memory instead of JSON-based. */
   useVectorMemory?: boolean;
+  /** Maximum number of workflow steps to run in parallel when dependencies allow. */
+  workflowMaxParallelSteps?: number;
 }
 
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
@@ -75,4 +77,5 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   forceReflection: true,
   autoRecordFailures: true,
   useVectorMemory: false,
+  workflowMaxParallelSteps: 1,
 };

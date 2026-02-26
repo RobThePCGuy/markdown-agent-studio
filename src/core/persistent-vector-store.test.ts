@@ -59,6 +59,23 @@ describe('PersistentVectorStore', () => {
     expect(results.length).toBeGreaterThan(0);
   });
 
+  it('searchWithDiagnostics() supports keywordFilter/minScore and returns telemetry', async () => {
+    await store.add(makeVector('diag-a', 'TypeScript migration guide'));
+    await store.add(makeVector('diag-b', 'Cooking and recipes notebook'));
+
+    const out = await store.searchWithDiagnostics('TypeScript', {
+      keywordFilter: 'typescript',
+      minScore: -1,
+      limit: 5,
+    });
+
+    const ids = out.results.map((r) => r.id);
+    expect(ids).toContain('diag-a');
+    expect(ids).not.toContain('diag-b');
+    expect(out.diagnostics.totalVectors).toBeGreaterThan(0);
+    expect(out.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
   it('update() regenerates embedding on content change', async () => {
     const original = await store.add(makeVector('v3', 'original content'));
     const origEmbed = [...original.embedding];

@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Verify package
-        run: npm run lint && npm test && npm run build
+        run: npm run lint && npm test && npm run build && npm run check:bundle
 
       - name: Publish to npm
         run: npm publish --access public --provenance --ignore-scripts

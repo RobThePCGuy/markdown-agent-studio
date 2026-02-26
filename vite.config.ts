@@ -16,7 +16,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
           'vendor-flow': ['@xyflow/react'],
           'vendor-monaco': ['@monaco-editor/react'],
           'vendor-google': ['@google/generative-ai'],

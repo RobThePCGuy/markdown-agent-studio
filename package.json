@@ -50,11 +50,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:all": "npm run lint && npm run test && npm run build",
+    "check:all": "npm run lint && npm run test && npm run build && npm run check:bundle",
     "clean": "rm -rf node_modules dist package-lock.json",
     "commit:checked": "node scripts/checked-commit.mjs",
     "commit:publish": "node scripts/checked-commit.mjs --stage-publish",

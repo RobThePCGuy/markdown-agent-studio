@@ -1,9 +1,15 @@
 import { EmbeddingEngine } from './embedding-engine';
-import { cosineSimilarity, type IVectorStore, type MemoryVector, type SearchOptions } from './vector-store';
+import {
+  cosineSimilarity,
+  type IVectorStore,
+  type MemoryVector,
+  type SearchOptions,
+  type VectorSearchResult,
+} from './vector-store';
 
 const DB_NAME = 'mas-vector-store';
 const STORE_NAME = 'vectors';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /**
  * IndexedDB-backed vector store. Keeps an in-memory cache for fast cosine
@@ -26,6 +32,12 @@ export class PersistentVectorStore implements IVectorStore {
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          return;
+        }
+        // Migration harness: keep future version upgrades centralized here.
+        // v2 currently does not require shape changes for existing records.
+        if (request.transaction) {
+          request.transaction.objectStore(STORE_NAME);
         }
       };
 
@@ -98,10 +110,18 @@ export class PersistentVectorStore implements IVectorStore {
   }
 
   async search(query: string, options?: SearchOptions): Promise<MemoryVector[]> {
+    const { results } = await this.searchWithDiagnostics(query, options);
+    return results;
+  }
+
+  async searchWithDiagnostics(query: string, options?: SearchOptions): Promise<VectorSearchResult> {
+    const startedAt = Date.now();
     const limit = options?.limit ?? 15;
+    const minScore = options?.minScore;
     const queryEmbedding = await this._engine.embed(query);
 
     let candidates = Array.from(this._cache.values());
+    const totalVectors = candidates.length;
 
     if (options?.agentId) {
       const agentId = options.agentId;
@@ -121,14 +141,39 @@ export class PersistentVectorStore implements IVectorStore {
         v.tags.some((t) => searchTags.has(t)),
       );
     }
+    const keywordTokens = normalizeKeywordTokens(options?.keywordFilter);
+    let filteredOutByKeywords = 0;
+    if (keywordTokens.length > 0) {
+      const before = candidates.length;
+      candidates = candidates.filter((v) => includesAnyKeyword(v.content, keywordTokens));
+      filteredOutByKeywords = before - candidates.length;
+    }
+    const candidateCount = candidates.length;
 
     const scored = candidates.map((v) => ({
       vector: v,
       score: cosineSimilarity(queryEmbedding, v.embedding),
     }));
 
+    let filteredOutByMinScore = 0;
+    if (typeof minScore === 'number') {
+      const before = scored.length;
+      scored.splice(0, scored.length, ...scored.filter((s) => s.score >= minScore));
+      filteredOutByMinScore = before - scored.length;
+    }
+
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, limit).map((s) => s.vector);
+    return {
+      results: scored.slice(0, limit).map((s) => s.vector),
+      diagnostics: {
+        query,
+        totalVectors,
+        candidateCount,
+        filteredOutByKeywords,
+        filteredOutByMinScore,
+        durationMs: Date.now() - startedAt,
+      },
+    };
   }
 
   async update(
@@ -171,4 +216,18 @@ export class PersistentVectorStore implements IVectorStore {
   async getById(id: string): Promise<MemoryVector | null> {
     return this._cache.get(id) ?? null;
   }
+}
+
+function normalizeKeywordTokens(value?: string | string[]): string[] {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : [value];
+  return raw
+    .flatMap((entry) => entry.split(/\s+/))
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function includesAnyKeyword(content: string, keywords: string[]): boolean {
+  const haystack = content.toLowerCase();
+  return keywords.some((token) => haystack.includes(token));
 }

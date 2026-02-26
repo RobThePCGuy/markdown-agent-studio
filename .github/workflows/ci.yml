@@ -32,5 +32,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Bundle size guard
+        run: npm run check:bundle
+
       - name: Package dry-run
         run: npm publish --dry-run --ignore-scripts

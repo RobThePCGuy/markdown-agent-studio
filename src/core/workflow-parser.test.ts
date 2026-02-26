@@ -74,4 +74,29 @@ steps:
 ---`;
     expect(() => parseWorkflow('w.md', circular)).toThrow(/circular/i);
   });
+
+  it('rejects duplicate step ids', () => {
+    const invalid = `---
+name: Duplicate IDs
+steps:
+  - id: a
+    agent: agents/a.md
+    prompt: test
+  - id: a
+    agent: agents/b.md
+    prompt: test
+---`;
+    expect(() => parseWorkflow('w.md', invalid)).toThrow(/duplicate step id/i);
+  });
+
+  it('rejects steps missing required fields', () => {
+    const invalid = `---
+name: Missing fields
+steps:
+  - id: a
+    agent: ""
+    prompt: ""
+---`;
+    expect(() => parseWorkflow('w.md', invalid)).toThrow(/missing a non-empty "agent"/i);
+  });
 });

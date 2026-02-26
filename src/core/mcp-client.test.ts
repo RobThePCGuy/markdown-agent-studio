@@ -120,6 +120,20 @@ describe('MCPClientManager', () => {
 
     expect(mockConnect).not.toHaveBeenCalled();
     expect(manager.getConnectedServers()).toEqual([]);
+    expect(manager.getServerStates()[0]?.status).toBe('unsupported_transport');
+  });
+
+  it('connect() with stdio + gatewayUrl uses HTTP bridge', async () => {
+    await manager.connect({
+      name: 'stdio-bridge',
+      transport: 'stdio',
+      command: 'node',
+      gatewayUrl: 'http://localhost:3030/mcp',
+    });
+
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+    expect(manager.getConnectedServers()).toEqual(['stdio-bridge']);
+    expect(manager.getServerStates()[0]?.status).toBe('connected');
   });
 
   it('connect() timeout produces error', async () => {
@@ -133,6 +147,7 @@ describe('MCPClientManager', () => {
 
     // Server should be stored but not connected
     expect(manager.getConnectedServers()).toEqual([]);
+    expect(manager.getServerStates()[0]?.status).toBe('failed');
   });
 
   it('callTool() returns formatted text content', async () => {
@@ -194,6 +209,7 @@ describe('MCPClientManager', () => {
     await manager.disconnect('close-server');
     expect(mockClose).toHaveBeenCalledTimes(1);
     expect(manager.getConnectedServers()).toEqual([]);
+    expect(manager.getServerStates().find((s) => s.name === 'close-server')?.status).toBe('disconnected');
   });
 
   it('skips if already connected', async () => {
@@ -211,5 +227,22 @@ describe('MCPClientManager', () => {
 
     // connect should only be called once
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('callToolDetailed returns structured result payload', async () => {
+    await manager.connect({
+      name: 'detail-server',
+      transport: 'http',
+      url: 'http://localhost:3000/mcp',
+    });
+    mockCallTool.mockResolvedValue({
+      content: [{ type: 'text', text: 'detailed text' }],
+      meta: { source: 'test' },
+    });
+
+    const detailed = await manager.callToolDetailed('detail-server', 'read_file', { path: '/x' });
+    expect(detailed.ok).toBe(true);
+    expect(detailed.text).toBe('detailed text');
+    expect(Array.isArray(detailed.content)).toBe(true);
   });
 });

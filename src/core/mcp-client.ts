@@ -8,6 +8,8 @@ export interface MCPServerConfig {
   command?: string;
   args?: string[];
   url?: string;
+  /** Optional HTTP bridge for stdio servers in browser contexts. */
+  gatewayUrl?: string;
   env?: Record<string, string>;
 }
 
@@ -18,11 +20,32 @@ export interface MCPTool {
   inputSchema: Record<string, unknown>;
 }
 
+export type MCPServerStatus = 'connected' | 'disconnected' | 'failed' | 'unsupported_transport';
+
+export interface MCPServerState {
+  name: string;
+  transport: MCPServerConfig['transport'];
+  connected: boolean;
+  status: MCPServerStatus;
+  url?: string;
+  lastError?: string;
+}
+
+export interface MCPCallResult {
+  ok: boolean;
+  text: string;
+  content?: unknown[];
+  raw?: unknown;
+  error?: string;
+}
+
 interface ConnectedServer {
   config: MCPServerConfig;
   client: Client | null;
   tools: MCPTool[];
   connected: boolean;
+  status: MCPServerStatus;
+  lastError?: string;
 }
 
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -62,6 +85,17 @@ export class MCPClientManager {
       .map(([name]) => name);
   }
 
+  getServerStates(): MCPServerState[] {
+    return Array.from(this.servers.entries()).map(([name, server]) => ({
+      name,
+      transport: server.config.transport,
+      connected: server.connected,
+      status: server.status,
+      url: server.config.url,
+      lastError: server.lastError,
+    }));
+  }
+
   getTools(): MCPTool[] {
     const tools: MCPTool[] = [];
     for (const server of this.servers.values()) {
@@ -77,24 +111,28 @@ export class MCPClientManager {
     const existing = this.servers.get(config.name);
     if (existing?.connected) return;
 
-    if (config.transport === 'stdio') {
+    if (config.transport === 'stdio' && !config.gatewayUrl) {
       // stdio requires Node.js native process spawning - not available in browser
       this.servers.set(config.name, {
         config,
         client: null,
         tools: [],
         connected: false,
+        status: 'unsupported_transport',
       });
       console.warn(`MCP: stdio transport not available in browser for "${config.name}"`);
       return;
     }
 
-    if (!config.url) {
+    const effectiveTransport = config.transport === 'stdio' ? 'http' : config.transport;
+    const effectiveUrl = config.transport === 'stdio' ? config.gatewayUrl : config.url;
+
+    if (!effectiveUrl) {
       throw new Error(`MCP server "${config.name}" requires a url for ${config.transport} transport`);
     }
 
-    const url = new URL(config.url);
-    const transport = config.transport === 'sse'
+    const url = new URL(effectiveUrl);
+    const transport = effectiveTransport === 'sse'
       ? new SSEClientTransport(url)
       : new StreamableHTTPClientTransport(url);
 
@@ -120,13 +158,18 @@ export class MCPClientManager {
         client,
         tools,
         connected: true,
+        status: 'connected',
+        lastError: undefined,
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       this.servers.set(config.name, {
         config,
         client: null,
         tools: [],
         connected: false,
+        status: 'failed',
+        lastError: message,
       });
       throw err;
     }
@@ -141,7 +184,15 @@ export class MCPClientManager {
         // Best-effort close
       }
     }
-    this.servers.delete(name);
+    if (server) {
+      this.servers.set(name, {
+        ...server,
+        client: null,
+        tools: [],
+        connected: false,
+        status: 'disconnected',
+      });
+    }
   }
 
   async disconnectAll(): Promise<void> {
@@ -172,9 +223,19 @@ export class MCPClientManager {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<string> {
+    const result = await this.callToolDetailed(serverName, toolName, args);
+    return result.text;
+  }
+
+  async callToolDetailed(
+    serverName: string,
+    toolName: string,
+    args: Record<string, unknown>
+  ): Promise<MCPCallResult> {
     const server = this.servers.get(serverName);
     if (!server?.connected || !server.client) {
-      return `Error: MCP server "${serverName}" is not connected.`;
+      const text = `Error: MCP server "${serverName}" is not connected.`;
+      return { ok: false, text, error: text };
     }
 
     try {
@@ -191,14 +252,23 @@ export class MCPClientManager {
             c.type === 'text' && typeof c.text === 'string'
           )
           .map((c) => c.text);
-        if (textParts.length > 0) return textParts.join('\n');
+        if (textParts.length > 0) {
+          return {
+            ok: true,
+            text: textParts.join('\n'),
+            content,
+            raw: result,
+          };
+        }
       }
 
       // Fallback: stringify the result
-      return typeof result === 'string' ? result : JSON.stringify(result);
+      const text = typeof result === 'string' ? result : JSON.stringify(result);
+      return { ok: true, text, content: Array.isArray(content) ? content : undefined, raw: result };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return `Error: MCP tool call failed: ${message}`;
+      const text = `Error: MCP tool call failed: ${message}`;
+      return { ok: false, text, error: message };
     }
   }
 

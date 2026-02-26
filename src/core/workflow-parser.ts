@@ -16,27 +16,62 @@ export interface WorkflowDefinition {
   steps: WorkflowStep[];
   executionOrder: string[];
   body: string;
+  diagnostics: string[];
 }
 
 export function parseWorkflow(path: string, markdown: string): WorkflowDefinition {
   const { data: fm, content } = matter(markdown);
+  const diagnostics: string[] = [];
 
   const name = String(fm.name || path);
   const description = String(fm.description || '');
   const trigger = fm.trigger === 'auto' ? 'auto' : 'manual';
 
   const rawSteps = Array.isArray(fm.steps) ? fm.steps : [];
-  const steps: WorkflowStep[] = rawSteps.map((s: Record<string, unknown>) => ({
-    id: String(s.id || ''),
-    agent: String(s.agent || ''),
-    prompt: String(s.prompt || ''),
-    dependsOn: Array.isArray(s.depends_on) ? s.depends_on.map(String) : [],
-    outputs: Array.isArray(s.outputs) ? s.outputs.map(String) : [],
-  }));
+  const steps: WorkflowStep[] = rawSteps.map((raw, idx) => {
+    const s = raw as Record<string, unknown>;
+    const id = String(s.id || '').trim();
+    const agent = String(s.agent || '').trim();
+    const prompt = String(s.prompt || '').trim();
+    const dependsOn = Array.isArray(s.depends_on)
+      ? s.depends_on.map((dep) => String(dep).trim()).filter(Boolean)
+      : [];
+    const outputs = Array.isArray(s.outputs)
+      ? [...new Set(s.outputs.map((out) => String(out).trim()).filter(Boolean))]
+      : [];
+
+    if (!id) diagnostics.push(`Step #${idx + 1} is missing a non-empty "id".`);
+    if (!agent) diagnostics.push(`Step "${id || `#${idx + 1}`}" is missing a non-empty "agent".`);
+    if (!prompt) diagnostics.push(`Step "${id || `#${idx + 1}`}" is missing a non-empty "prompt".`);
+
+    return { id, agent, prompt, dependsOn, outputs };
+  });
+
+  if (steps.length === 0) {
+    diagnostics.push('Workflow must define at least one step in frontmatter "steps".');
+  }
+
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const step of steps) {
+    if (!step.id) continue;
+    if (seen.has(step.id)) {
+      duplicates.add(step.id);
+    } else {
+      seen.add(step.id);
+    }
+  }
+  if (duplicates.size > 0) {
+    diagnostics.push(`Duplicate step id(s): ${[...duplicates].join(', ')}`);
+  }
+
+  if (diagnostics.length > 0) {
+    throw new Error(`Invalid workflow "${path}": ${diagnostics.join(' ')}`);
+  }
 
   const executionOrder = topoSort(steps);
 
-  return { path, name, description, trigger, steps, executionOrder, body: content };
+  return { path, name, description, trigger, steps, executionOrder, body: content, diagnostics };
 }
 
 function topoSort(steps: WorkflowStep[]): string[] {

@@ -353,6 +353,25 @@ export default function SettingsModal() {
               className={styles.input}
             />
           </label>
+
+          <label className={styles.label}>
+            <span className={styles.labelText}>Workflow Parallel Steps</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              defaultValue={kernelConfig.workflowMaxParallelSteps ?? 1}
+              onChange={(e) => {
+                const v = e.target.valueAsNumber;
+                if (!isNaN(v)) {
+                  uiStore.getState().setKernelConfig({
+                    workflowMaxParallelSteps: Math.max(1, Math.min(10, Math.floor(v))),
+                  });
+                }
+              }}
+              className={styles.input}
+            />
+          </label>
         </div>
 
         <hr className={styles.divider} />

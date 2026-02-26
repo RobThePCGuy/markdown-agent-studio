@@ -239,4 +239,20 @@ describe('VectorMemoryDB', () => {
     expect(ids).toContain('m2');
     expect(ids).toContain('m3');
   });
+
+  it('semanticSearchDetailed returns diagnostics and filtered results', async () => {
+    await db.put(makeLTM({ id: 'd1', agentId: 'agent-A', content: 'TypeScript coding style guide' }));
+    await db.put(makeLTM({ id: 'd2', agentId: 'agent-A', content: 'Gardening seasonal checklist' }));
+
+    const out = await db.semanticSearchDetailed('guide', 'agent-A', {
+      keywordFilter: 'typescript',
+      minScore: -1,
+      limit: 5,
+    });
+
+    const ids = out.results.map((r) => r.id);
+    expect(ids).toContain('d1');
+    expect(ids).not.toContain('d2');
+    expect(out.diagnostics.totalVectors).toBeGreaterThan(0);
+  });
 });

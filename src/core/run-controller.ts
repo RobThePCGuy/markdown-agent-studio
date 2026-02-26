@@ -12,7 +12,7 @@ import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from '
 import { AutonomousRunner } from './autonomous-runner';
 import { MCPClientManager } from './mcp-client';
 import { WorkflowEngine } from './workflow-engine';
-import { parseWorkflow } from './workflow-parser';
+import { parseWorkflow, type WorkflowDefinition } from './workflow-parser';
 import { extractWorkflowVariables } from './workflow-variables';
 
 export interface RunControllerState {
@@ -32,6 +32,13 @@ export interface RunControllerState {
 }
 
 type Listener = (state: RunControllerState) => void;
+
+interface WorkflowResumePayload {
+  variables: Record<string, string>;
+  completedOutputs: Record<string, Record<string, unknown>>;
+  perStepTokens: Record<string, number>;
+  completedSteps: number;
+}
 
 class RunController {
   private kernel: Kernel | null = null;
@@ -270,15 +277,11 @@ class RunController {
   async runWorkflow(workflowPath: string, variables?: Record<string, string>): Promise<void> {
     if (this.state.isRunning) return;
 
-    // 1. Read and parse workflow
     const content = vfsStore.getState().read(workflowPath);
     if (!content) return;
     const workflow = parseWorkflow(workflowPath, content);
-
-    // 2. Extract variables
     const requiredVars = extractWorkflowVariables(workflow);
 
-    // 3. If variables needed but not provided, show modal and return
     if (requiredVars.length > 0 && !variables) {
       uiStore.getState().setWorkflowVariableModal({
         workflowPath,
@@ -292,10 +295,162 @@ class RunController {
     this.refreshMemoryManager(config);
     sessionStore.getState().clearAll();
 
+    await this.executeWorkflow({
+      workflowPath,
+      workflow,
+      config,
+      variables: variables ?? {},
+    });
+  }
+
+  async resumeWorkflow(workflowPath: string): Promise<void> {
+    if (this.state.isRunning) return;
+
+    const content = vfsStore.getState().read(workflowPath);
+    if (!content) return;
+    const workflow = parseWorkflow(workflowPath, content);
+    const resume = this.getWorkflowResumePayload(workflowPath, workflow);
+    if (!resume) return;
+
+    const config = uiStore.getState().kernelConfig;
+    this.refreshMemoryManager(config);
+    sessionStore.getState().clearAll();
+
+    await this.executeWorkflow({
+      workflowPath,
+      workflow,
+      config,
+      variables: resume.variables,
+      resume,
+    });
+  }
+
+  private findLatestFailedWorkflowEvent(workflowPath: string): EventLogEntry | null {
+    const entries = eventLogStore.getState().entries;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i];
+      if (e.type === 'workflow_complete' && e.data.workflowPath === workflowPath && e.data.status === 'failed') {
+        return e;
+      }
+    }
+    return null;
+  }
+
+  private getWorkflowResumePayload(
+    workflowPath: string,
+    workflow: WorkflowDefinition,
+  ): WorkflowResumePayload | null {
+    const failedEvent = this.findLatestFailedWorkflowEvent(workflowPath);
+    if (!failedEvent) return null;
+
+    const resumeRaw = failedEvent.data.workflowResume as Record<string, unknown> | undefined;
+    if (resumeRaw && typeof resumeRaw === 'object') {
+      const variables = (resumeRaw.variables as Record<string, string>) ?? {};
+      const completedOutputs =
+        (resumeRaw.completedOutputs as Record<string, Record<string, unknown>>) ?? {};
+      const perStepTokens = (resumeRaw.perStepTokens as Record<string, number>) ?? {};
+      const completedStepsRaw = resumeRaw.completedSteps;
+      const completedSteps = typeof completedStepsRaw === 'number'
+        ? completedStepsRaw
+        : Object.keys(completedOutputs).length;
+      return { variables, completedOutputs, perStepTokens, completedSteps };
+    }
+
+    // Backward-compat fallback for legacy failed events.
+    const variables = (failedEvent.data.variables as Record<string, string>) ?? {};
+    const perStepTokens = (failedEvent.data.perStepTokens as Record<string, number>) ?? {};
+    const completedStepCount = (failedEvent.data.completedSteps as number) ?? 0;
+    const completedOutputs: Record<string, Record<string, unknown>> = {};
+    for (let i = 0; i < completedStepCount && i < workflow.executionOrder.length; i++) {
+      const stepId = workflow.executionOrder[i];
+      completedOutputs[stepId] = {
+        result: '[resumed from previous run]',
+        tokens: perStepTokens[stepId] ?? 0,
+      };
+    }
+
+    return {
+      variables,
+      completedOutputs,
+      perStepTokens,
+      completedSteps: completedStepCount,
+    };
+  }
+
+  private extractLastModelMessage(kernel: Kernel): string {
+    const completedSessions = kernel.completedSessions;
+    if (completedSessions.length === 0) return '';
+    const lastSession = completedSessions[completedSessions.length - 1];
+    const lastModelMsg = [...lastSession.history].reverse().find((m) => m.role === 'model');
+    return lastModelMsg?.content ?? '';
+  }
+
+  private countTokens(stepTokens: Map<string, number>): number {
+    let total = 0;
+    for (const t of stepTokens.values()) total += t;
+    return total;
+  }
+
+  private formatWorkflowOutput(
+    workflow: WorkflowDefinition,
+    outputs: Record<string, Record<string, unknown>>,
+    stepAgents: Map<string, string>,
+    stepTokens: Map<string, number>,
+    resumedFrom?: number,
+  ): string {
+    const totalTokens = this.countTokens(stepTokens);
+    const stepSections = workflow.executionOrder.map((stepId) => {
+      const agent = stepAgents.get(stepId) ?? 'unknown';
+      const tokens = stepTokens.get(stepId) ?? 0;
+      const output = outputs[stepId];
+      const result = output?.result ?? output?.text ?? '';
+      const resultText = typeof result === 'string' ? result : JSON.stringify(result);
+      return `## Step: ${stepId} (agent: ${agent})\nTokens: ${tokens}\n\n${resultText}`;
+    }).join('\n\n---\n\n');
+
+    const summary = [
+      '## Summary',
+      `- Steps: ${workflow.executionOrder.length}/${workflow.executionOrder.length}`,
+      `- Tokens: ${Math.round(totalTokens / 1000)}K`,
+      ...(typeof resumedFrom === 'number' ? [`- Resumed from step: ${resumedFrom + 1}`] : []),
+      '',
+    ];
+
+    return [
+      '---',
+      `workflow: ${workflow.name}`,
+      `completed: ${new Date().toISOString()}`,
+      `totalTokens: ${totalTokens}`,
+      ...(typeof resumedFrom === 'number' ? ['resumed: true'] : []),
+      '---',
+      `# Workflow Output: ${workflow.name}${typeof resumedFrom === 'number' ? ' (Resumed)' : ''}`,
+      '',
+      ...summary,
+      stepSections,
+    ].join('\n');
+  }
+
+  private async executeWorkflow(params: {
+    workflowPath: string;
+    workflow: WorkflowDefinition;
+    config: KernelConfig;
+    variables: Record<string, string>;
+    resume?: WorkflowResumePayload;
+  }): Promise<void> {
+    const { workflowPath, workflow, config, variables, resume } = params;
     const abort = new AbortController();
     this.workflowAbort = abort;
 
-    // 4. Set running state
+    const stepTokens = new Map<string, number>();
+    const stepAgents = new Map<string, string>(workflow.steps.map((s) => [s.id, s.agent]));
+    if (resume) {
+      for (const [stepId, tokens] of Object.entries(resume.perStepTokens)) {
+        if (workflow.executionOrder.includes(stepId)) {
+          stepTokens.set(stepId, tokens);
+        }
+      }
+    }
+
     const stepCount = workflow.executionOrder.length;
     this.setState({
       isRunning: true,
@@ -303,117 +458,104 @@ class RunController {
       isWorkflow: true,
       workflowName: workflow.name,
       workflowStepCount: stepCount,
-      workflowCompletedSteps: 0,
-      totalTokens: 0,
+      workflowCompletedSteps: resume?.completedSteps ?? 0,
+      totalTokens: this.countTokens(stepTokens),
     });
 
-    // Emit workflow_start event
     eventLogStore.getState().append({
       type: 'workflow_start',
       agentId: 'system',
       activationId: 'system',
-      data: { workflowPath, name: workflow.name, stepCount },
+      data: {
+        workflowPath,
+        name: workflow.name,
+        stepCount,
+        resumed: Boolean(resume),
+        resumedFrom: resume?.completedSteps ?? 0,
+      },
     });
 
-    // 5. Track per-step tokens
-    const stepTokens = new Map<string, number>();
-    const stepAgents = new Map<string, string>();
-
-    // 6. Create engine with runStep callback
     const engine = new WorkflowEngine({
+      maxParallelSteps: config.workflowMaxParallelSteps ?? 1,
       runStep: async (stepId, prompt, agentPath, _context) => {
-        // Emit step event
         eventLogStore.getState().append({
           type: 'workflow_step',
           agentId: agentPath,
           activationId: 'system',
-          data: { stepId, workflowPath, agentPath },
+          data: { stepId, workflowPath, agentPath, status: 'running' },
         });
 
-        stepAgents.set(stepId, agentPath);
+        try {
+          stepAgents.set(stepId, agentPath);
+          sessionStore.getState().clearAll();
+          const kernel = await this.createKernel(config);
+          kernel.enqueue({
+            agentId: agentPath,
+            input: prompt,
+            spawnDepth: 0,
+            priority: 0,
+          });
+          await kernel.runUntilEmpty();
 
-        // Create fresh kernel for this step
-        sessionStore.getState().clearAll();
-        const kernel = await this.createKernel(config);
-        kernel.enqueue({
-          agentId: agentPath,
-          input: prompt,
-          spawnDepth: 0,
-          priority: 0,
-        });
+          const tokens = kernel.totalTokens;
+          stepTokens.set(stepId, tokens);
 
-        await kernel.runUntilEmpty();
+          const totalTokens = this.countTokens(stepTokens);
+          const completed = (this.state.workflowCompletedSteps ?? 0) + 1;
+          this.setState({
+            workflowCompletedSteps: completed,
+            totalTokens,
+            activeCount: 0,
+            queueCount: 0,
+          });
 
-        // Track tokens
-        const tokens = kernel.totalTokens;
-        stepTokens.set(stepId, tokens);
+          const resultText = this.extractLastModelMessage(kernel);
+          eventLogStore.getState().append({
+            type: 'workflow_step',
+            agentId: agentPath,
+            activationId: 'system',
+            data: { stepId, workflowPath, agentPath, status: 'completed', tokens },
+          });
 
-        // Update total tokens (sum all step tokens)
-        let totalTokens = 0;
-        for (const t of stepTokens.values()) totalTokens += t;
-
-        const completed = (this.state.workflowCompletedSteps ?? 0) + 1;
-        this.setState({
-          workflowCompletedSteps: completed,
-          totalTokens,
-          activeCount: 0,
-          queueCount: 0,
-        });
-
-        // Extract last model message from completed sessions
-        const completedSessions = kernel.completedSessions;
-        let resultText = '';
-        if (completedSessions.length > 0) {
-          const lastSession = completedSessions[completedSessions.length - 1];
-          const lastModelMsg = [...lastSession.history]
-            .reverse()
-            .find((m) => m.role === 'model');
-          if (lastModelMsg) {
-            resultText = lastModelMsg.content;
-          }
+          return { result: resultText };
+        } catch (err) {
+          eventLogStore.getState().append({
+            type: 'workflow_step',
+            agentId: agentPath,
+            activationId: 'system',
+            data: {
+              stepId,
+              workflowPath,
+              agentPath,
+              status: 'failed',
+              error: err instanceof Error ? err.message : String(err),
+            },
+          });
+          throw err;
         }
-
-        return { result: resultText };
       },
     });
 
     try {
-      // 7. Execute workflow
-      const outputs = await engine.execute(workflow, variables ?? {}, abort.signal);
+      const outputs = resume
+        ? await engine.resumeFrom(workflow, variables, resume.completedOutputs, abort.signal)
+        : await engine.execute(workflow, variables, abort.signal);
 
-      // 8. Write output file
-      let totalTokens = 0;
-      for (const t of stepTokens.values()) totalTokens += t;
-
+      const totalTokens = this.countTokens(stepTokens);
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const outputPath = `outputs/${workflow.name.replace(/\s+/g, '-').toLowerCase()}-${timestamp}.md`;
+      const outputContent = this.formatWorkflowOutput(
+        workflow,
+        outputs,
+        stepAgents,
+        stepTokens,
+        resume?.completedSteps,
+      );
+      vfsStore.getState().write(outputPath, outputContent, {
+        authorAgentId: 'system',
+        activationId: 'system',
+      });
 
-      const stepSections = workflow.executionOrder.map((stepId) => {
-        const agent = stepAgents.get(stepId) ?? 'unknown';
-        const tokens = stepTokens.get(stepId) ?? 0;
-        const output = outputs[stepId];
-        const resultText = output?.result ?? '';
-        return `## Step: ${stepId} (agent: ${agent})\nTokens: ${tokens}\n\n${resultText}`;
-      }).join('\n\n---\n\n');
-
-      const outputContent = [
-        '---',
-        `workflow: ${workflow.name}`,
-        `completed: ${new Date().toISOString()}`,
-        `totalTokens: ${totalTokens}`,
-        '---',
-        `# Workflow Output: ${workflow.name}`,
-        '',
-        '## Summary',
-        `- Steps: ${workflow.executionOrder.length}/${workflow.executionOrder.length}`,
-        `- Tokens: ${Math.round(totalTokens / 1000)}K`,
-        '',
-        stepSections,
-      ].join('\n');
-
-      vfsStore.getState().write(outputPath, outputContent, { authorAgentId: 'system', activationId: 'system' });
-
-      // 9. Emit workflow_complete event
       const perStepTokens: Record<string, number> = {};
       for (const [id, t] of stepTokens) perStepTokens[id] = t;
 
@@ -430,29 +572,39 @@ class RunController {
           outputPath,
           completedSteps: workflow.executionOrder.length,
           totalSteps: workflow.executionOrder.length,
+          resumed: Boolean(resume),
+          workflowResume: {
+            variables,
+            completedOutputs: outputs,
+            perStepTokens,
+            completedSteps: workflow.executionOrder.length,
+          },
         },
       });
 
-      // 10. Open output in editor
       uiStore.getState().openFileInEditor(outputPath);
-
     } catch (err) {
-      // On failure, emit workflow_complete with status 'failed'
       const perStepTokens: Record<string, number> = {};
       for (const [id, t] of stepTokens) perStepTokens[id] = t;
 
-      // Collect completed step statuses for potential resume
-      const statuses = engine.getStatus();
+      const status = engine.getStatus();
+      const outputs = engine.getOutputs();
+      const completedOutputs: Record<string, Record<string, unknown>> = {};
       const completedStepIds: string[] = [];
-      for (const [stepId, status] of Object.entries(statuses)) {
-        if (status === 'completed') {
+      let failedStepId: string | undefined;
+
+      for (const stepId of workflow.executionOrder) {
+        const stepStatus = status[stepId];
+        if (stepStatus === 'completed' && outputs[stepId]) {
           completedStepIds.push(stepId);
+          completedOutputs[stepId] = outputs[stepId];
+        } else if (stepStatus === 'failed' && !failedStepId) {
+          failedStepId = stepId;
         }
       }
 
-      let totalTokens = 0;
-      for (const t of stepTokens.values()) totalTokens += t;
-
+      const totalTokens = this.countTokens(stepTokens);
+      const completedSteps = completedStepIds.length;
       eventLogStore.getState().append({
         type: 'workflow_complete',
         agentId: 'system',
@@ -464,9 +616,17 @@ class RunController {
           error: err instanceof Error ? err.message : String(err),
           totalTokens,
           perStepTokens,
-          completedSteps: this.state.workflowCompletedSteps ?? 0,
+          completedSteps,
           totalSteps: workflow.executionOrder.length,
-          variables: variables ?? {},
+          variables,
+          failedStepId,
+          resumableFromStep: Math.min(completedSteps + 1, workflow.executionOrder.length),
+          workflowResume: {
+            variables,
+            completedOutputs,
+            perStepTokens,
+            completedSteps,
+          },
         },
       });
     } finally {
@@ -481,167 +641,6 @@ class RunController {
       });
     }
   }
-
-  async resumeWorkflow(workflowPath: string): Promise<void> {
-    if (this.state.isRunning) return;
-
-    // Find the most recent failed workflow_complete event for this path
-    const entries = eventLogStore.getState().entries;
-    let failedEvent: EventLogEntry | null = null;
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const e = entries[i];
-      if (e.type === 'workflow_complete' && e.data.workflowPath === workflowPath && e.data.status === 'failed') {
-        failedEvent = e;
-        break;
-      }
-    }
-    if (!failedEvent) return;
-
-    // Extract variables and completed step data from the failed event
-    const variables = (failedEvent.data.variables as Record<string, string>) ?? {};
-
-    // Read and parse the workflow
-    const content = vfsStore.getState().read(workflowPath);
-    if (!content) return;
-    const workflow = parseWorkflow(workflowPath, content);
-
-    const config = uiStore.getState().kernelConfig;
-    this.refreshMemoryManager(config);
-    sessionStore.getState().clearAll();
-
-    const abort = new AbortController();
-    this.workflowAbort = abort;
-
-    // Determine which steps were completed
-    const statuses = failedEvent.data.perStepTokens as Record<string, number> | undefined;
-    const completedStepCount = (failedEvent.data.completedSteps as number) ?? 0;
-    const completedOutputs: Record<string, Record<string, unknown>> = {};
-
-    // Build completed outputs from the execution order up to completedStepCount
-    for (let i = 0; i < completedStepCount && i < workflow.executionOrder.length; i++) {
-      const stepId = workflow.executionOrder[i];
-      completedOutputs[stepId] = { result: '[resumed from previous run]', tokens: statuses?.[stepId] ?? 0 };
-    }
-
-    const stepCount = workflow.executionOrder.length;
-    this.setState({
-      isRunning: true,
-      isPaused: false,
-      isWorkflow: true,
-      workflowName: workflow.name,
-      workflowStepCount: stepCount,
-      workflowCompletedSteps: completedStepCount,
-      totalTokens: 0,
-    });
-
-    eventLogStore.getState().append({
-      type: 'workflow_start',
-      agentId: 'system',
-      activationId: 'system',
-      data: { workflowPath, name: workflow.name, stepCount, resumed: true, resumedFrom: completedStepCount },
-    });
-
-    const stepTokens = new Map<string, number>();
-    const stepAgents = new Map<string, string>();
-
-    // Pre-populate token tracking for completed steps
-    if (statuses) {
-      for (const [stepId, tokens] of Object.entries(statuses)) {
-        if (stepId in completedOutputs) {
-          stepTokens.set(stepId, tokens);
-        }
-      }
-    }
-
-    const engine = new WorkflowEngine({
-      runStep: async (stepId, prompt, agentPath, _context) => {
-        eventLogStore.getState().append({
-          type: 'workflow_step',
-          agentId: agentPath,
-          activationId: 'system',
-          data: { stepId, workflowPath, agentPath },
-        });
-
-        stepAgents.set(stepId, agentPath);
-        sessionStore.getState().clearAll();
-        const kernel = await this.createKernel(config);
-        kernel.enqueue({ agentId: agentPath, input: prompt, spawnDepth: 0, priority: 0 });
-        await kernel.runUntilEmpty();
-
-        const tokens = kernel.totalTokens;
-        stepTokens.set(stepId, tokens);
-        let totalTokens = 0;
-        for (const t of stepTokens.values()) totalTokens += t;
-
-        const completed = (this.state.workflowCompletedSteps ?? 0) + 1;
-        this.setState({ workflowCompletedSteps: completed, totalTokens, activeCount: 0, queueCount: 0 });
-
-        const completedSessions = kernel.completedSessions;
-        let resultText = '';
-        if (completedSessions.length > 0) {
-          const lastSession = completedSessions[completedSessions.length - 1];
-          const lastModelMsg = [...lastSession.history].reverse().find((m) => m.role === 'model');
-          if (lastModelMsg) resultText = lastModelMsg.content;
-        }
-        return { result: resultText };
-      },
-    });
-
-    try {
-      const outputs = await engine.resumeFrom(workflow, variables, completedOutputs);
-
-      // Write output (same format as runWorkflow)
-      let totalTokens = 0;
-      for (const t of stepTokens.values()) totalTokens += t;
-
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const outputPath = `outputs/${workflow.name.replace(/\s+/g, '-').toLowerCase()}-${timestamp}.md`;
-
-      const stepSections = workflow.executionOrder.map((stepId) => {
-        const agent = stepAgents.get(stepId) ?? 'unknown';
-        const tokens = stepTokens.get(stepId) ?? 0;
-        const output = outputs[stepId];
-        const resultText = output?.result ?? '';
-        return `## Step: ${stepId} (agent: ${agent})\nTokens: ${tokens}\n\n${resultText}`;
-      }).join('\n\n---\n\n');
-
-      const outputContent = [
-        '---', `workflow: ${workflow.name}`, `completed: ${new Date().toISOString()}`,
-        `totalTokens: ${totalTokens}`, `resumed: true`, '---',
-        `# Workflow Output: ${workflow.name} (Resumed)`, '',
-        '## Summary', `- Steps: ${stepCount}/${stepCount}`,
-        `- Tokens: ${Math.round(totalTokens / 1000)}K`, `- Resumed from step: ${completedStepCount + 1}`, '',
-        stepSections,
-      ].join('\n');
-
-      vfsStore.getState().write(outputPath, outputContent, { authorAgentId: 'system', activationId: 'system' });
-
-      const perStepTokens: Record<string, number> = {};
-      for (const [id, t] of stepTokens) perStepTokens[id] = t;
-
-      eventLogStore.getState().append({
-        type: 'workflow_complete', agentId: 'system', activationId: 'system',
-        data: { workflowPath, name: workflow.name, status: 'completed', totalTokens, perStepTokens, outputPath, completedSteps: stepCount, totalSteps: stepCount, resumed: true },
-      });
-
-      uiStore.getState().openFileInEditor(outputPath);
-    } catch (err) {
-      const perStepTokens: Record<string, number> = {};
-      for (const [id, t] of stepTokens) perStepTokens[id] = t;
-      let totalTokens = 0;
-      for (const t of stepTokens.values()) totalTokens += t;
-
-      eventLogStore.getState().append({
-        type: 'workflow_complete', agentId: 'system', activationId: 'system',
-        data: { workflowPath, name: workflow.name, status: 'failed', error: err instanceof Error ? err.message : String(err), totalTokens, perStepTokens, completedSteps: this.state.workflowCompletedSteps ?? 0, totalSteps: stepCount, variables },
-      });
-    } finally {
-      this.workflowAbort = null;
-      this.setState({ isRunning: false, isPaused: false, isWorkflow: false, workflowName: undefined, workflowStepCount: undefined, workflowCompletedSteps: undefined });
-    }
-  }
-
-
   pause(): void {
     if (this.autonomousRunner) {
       this.autonomousRunner.pause();

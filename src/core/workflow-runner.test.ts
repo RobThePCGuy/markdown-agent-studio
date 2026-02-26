@@ -105,6 +105,7 @@ describe('WorkflowEngine + StepRunner integration', () => {
       ],
       executionOrder: ['research', 'write'],
       body: '',
+      diagnostics: [],
     };
 
     const outputs = await engine.execute(workflow, { topic: 'AI safety' });
@@ -146,6 +147,7 @@ describe('WorkflowEngine + StepRunner integration', () => {
       ],
       executionOrder: ['step1', 'step2'],
       body: '',
+      diagnostics: [],
     };
 
     await expect(engine.execute(workflow, {}, abort.signal)).rejects.toThrow('Workflow aborted');
@@ -180,6 +182,7 @@ describe('WorkflowEngine + StepRunner integration', () => {
       ],
       executionOrder: ['outline', 'draft'],
       body: '',
+      diagnostics: [],
     };
 
     await engine.execute(workflow, {});

@@ -22,11 +22,27 @@ export interface SearchOptions {
   limit?: number;
   type?: MemoryVector['type'];
   tags?: string[];
+  minScore?: number;
+  keywordFilter?: string | string[];
 }
 
 export interface VectorStoreOptions {
   inMemory?: boolean;
   dbPath?: string;
+}
+
+export interface VectorSearchDiagnostics {
+  query: string;
+  totalVectors: number;
+  candidateCount: number;
+  filteredOutByKeywords: number;
+  filteredOutByMinScore: number;
+  durationMs: number;
+}
+
+export interface VectorSearchResult {
+  results: MemoryVector[];
+  diagnostics: VectorSearchDiagnostics;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +53,7 @@ export interface IVectorStore {
   init(): Promise<void>;
   add(input: Omit<MemoryVector, 'embedding'>): Promise<MemoryVector>;
   search(query: string, options?: SearchOptions): Promise<MemoryVector[]>;
+  searchWithDiagnostics(query: string, options?: SearchOptions): Promise<VectorSearchResult>;
   update(id: string, changes: Partial<Pick<MemoryVector, 'content' | 'tags' | 'type' | 'shared'>>): Promise<void>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
@@ -112,10 +129,18 @@ export class VectorStore implements IVectorStore {
    * - Returns top `limit` results (default 15)
    */
   async search(query: string, options?: SearchOptions): Promise<MemoryVector[]> {
+    const { results } = await this.searchWithDiagnostics(query, options);
+    return results;
+  }
+
+  async searchWithDiagnostics(query: string, options?: SearchOptions): Promise<VectorSearchResult> {
+    const startedAt = Date.now();
     const limit = options?.limit ?? 15;
+    const minScore = options?.minScore;
     const queryEmbedding = await this._engine.embed(query);
 
     let candidates = Array.from(this._vectors.values());
+    const totalVectors = candidates.length;
 
     // Filter by agentId: own memories + shared
     if (options?.agentId) {
@@ -138,6 +163,14 @@ export class VectorStore implements IVectorStore {
         v.tags.some((t) => searchTags.has(t)),
       );
     }
+    const keywordTokens = normalizeKeywordTokens(options?.keywordFilter);
+    let filteredOutByKeywords = 0;
+    if (keywordTokens.length > 0) {
+      const before = candidates.length;
+      candidates = candidates.filter((v) => includesAnyKeyword(v.content, keywordTokens));
+      filteredOutByKeywords = before - candidates.length;
+    }
+    const candidateCount = candidates.length;
 
     // Rank by cosine similarity (descending)
     const scored = candidates.map((v) => ({
@@ -145,9 +178,26 @@ export class VectorStore implements IVectorStore {
       score: cosineSimilarity(queryEmbedding, v.embedding),
     }));
 
+    let filteredOutByMinScore = 0;
+    if (typeof minScore === 'number') {
+      const before = scored.length;
+      scored.splice(0, scored.length, ...scored.filter((s) => s.score >= minScore));
+      filteredOutByMinScore = before - scored.length;
+    }
+
     scored.sort((a, b) => b.score - a.score);
 
-    return scored.slice(0, limit).map((s) => s.vector);
+    return {
+      results: scored.slice(0, limit).map((s) => s.vector),
+      diagnostics: {
+        query,
+        totalVectors,
+        candidateCount,
+        filteredOutByKeywords,
+        filteredOutByMinScore,
+        durationMs: Date.now() - startedAt,
+      },
+    };
   }
 
   /**
@@ -195,4 +245,18 @@ export class VectorStore implements IVectorStore {
   async getById(id: string): Promise<MemoryVector | null> {
     return this._vectors.get(id) ?? null;
   }
+}
+
+function normalizeKeywordTokens(value?: string | string[]): string[] {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : [value];
+  return raw
+    .flatMap((entry) => entry.split(/\s+/))
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function includesAnyKeyword(content: string, keywords: string[]): boolean {
+  const haystack = content.toLowerCase();
+  return keywords.some((token) => haystack.includes(token));
 }

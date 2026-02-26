@@ -1,6 +1,13 @@
 import type { LongTermMemory } from '../types/memory';
 import type { MemoryDB } from './memory-db';
-import { VectorStore, type IVectorStore, type MemoryVector, type VectorStoreOptions } from './vector-store';
+import {
+  VectorStore,
+  type IVectorStore,
+  type MemoryVector,
+  type VectorStoreOptions,
+  type SearchOptions,
+  type VectorSearchDiagnostics,
+} from './vector-store';
 
 // ---------------------------------------------------------------------------
 // Conversion helpers
@@ -120,6 +127,21 @@ export class VectorMemoryDB implements MemoryDB {
       limit,
     });
     return vectors.map(toLongTermMemory);
+  }
+
+  async semanticSearchDetailed(
+    query: string,
+    agentId: string,
+    options?: Omit<SearchOptions, 'agentId'>,
+  ): Promise<{ results: LongTermMemory[]; diagnostics: VectorSearchDiagnostics }> {
+    const { results, diagnostics } = await this._store.searchWithDiagnostics(query, {
+      ...options,
+      agentId,
+    });
+    return {
+      results: results.map(toLongTermMemory),
+      diagnostics,
+    };
   }
 
   /**

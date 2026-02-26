@@ -14,6 +14,7 @@ function makeWorkflow(): WorkflowDefinition {
     ],
     executionOrder: ['a', 'b'],
     body: '',
+    diagnostics: [],
   };
 }
 
@@ -55,5 +56,31 @@ describe('WorkflowEngine', () => {
     const statusAfter = engine.getStatus();
     expect(statusAfter.a).toBe('completed');
     expect(statusAfter.b).toBe('completed');
+  });
+
+  it('supports running independent steps in parallel', async () => {
+    const runStep = vi.fn().mockImplementation(async (stepId: string) => {
+      if (stepId === 'a') {
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      if (stepId === 'b') {
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      return { [`result_${stepId}`]: stepId };
+    });
+
+    const workflow = makeWorkflow();
+    workflow.steps = [
+      { id: 'a', agent: 'agents/a.md', prompt: 'Do A', dependsOn: [], outputs: [] },
+      { id: 'b', agent: 'agents/b.md', prompt: 'Do B', dependsOn: [], outputs: [] },
+      { id: 'c', agent: 'agents/c.md', prompt: 'Do C with {a.result_a} and {b.result_b}', dependsOn: ['a', 'b'], outputs: [] },
+    ];
+    workflow.executionOrder = ['a', 'b', 'c'];
+
+    const engine = new WorkflowEngine({ runStep, maxParallelSteps: 2 });
+    await engine.execute(workflow, {});
+
+    expect(runStep).toHaveBeenCalledTimes(3);
+    expect(engine.getStatus().c).toBe('completed');
   });
 });
