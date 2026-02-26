@@ -11,7 +11,7 @@ import { createPubSubStore } from './pub-sub-store';
 import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
-import type { MCPServerConfig } from '../core/mcp-client';
+import { MCPClientManager, type MCPServerConfig } from '../core/mcp-client';
 
 // Singleton vanilla stores
 export const vfsStore = createVFSStore();
@@ -78,7 +78,7 @@ const persistedSoundEnabled = (() => {
 const persistedMcpServers: MCPServerConfig[] = (() => {
   try {
     const raw = localStorage.getItem('mas-mcp-servers');
-    return raw ? JSON.parse(raw) as MCPServerConfig[] : [];
+    return raw ? MCPClientManager.parseServerConfigs(JSON.parse(raw)) : [];
   } catch { return []; }
 })();
 

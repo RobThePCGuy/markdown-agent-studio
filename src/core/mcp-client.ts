@@ -98,4 +98,49 @@ export class MCPClientManager {
     }
     return `Error: Tool execution not yet implemented for ${serverName}:${toolName}`;
   }
+
+  /**
+   * Create an MCPClientManager with global servers pre-connected.
+   * Skips stdio servers (browser-incompatible) and logs warnings/connections via eventLog.
+   */
+  static async createWithGlobalServers(
+    globalServers: MCPServerConfig[],
+    eventLog: { getState(): { append(entry: Record<string, unknown>): void } },
+  ): Promise<MCPClientManager> {
+    const manager = new MCPClientManager();
+    if (globalServers.length === 0) return manager;
+
+    const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(globalServers);
+    for (const server of skipped) {
+      eventLog.getState().append({
+        type: 'warning',
+        agentId: 'system',
+        activationId: 'system',
+        data: {
+          message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
+        },
+      });
+    }
+    for (const server of compatible) {
+      try {
+        await manager.connect(server);
+        eventLog.getState().append({
+          type: 'mcp_connect',
+          agentId: 'system',
+          activationId: 'system',
+          data: { serverName: server.name, transport: server.transport },
+        });
+      } catch (err) {
+        eventLog.getState().append({
+          type: 'warning',
+          agentId: 'system',
+          activationId: 'system',
+          data: {
+            message: `Failed to connect MCP server "${server.name}": ${err instanceof Error ? err.message : String(err)}`,
+          },
+        });
+      }
+    }
+    return manager;
+  }
 }

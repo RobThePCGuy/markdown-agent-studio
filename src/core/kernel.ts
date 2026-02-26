@@ -306,28 +306,7 @@ export class Kernel {
     }
 
     if (profile.mcpServers && this.deps.mcpManager) {
-      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(profile.mcpServers);
-      for (const server of skipped) {
-        this.deps.eventLog.getState().append({
-          type: 'warning',
-          agentId: activation.agentId,
-          activationId: activation.id,
-          data: {
-            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
-          },
-        });
-      }
-      for (const serverConfig of compatible) {
-        await this.deps.mcpManager.connect(serverConfig);
-      }
-      const mcpTools = this.deps.mcpManager.getTools();
-      const bridgePlugins = createMCPBridgePlugins(
-        mcpTools,
-        (server, tool, args) => this.deps.mcpManager!.callTool(server, tool, args)
-      );
-      if (bridgePlugins.length > 0) {
-        sessionRegistry = sessionRegistry.cloneWith(bridgePlugins);
-      }
+      sessionRegistry = await this.setupAgentMcp(sessionRegistry, profile.mcpServers, activation);
     }
 
     const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
@@ -656,28 +635,7 @@ export class Kernel {
     }
 
     if (profile.mcpServers && this.deps.mcpManager) {
-      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(profile.mcpServers);
-      for (const server of skipped) {
-        this.deps.eventLog.getState().append({
-          type: 'warning',
-          agentId: activation.agentId,
-          activationId: activation.id,
-          data: {
-            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
-          },
-        });
-      }
-      for (const serverConfig of compatible) {
-        await this.deps.mcpManager.connect(serverConfig);
-      }
-      const mcpTools = this.deps.mcpManager.getTools();
-      const bridgePlugins = createMCPBridgePlugins(
-        mcpTools,
-        (server, tool, args) => this.deps.mcpManager!.callTool(server, tool, args)
-      );
-      if (bridgePlugins.length > 0) {
-        sessionRegistry = sessionRegistry.cloneWith(bridgePlugins);
-      }
+      sessionRegistry = await this.setupAgentMcp(sessionRegistry, profile.mcpServers, activation);
     }
 
     const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
@@ -981,6 +939,49 @@ export class Kernel {
     if (textAccumulator) {
       session.history.push({ role: 'model', content: textAccumulator });
     }
+  }
+
+  /** Connect per-agent MCP servers (from frontmatter), filtering out stdio, and return updated registry. */
+  private async setupAgentMcp(
+    sessionRegistry: ToolPluginRegistry,
+    mcpServers: import('./mcp-client').MCPServerConfig[],
+    activation: Activation,
+  ): Promise<ToolPluginRegistry> {
+    if (!this.deps.mcpManager) return sessionRegistry;
+    const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(mcpServers);
+    for (const server of skipped) {
+      this.deps.eventLog.getState().append({
+        type: 'warning',
+        agentId: activation.agentId,
+        activationId: activation.id,
+        data: {
+          message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
+        },
+      });
+    }
+    for (const serverConfig of compatible) {
+      try {
+        await this.deps.mcpManager.connect(serverConfig);
+      } catch (err) {
+        this.deps.eventLog.getState().append({
+          type: 'warning',
+          agentId: activation.agentId,
+          activationId: activation.id,
+          data: {
+            message: `Failed to connect MCP server "${serverConfig.name}": ${err instanceof Error ? err.message : String(err)}`,
+          },
+        });
+      }
+    }
+    const mcpTools = this.deps.mcpManager.getTools();
+    const bridgePlugins = createMCPBridgePlugins(
+      mcpTools,
+      (server, tool, args) => this.deps.mcpManager!.callTool(server, tool, args)
+    );
+    if (bridgePlugins.length > 0) {
+      return sessionRegistry.cloneWith(bridgePlugins);
+    }
+    return sessionRegistry;
   }
 
   private waitForResume(signal: AbortSignal): Promise<void> {

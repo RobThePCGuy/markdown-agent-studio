@@ -373,31 +373,11 @@ export class AutonomousRunner {
 
     this._baseTokensBeforeCycle = this._totalTokensAllCycles;
 
-    // Instantiate MCPClientManager and pre-connect global servers
-    const mcpManager = new MCPClientManager();
-    const globalServers = this.deps.globalMcpServers ?? [];
-    if (globalServers.length > 0) {
-      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(globalServers);
-      for (const server of skipped) {
-        this.deps.eventLog.getState().append({
-          type: 'warning',
-          agentId: 'system',
-          activationId: 'system',
-          data: {
-            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
-          },
-        });
-      }
-      for (const server of compatible) {
-        await mcpManager.connect(server);
-        this.deps.eventLog.getState().append({
-          type: 'mcp_connect',
-          agentId: 'system',
-          activationId: 'system',
-          data: { serverName: server.name, transport: server.transport },
-        });
-      }
-    }
+    // Pre-connect global MCP servers (skips stdio with warning)
+    const mcpManager = await MCPClientManager.createWithGlobalServers(
+      this.deps.globalMcpServers ?? [],
+      this.deps.eventLog,
+    );
 
     const kernel = new Kernel({
       aiProvider: provider,

@@ -81,31 +81,11 @@ class RunController {
       ? new GeminiProvider(apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
 
-    // Instantiate MCPClientManager and pre-connect global servers
-    const mcpManager = new MCPClientManager();
-    const globalServers = uiStore.getState().globalMcpServers;
-    if (globalServers.length > 0) {
-      const { compatible, skipped } = MCPClientManager.filterBrowserCompatible(globalServers);
-      for (const server of skipped) {
-        eventLogStore.getState().append({
-          type: 'warning',
-          agentId: 'system',
-          activationId: 'system',
-          data: {
-            message: `Skipping MCP server "${server.name}" - stdio transport is not available in the browser.`,
-          },
-        });
-      }
-      for (const server of compatible) {
-        await mcpManager.connect(server);
-        eventLogStore.getState().append({
-          type: 'mcp_connect',
-          agentId: 'system',
-          activationId: 'system',
-          data: { serverName: server.name, transport: server.transport },
-        });
-      }
-    }
+    // Pre-connect global MCP servers (skips stdio with warning)
+    const mcpManager = await MCPClientManager.createWithGlobalServers(
+      uiStore.getState().globalMcpServers,
+      eventLogStore,
+    );
 
     const kernel = new Kernel({
       aiProvider: provider,
