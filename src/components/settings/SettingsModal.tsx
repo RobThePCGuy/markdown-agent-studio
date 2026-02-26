@@ -4,6 +4,7 @@ import { useUI, uiStore, vfsStore, agentRegistry, eventLogStore, sessionStore } 
 import { MemoryManager } from '../../core/memory-manager';
 import { createMemoryDB } from '../../core/memory-db';
 import { loadSampleProject } from '../../core/sample-project';
+import type { MCPServerConfig } from '../../core/mcp-client';
 import styles from './SettingsModal.module.css';
 
 // ---------------------------------------------------------------------------
@@ -15,8 +16,16 @@ export default function SettingsModal() {
   const apiKey = useUI((s) => s.apiKey);
   const kernelConfig = useUI(useShallow((s) => s.kernelConfig));
 
+  const mcpServers = useUI(useShallow((s) => s.mcpServers));
+
   const [showKey, setShowKey] = useState(false);
   const [clearConfirm, setClearConfirm] = useState('');
+  const [mcpFormOpen, setMcpFormOpen] = useState(false);
+  const [mcpName, setMcpName] = useState('');
+  const [mcpTransport, setMcpTransport] = useState<'http' | 'sse' | 'stdio'>('http');
+  const [mcpUrl, setMcpUrl] = useState('');
+  const [mcpCommand, setMcpCommand] = useState('');
+  const [mcpArgs, setMcpArgs] = useState('');
 
   // Close on Escape
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -39,6 +48,7 @@ export default function SettingsModal() {
     if (open) {
       setShowKey(false);
       setClearConfirm('');
+      setMcpFormOpen(false);
     }
   }
 
@@ -132,6 +142,145 @@ export default function SettingsModal() {
               <option value="gemini-2.0-flash">gemini-2.0-flash</option>
             </select>
           </label>
+        </div>
+
+        <hr className={styles.divider} />
+
+        {/* Section: MCP Servers */}
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>MCP Servers</h3>
+
+          {mcpServers.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {mcpServers.map((srv) => (
+                <div key={srv.name} className={styles.mcpServerRow}>
+                  <div className={styles.mcpServerInfo}>
+                    <span className={styles.mcpServerName}>{srv.name}</span>
+                    <span className={styles.mcpServerBadge}>{srv.transport}</span>
+                    <span className={styles.mcpServerUrl}>
+                      {srv.transport === 'stdio' ? srv.command : srv.url}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => uiStore.getState().removeMcpServer(srv.name)}
+                    className={styles.mcpRemoveBtn}
+                    aria-label={`Remove ${srv.name}`}
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {mcpFormOpen ? (
+            <div className={styles.mcpForm}>
+              <label className={styles.label}>
+                <span className={styles.labelText}>Server Name</span>
+                <input
+                  type="text"
+                  value={mcpName}
+                  onChange={(e) => setMcpName(e.target.value)}
+                  placeholder="my-server"
+                  className={styles.input}
+                />
+              </label>
+
+              <label className={styles.label}>
+                <span className={styles.labelText}>Transport</span>
+                <select
+                  value={mcpTransport}
+                  onChange={(e) => setMcpTransport(e.target.value as 'http' | 'sse' | 'stdio')}
+                  className={styles.select}
+                >
+                  <option value="http">HTTP (Streamable)</option>
+                  <option value="sse">SSE</option>
+                  <option value="stdio">stdio</option>
+                </select>
+              </label>
+
+              {mcpTransport === 'stdio' ? (
+                <>
+                  <label className={styles.label}>
+                    <span className={styles.labelText}>Command</span>
+                    <input
+                      type="text"
+                      value={mcpCommand}
+                      onChange={(e) => setMcpCommand(e.target.value)}
+                      placeholder="node"
+                      className={styles.input}
+                    />
+                  </label>
+                  <label className={styles.label}>
+                    <span className={styles.labelText}>Arguments (space-separated)</span>
+                    <input
+                      type="text"
+                      value={mcpArgs}
+                      onChange={(e) => setMcpArgs(e.target.value)}
+                      placeholder="server.js --port 3000"
+                      className={styles.input}
+                    />
+                  </label>
+                  <p style={{ margin: '4px 0 8px', fontSize: 12, color: 'var(--status-yellow)' }}>
+                    stdio transport is not available in the browser.
+                  </p>
+                </>
+              ) : (
+                <label className={styles.label}>
+                  <span className={styles.labelText}>URL</span>
+                  <input
+                    type="text"
+                    value={mcpUrl}
+                    onChange={(e) => setMcpUrl(e.target.value)}
+                    placeholder="http://localhost:3000/mcp"
+                    className={styles.input}
+                  />
+                </label>
+              )}
+
+              <div className={styles.inputRow}>
+                <button
+                  onClick={() => {
+                    if (!mcpName.trim()) return;
+                    if (mcpServers.some((s) => s.name === mcpName.trim())) return;
+                    const server: MCPServerConfig = {
+                      name: mcpName.trim(),
+                      transport: mcpTransport,
+                      ...(mcpTransport === 'stdio'
+                        ? {
+                            command: mcpCommand.trim(),
+                            args: mcpArgs.trim() ? mcpArgs.trim().split(/\s+/) : [],
+                          }
+                        : { url: mcpUrl.trim() }),
+                    };
+                    uiStore.getState().addMcpServer(server);
+                    setMcpName('');
+                    setMcpUrl('');
+                    setMcpCommand('');
+                    setMcpArgs('');
+                    setMcpFormOpen(false);
+                  }}
+                  disabled={!mcpName.trim() || mcpServers.some((s) => s.name === mcpName.trim())}
+                  className={styles.outlineBtn}
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setMcpFormOpen(false)}
+                  className={styles.outlineBtn}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setMcpFormOpen(true)}
+              className={styles.outlineBtn}
+            >
+              Add Server
+            </button>
+          )}
         </div>
 
         <hr className={styles.divider} />

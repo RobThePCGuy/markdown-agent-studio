@@ -18,6 +18,7 @@ import { useGraphData } from '../../hooks/useGraphData';
 import { uiStore } from '../../stores/use-stores';
 import { useEventLog, useSessionStore } from '../../stores/use-stores';
 import { ActivityNode } from './ActivityNode';
+import { WorkflowStepNode } from './WorkflowStepNode';
 import { RunTimeline } from './RunTimeline';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import styles from './GraphView.module.css';
@@ -25,10 +26,11 @@ import styles from './GraphView.module.css';
 const nodeTypes: NodeTypes = {
   agentNode: AgentNode,
   activityNode: ActivityNode,
+  workflowStepNode: WorkflowStepNode,
 };
 
 function GraphViewInner() {
-  const { nodes: derivedNodes, edges: derivedEdges } = useGraphData();
+  const { nodes: derivedNodes, edges: derivedEdges, activeWorkflowName } = useGraphData();
   const sessions = useSessionStore((s) => s.sessions);
   const events = useEventLog((s) => s.entries);
   const { showWelcome, dismissWelcome } = useOnboarding();
@@ -168,6 +170,13 @@ function GraphViewInner() {
           <span className={styles.hudLabel}>signals</span>
           <span className={styles.hudValue}>{signalCount}</span>
         </div>
+        {activeWorkflowName && (
+          <div className={styles.hudGroup}>
+            <span className={styles.hudDot} style={{ background: '#cba6f7' }} />
+            <span className={styles.hudLabel}>workflow</span>
+            <span className={styles.hudValue}>{activeWorkflowName}</span>
+          </div>
+        )}
         <div className={styles.hudGroup}>
           <span className={styles.hudDot} style={{ background: 'var(--status-red)' }} />
           <span className={styles.hudLabel}>errors</span>

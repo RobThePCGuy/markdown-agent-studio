@@ -1,6 +1,6 @@
 import type { LongTermMemory } from '../types/memory';
 import type { MemoryDB } from './memory-db';
-import { VectorStore, type MemoryVector, type VectorStoreOptions } from './vector-store';
+import { VectorStore, type IVectorStore, type MemoryVector, type VectorStoreOptions } from './vector-store';
 
 // ---------------------------------------------------------------------------
 // Conversion helpers
@@ -57,10 +57,10 @@ function toLongTermMemory(vec: MemoryVector): LongTermMemory {
  *   const results = await db.semanticSearch('query', 'agent-A');
  */
 export class VectorMemoryDB implements MemoryDB {
-  private _store: VectorStore;
+  private _store: IVectorStore;
 
-  constructor(options?: VectorStoreOptions) {
-    this._store = new VectorStore(options);
+  constructor(options?: VectorStoreOptions & { store?: IVectorStore }) {
+    this._store = options?.store ?? new VectorStore(options);
   }
 
   /**

@@ -9,6 +9,7 @@ import { createMemoryStore, type MemoryStoreState } from './memory-store';
 import { createTaskQueueStore, type TaskQueueState } from './task-queue-store';
 import { createPubSubStore } from './pub-sub-store';
 import type { KernelConfig } from '../types';
+import type { MCPServerConfig } from '../core/mcp-client';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
 
@@ -35,6 +36,7 @@ export interface UIState {
   settingsOpen: boolean;
   soundEnabled: boolean;
   showWelcome: boolean;
+  mcpServers: MCPServerConfig[];
   setSelectedAgent: (id: string | null) => void;
   setSelectedFile: (path: string | null) => void;
   setActiveTab: (tab: 'graph' | 'editor') => void;
@@ -46,6 +48,9 @@ export interface UIState {
   setSettingsOpen: (open: boolean) => void;
   setSoundEnabled: (enabled: boolean) => void;
   setShowWelcome: (show: boolean) => void;
+  addMcpServer: (server: MCPServerConfig) => void;
+  removeMcpServer: (name: string) => void;
+  updateMcpServer: (name: string, server: MCPServerConfig) => void;
 }
 
 const persistedApiKey = (() => {
@@ -58,6 +63,13 @@ const persistedConfig = (() => {
     const raw = localStorage.getItem('mas-kernel-config');
     return raw ? { ...DEFAULT_KERNEL_CONFIG, ...JSON.parse(raw) } : DEFAULT_KERNEL_CONFIG;
   } catch { return DEFAULT_KERNEL_CONFIG; }
+})();
+
+const persistedMcpServers = ((): MCPServerConfig[] => {
+  try {
+    const raw = localStorage.getItem('mas-mcp-servers');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
 })();
 
 const persistedSoundEnabled = (() => {
@@ -76,6 +88,7 @@ export const uiStore = createStore<UIState>((set) => ({
   settingsOpen: false,
   soundEnabled: persistedSoundEnabled,
   showWelcome: false,
+  mcpServers: persistedMcpServers,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -97,6 +110,22 @@ export const uiStore = createStore<UIState>((set) => ({
     set({ soundEnabled: enabled });
   },
   setShowWelcome: (show) => set({ showWelcome: show }),
+  addMcpServer: (server) => set((s) => {
+    if (s.mcpServers.some((srv) => srv.name === server.name)) return s;
+    const next = [...s.mcpServers, server];
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(next)); } catch { /* */ }
+    return { mcpServers: next };
+  }),
+  removeMcpServer: (name) => set((s) => {
+    const next = s.mcpServers.filter((srv) => srv.name !== name);
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(next)); } catch { /* */ }
+    return { mcpServers: next };
+  }),
+  updateMcpServer: (name, server) => set((s) => {
+    const next = s.mcpServers.map((srv) => (srv.name === name ? server : srv));
+    try { localStorage.setItem('mas-mcp-servers', JSON.stringify(next)); } catch { /* */ }
+    return { mcpServers: next };
+  }),
 }));
 
 // React hooks

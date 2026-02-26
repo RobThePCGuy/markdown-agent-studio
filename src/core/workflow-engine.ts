@@ -32,7 +32,8 @@ export class WorkflowEngine {
 
   async execute(
     workflow: WorkflowDefinition,
-    variables: Record<string, unknown>
+    variables: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<Record<string, Record<string, unknown>>> {
     this.stepStatuses.clear();
     this.stepOutputs.clear();
@@ -40,6 +41,10 @@ export class WorkflowEngine {
     const stepMap = new Map(workflow.steps.map((s) => [s.id, s]));
 
     for (const stepId of workflow.executionOrder) {
+      if (signal?.aborted) {
+        throw new Error('Workflow aborted');
+      }
+
       const step = stepMap.get(stepId);
       if (!step) continue;
 

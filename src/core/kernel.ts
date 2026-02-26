@@ -259,329 +259,15 @@ export class Kernel {
   }
 
   private async runSession(activation: Activation): Promise<void> {
-    const release = await this.semaphore.acquire();
-
-    const controller = new AbortController();
-    // Wire to global controller
-    const onGlobalAbort = () => controller.abort();
-    this.globalController.signal.addEventListener('abort', onGlobalAbort);
-
-    const session: AgentSession = {
-      agentId: activation.agentId,
-      activationId: activation.id,
-      controller,
-      status: 'running',
-      history: [{ role: 'user', content: activation.input }],
-      toolCalls: [],
-      tokenCount: 0,
-    };
-
-    this.activeSessions.set(activation.id, session);
-    this.deps.onSessionUpdate?.(session);
-    this.deps.sessionStore?.getState().openSession(activation.agentId, activation.id);
-    this.deps.sessionStore?.getState().addUserMessage(activation.id, activation.input);
-
-    this.deps.eventLog.getState().append({
-      type: 'activation',
-      agentId: activation.agentId,
-      activationId: activation.id,
-      data: { input: activation.input, depth: activation.spawnDepth },
+    await this._executeSession({
+      activation,
+      useSemaphore: true,
+      checkPause: true,
+      trackInQueue: true,
+      checkQuotaErrors: true,
+      checkWrapUp: true,
+      emitPolicyWarning: true,
     });
-
-    const profile = this.deps.agentRegistry.getState().get(activation.agentId);
-    if (!profile) {
-      session.status = 'error';
-      this._completedSessions.push(session);
-      this.activeSessions.delete(activation.id);
-      release();
-      this.globalController.signal.removeEventListener('abort', onGlobalAbort);
-      return;
-    }
-
-    // Build per-agent tool list (built-in + custom + MCP)
-    let sessionRegistry = this.deps.toolRegistry!;
-    if (profile.customTools && profile.customTools.length > 0) {
-      const customPlugins = profile.customTools.map(createCustomToolPlugin);
-      sessionRegistry = this.deps.toolRegistry!.cloneWith(customPlugins);
-    }
-
-    if (profile.mcpServers && this.deps.mcpManager) {
-      for (const serverConfig of profile.mcpServers) {
-        await this.deps.mcpManager.connect(serverConfig);
-      }
-      const mcpTools = this.deps.mcpManager.getTools();
-      const bridgePlugins = createMCPBridgePlugins(
-        mcpTools,
-        (server, tool, args) => this.deps.mcpManager!.callTool(server, tool, args)
-      );
-      if (bridgePlugins.length > 0) {
-        sessionRegistry = sessionRegistry.cloneWith(bridgePlugins);
-      }
-    }
-
-    const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
-    if (policyResolution.escalated) {
-      this.deps.eventLog.getState().append({
-        type: 'warning',
-        agentId: activation.agentId,
-        activationId: activation.id,
-        data: {
-          message:
-            `Task input matched frontmatter gloves_off trigger '${policyResolution.trigger}'. ` +
-            'Policy escalated to gloves_off for this activation.',
-        },
-      });
-    }
-
-    const toolHandler = new ToolHandler({
-      pluginRegistry: sessionRegistry,
-      vfs: this.deps.vfs,
-      agentRegistry: this.deps.agentRegistry,
-      eventLog: this.deps.eventLog,
-      onSpawnActivation: (act) => this.enqueue(act),
-      onRunSessionAndReturn: (act) => this.runSessionAndReturn(act),
-      currentAgentId: activation.agentId,
-      currentActivationId: activation.id,
-      parentAgentId: activation.parentId,
-      spawnDepth: activation.spawnDepth,
-      maxDepth: this.deps.config.maxDepth,
-      maxFanout: this.deps.config.maxFanout,
-      childCount: this.childCounts.get(activation.agentId) ?? 0,
-      policy: policyResolution.policy,
-      apiKey: this.deps.apiKey,
-      preferredModel: this.resolvePreferredModel(),
-      memoryStore: this.memoryStore,
-      taskQueueStore: this.deps.taskQueueStore,
-    });
-
-    try {
-      const MAX_AGENT_TURNS = 25;
-      let nudgeCount = 0;
-      const maxNudges = this.deps.config.maxNudges ?? 3;
-      const minTurns = this.deps.config.minTurnsBeforeStop ?? 0;
-      const toolFailures: Array<{ tool: string; args: string; error: string }> = [];
-      let sessionUsedTools = false;
-
-      // Inject workspace preamble and long-term memory context into system prompt
-      let systemPrompt = WORKSPACE_PREAMBLE + '\n' + profile.systemPrompt;
-      if (this.memoryManager && this.deps.config.memoryEnabled !== false) {
-        try {
-          const memoryContext = await this.memoryManager.buildMemoryPrompt(
-            activation.agentId,
-            activation.input,
-            undefined,
-            this.deps.config.memoryTokenBudget,
-          );
-          if (memoryContext) {
-            systemPrompt = memoryContext + '\n\n' + systemPrompt;
-          }
-        } catch {
-          // Memory injection is best-effort
-        }
-      }
-
-      for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
-        let textAccumulator = '';
-        let hadToolCalls = false;
-
-        // Register session with scripted provider if applicable
-        if (hasRegisterSession(this.deps.aiProvider)) {
-          this.deps.aiProvider.registerSession(activation.id, activation.agentId);
-        }
-
-        const stream = this.deps.aiProvider.chat(
-          {
-            sessionId: activation.id,
-            systemPrompt,
-            model: this.resolveSessionModel(profile.model),
-          },
-          session.history,
-          sessionRegistry.toToolDefinitions()
-        );
-
-        for await (const chunk of stream) {
-          if (controller.signal.aborted) {
-            session.status = 'aborted';
-            break;
-          }
-
-          this.deps.onStreamChunk?.(activation.agentId, chunk);
-          this.deps.sessionStore?.getState().appendChunk(activation.id, chunk);
-
-          switch (chunk.type) {
-            case 'text':
-              textAccumulator += chunk.text ?? '';
-              break;
-
-            case 'tool_call': {
-              if (this._paused) {
-                await this.waitForResume(controller.signal);
-                if (controller.signal.aborted) {
-                  session.status = 'aborted';
-                  break;
-                }
-              }
-
-              hadToolCalls = true;
-              sessionUsedTools = true;
-              const tc = chunk.toolCall!;
-              const result = await toolHandler.handle(tc.name, tc.args);
-
-              // Track tool failures
-              if (isToolFailure(result)) {
-                toolFailures.push({
-                  tool: tc.name,
-                  args: JSON.stringify(tc.args).slice(0, 200),
-                  error: result.slice(0, 300),
-                });
-              }
-
-              const record = {
-                id: tc.id,
-                name: tc.name,
-                args: tc.args,
-                result,
-                timestamp: Date.now(),
-              };
-              session.toolCalls.push(record);
-              session.history.push({
-                role: 'tool' as const,
-                content: result,
-                toolCall: record,
-              });
-              this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
-
-              if (tc.name === 'spawn_agent') {
-                const count = this.childCounts.get(activation.agentId) ?? 0;
-                this.childCounts.set(activation.agentId, count + 1);
-              }
-              break;
-            }
-
-            case 'done':
-              if (chunk.tokenCount) {
-                session.tokenCount += chunk.tokenCount;
-                this._totalTokens += chunk.tokenCount;
-              }
-              break;
-
-            case 'error':
-              session.status = 'error';
-              {
-                const errorMessage = chunk.error ?? 'Unknown stream error';
-                if (this.isQuotaError(errorMessage)) {
-                  this.haltForQuota(activation, errorMessage);
-                }
-              }
-              this.deps.eventLog.getState().append({
-                type: 'error',
-                agentId: activation.agentId,
-                activationId: activation.id,
-                data: { error: chunk.error },
-              });
-              break;
-          }
-        }
-
-        // Only add model text to history when no tool calls were made.
-        // When there are tool calls, the ChatSession tracks the model's text
-        // internally, and adding it here would break the trailing-tool-messages
-        // extraction that the provider uses for function responses.
-        if (textAccumulator && !hadToolCalls) {
-          session.history.push({ role: 'model', content: textAccumulator });
-        }
-
-        // Nudge system: if model stopped without tool calls too early, push it to keep going
-        if (!hadToolCalls && session.status === 'running') {
-          if (turn < minTurns && nudgeCount < maxNudges) {
-            nudgeCount++;
-            const nudge = buildNudgePrompt(turn, MAX_AGENT_TURNS, nudgeCount);
-            session.history.push({ role: 'user', content: nudge });
-            continue;
-          }
-          break;
-        }
-
-        // Exit if session errored/aborted
-        if (session.status !== 'running') break;
-
-        // Wrap-up threshold check (for autonomous mode)
-        if (this.deps.onBudgetWarning && !this._wrapUpInjected) {
-          const threshold = this.deps.config.wrapUpThreshold ?? 1.0;
-          if (this._totalTokens >= this.deps.config.tokenBudget * threshold) {
-            this._wrapUpInjected = true;
-            this.deps.onBudgetWarning(activation.id);
-          }
-        }
-
-        // Token budget check between turns
-        if (this._totalTokens >= this.deps.config.tokenBudget) {
-          this.haltForBudget(activation, 'mid-session');
-          break;
-        }
-      }
-
-      // Auto-record tool failures to working memory
-      if ((this.deps.config.autoRecordFailures ?? true) && toolFailures.length > 0 && this.memoryStore) {
-        const summary = toolFailures
-          .map((f) => `- ${f.tool}(${f.args}): ${f.error}`)
-          .join('\n');
-        this.memoryStore.getState().write({
-          key: 'tool-failures',
-          value: `Tool failures detected in session:\n${summary}`,
-          tags: ['mistake', 'tool-failure', 'auto-detected'],
-          authorAgentId: activation.agentId,
-        });
-      }
-
-      // Forced reflection: inject a reflection prompt and run one more turn
-      if (
-        (this.deps.config.forceReflection ?? false) &&
-        sessionUsedTools &&
-        session.status === 'running' &&
-        this._totalTokens < this.deps.config.tokenBudget
-      ) {
-        session.history.push({ role: 'user', content: REFLECTION_PROMPT });
-        await this.runReflectionTurn(session, activation, systemPrompt, sessionRegistry, profile.model);
-      }
-
-      if (session.status === 'running') {
-        session.status = 'completed';
-      }
-
-      this.deps.eventLog.getState().append({
-        type: 'complete',
-        agentId: activation.agentId,
-        activationId: activation.id,
-        data: { status: session.status, tokens: session.tokenCount },
-      });
-
-    } catch (err) {
-      session.status = 'error';
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      if (this.isQuotaError(errorMessage)) {
-        this.haltForQuota(activation, errorMessage);
-      }
-      this.deps.eventLog.getState().append({
-        type: 'error',
-        agentId: activation.agentId,
-        activationId: activation.id,
-        data: { error: errorMessage },
-      });
-    } finally {
-      this._completedSessions.push(session);
-      this.activeSessions.delete(activation.id);
-      this.globalController.signal.removeEventListener('abort', onGlobalAbort);
-      this.deps.sessionStore?.getState().closeSession(activation.id, session.status);
-      this.deps.aiProvider.endSession?.(activation.id);
-      release();
-      this.deps.onSessionUpdate?.(session);
-
-      // Try to process more from queue
-      if (!this._paused) {
-        this.processQueue();
-      }
-    }
   }
 
   async runSessionAndReturn(activation: Omit<Activation, 'id' | 'createdAt'>): Promise<string> {
@@ -595,12 +281,31 @@ export class Kernel {
       return 'Error: Loop detected, skipping activation.';
     }
     this.seenHashes.add(loopHash);
-    return this._runSessionForResult(fullActivation);
+    return this._executeSession({
+      activation: fullActivation,
+      useSemaphore: false,
+      checkPause: false,
+      trackInQueue: false,
+      checkQuotaErrors: false,
+      checkWrapUp: false,
+      emitPolicyWarning: false,
+    });
   }
 
-  private async _runSessionForResult(activation: Activation): Promise<string> {
-    // NOTE: No semaphore acquisition -- avoids deadlock when called from a
-    // parent session that already holds a slot.
+  private async _executeSession(opts: {
+    activation: Activation;
+    useSemaphore: boolean;
+    checkPause: boolean;
+    trackInQueue: boolean;
+    checkQuotaErrors: boolean;
+    checkWrapUp: boolean;
+    emitPolicyWarning: boolean;
+  }): Promise<string> {
+    const { activation } = opts;
+    let release: (() => void) | undefined;
+    if (opts.useSemaphore) {
+      release = await this.semaphore.acquire();
+    }
 
     const controller = new AbortController();
     const onGlobalAbort = () => controller.abort();
@@ -633,6 +338,7 @@ export class Kernel {
       session.status = 'error';
       this._completedSessions.push(session);
       this.activeSessions.delete(activation.id);
+      release?.();
       this.globalController.signal.removeEventListener('abort', onGlobalAbort);
       return 'Error: Agent profile not found.';
     }
@@ -659,6 +365,18 @@ export class Kernel {
     }
 
     const policyResolution = resolvePolicyForInput(profile.policy, activation.input);
+    if (opts.emitPolicyWarning && policyResolution.escalated) {
+      this.deps.eventLog.getState().append({
+        type: 'warning',
+        agentId: activation.agentId,
+        activationId: activation.id,
+        data: {
+          message:
+            `Task input matched frontmatter gloves_off trigger '${policyResolution.trigger}'. ` +
+            'Policy escalated to gloves_off for this activation.',
+        },
+      });
+    }
 
     const toolHandler = new ToolHandler({
       pluginRegistry: sessionRegistry,
@@ -743,6 +461,14 @@ export class Kernel {
               break;
 
             case 'tool_call': {
+              if (opts.checkPause && this._paused) {
+                await this.waitForResume(controller.signal);
+                if (controller.signal.aborted) {
+                  session.status = 'aborted';
+                  break;
+                }
+              }
+
               hadToolCalls = true;
               sessionUsedTools = true;
               const tc = chunk.toolCall!;
@@ -788,6 +514,12 @@ export class Kernel {
 
             case 'error':
               session.status = 'error';
+              if (opts.checkQuotaErrors) {
+                const errorMessage = chunk.error ?? 'Unknown stream error';
+                if (this.isQuotaError(errorMessage)) {
+                  this.haltForQuota(activation, errorMessage);
+                }
+              }
               this.deps.eventLog.getState().append({
                 type: 'error',
                 agentId: activation.agentId,
@@ -803,7 +535,7 @@ export class Kernel {
           finalText = textAccumulator;
         }
 
-        // Nudge system for sub-agent sessions
+        // Nudge system: if model stopped without tool calls too early, push it to keep going
         if (!hadToolCalls && session.status === 'running') {
           if (turn < minTurns && nudgeCount < maxNudges) {
             nudgeCount++;
@@ -814,8 +546,19 @@ export class Kernel {
           break;
         }
 
+        // Exit if session errored/aborted
         if (session.status !== 'running') break;
 
+        // Wrap-up threshold check (for autonomous mode)
+        if (opts.checkWrapUp && this.deps.onBudgetWarning && !this._wrapUpInjected) {
+          const threshold = this.deps.config.wrapUpThreshold ?? 1.0;
+          if (this._totalTokens >= this.deps.config.tokenBudget * threshold) {
+            this._wrapUpInjected = true;
+            this.deps.onBudgetWarning(activation.id);
+          }
+        }
+
+        // Token budget check between turns
         if (this._totalTokens >= this.deps.config.tokenBudget) {
           this.haltForBudget(activation, 'mid-session');
           break;
@@ -835,7 +578,7 @@ export class Kernel {
         });
       }
 
-      // Forced reflection for sub-agent sessions
+      // Forced reflection: inject a reflection prompt and run one more turn
       if (
         (this.deps.config.forceReflection ?? false) &&
         sessionUsedTools &&
@@ -860,6 +603,9 @@ export class Kernel {
     } catch (err) {
       session.status = 'error';
       const errorMessage = err instanceof Error ? err.message : String(err);
+      if (opts.checkQuotaErrors && this.isQuotaError(errorMessage)) {
+        this.haltForQuota(activation, errorMessage);
+      }
       this.deps.eventLog.getState().append({
         type: 'error',
         agentId: activation.agentId,
@@ -873,7 +619,13 @@ export class Kernel {
       this.globalController.signal.removeEventListener('abort', onGlobalAbort);
       this.deps.sessionStore?.getState().closeSession(activation.id, session.status);
       this.deps.aiProvider.endSession?.(activation.id);
+      release?.();
       this.deps.onSessionUpdate?.(session);
+
+      // Try to process more from queue
+      if (opts.trackInQueue && !this._paused) {
+        this.processQueue();
+      }
     }
 
     return finalText;

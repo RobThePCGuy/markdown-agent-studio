@@ -9,6 +9,9 @@ import { MemoryManager } from './memory-manager';
 import { createMemoryDB } from './memory-db';
 import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
 import { AutonomousRunner } from './autonomous-runner';
+import { parseWorkflow } from './workflow-parser';
+import { WorkflowEngine } from './workflow-engine';
+import { createStepRunner } from './workflow-runner';
 
 export interface RunControllerState {
   isRunning: boolean;
@@ -27,6 +30,7 @@ type Listener = (state: RunControllerState) => void;
 class RunController {
   private kernel: Kernel | null = null;
   private autonomousRunner: AutonomousRunner | null = null;
+  private workflowAbort: AbortController | null = null;
   private memoryManager = new MemoryManager(createMemoryDB(vfsStore));
 
   /** Re-create the memory DB (and manager) based on the current kernel config. */
@@ -244,6 +248,80 @@ class RunController {
     }
   }
 
+  async runWorkflow(workflowPath: string, variables: Record<string, unknown> = {}): Promise<void> {
+    if (this.state.isRunning) return;
+
+    const config = uiStore.getState().kernelConfig;
+    this.refreshMemoryManager(config);
+    sessionStore.getState().clearAll();
+
+    const abort = new AbortController();
+    this.workflowAbort = abort;
+    this.setState({ isRunning: true, isPaused: false });
+
+    let kernel: Kernel | null = null;
+    try {
+      // Read and parse workflow (inside try so YAML errors are caught)
+      const content = vfsStore.getState().read(workflowPath);
+      if (!content) throw new Error(`Workflow not found: ${workflowPath}`);
+
+      const workflow = parseWorkflow(workflowPath, content);
+      kernel = this.createKernel(config);
+
+      // Emit workflow_start
+      eventLogStore.getState().append({
+        type: 'workflow_start',
+        agentId: workflowPath,
+        activationId: `wf-${workflowPath}`,
+        data: {
+          workflowPath,
+          name: workflow.name,
+          steps: workflow.steps.map((s) => s.id),
+          variables,
+        },
+      });
+
+      const stepRunner = createStepRunner({
+        kernel,
+        eventLog: eventLogStore,
+        workflowPath,
+      });
+      const engine = new WorkflowEngine({ runStep: stepRunner });
+
+      const outputs = await engine.execute(workflow, variables, abort.signal);
+
+      eventLogStore.getState().append({
+        type: 'workflow_complete',
+        agentId: workflowPath,
+        activationId: `wf-${workflowPath}`,
+        data: {
+          workflowPath,
+          name: workflow.name,
+          stepCount: workflow.steps.length,
+          outputs: Object.keys(outputs),
+        },
+      });
+    } catch (err) {
+      eventLogStore.getState().append({
+        type: 'error',
+        agentId: workflowPath,
+        activationId: `wf-${workflowPath}`,
+        data: {
+          error: `Workflow failed: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      });
+    } finally {
+      this.workflowAbort = null;
+      this.setState({
+        isRunning: false,
+        isPaused: false,
+        totalTokens: kernel?.totalTokens ?? 0,
+        activeCount: 0,
+        queueCount: 0,
+      });
+    }
+  }
+
   pause(): void {
     if (this.autonomousRunner) {
       this.autonomousRunner.pause();
@@ -263,6 +341,10 @@ class RunController {
   }
 
   killAll(): void {
+    if (this.workflowAbort) {
+      this.workflowAbort.abort();
+      this.workflowAbort = null;
+    }
     if (this.autonomousRunner) {
       this.autonomousRunner.stop();
       this.autonomousRunner = null;

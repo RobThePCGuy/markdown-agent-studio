@@ -1,0 +1,73 @@
+.node {
+  min-width: 120px;
+  max-width: 180px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid #585b70;
+  background: rgba(30, 30, 46, 0.85);
+  backdrop-filter: blur(8px);
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-body);
+  transition: border-color 300ms, box-shadow 300ms;
+}
+
+.running {
+  box-shadow: 0 0 12px rgba(166, 227, 161, 0.3);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dotWrapper {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: absolute;
+  inset: 0;
+}
+
+.dotRing {
+  position: absolute;
+  inset: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: stepPulse 1.8s ease-out infinite;
+}
+
+@keyframes stepPulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+.label {
+  font-size: 12px;
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-heading);
+}
+
+.agent {
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+.handle {
+  border: none !important;
+}

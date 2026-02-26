@@ -30,11 +30,26 @@ export interface VectorStoreOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Interface
+// ---------------------------------------------------------------------------
+
+export interface IVectorStore {
+  init(): Promise<void>;
+  add(input: Omit<MemoryVector, 'embedding'>): Promise<MemoryVector>;
+  search(query: string, options?: SearchOptions): Promise<MemoryVector[]>;
+  update(id: string, changes: Partial<Pick<MemoryVector, 'content' | 'tags' | 'type' | 'shared'>>): Promise<void>;
+  delete(id: string): Promise<void>;
+  clear(): Promise<void>;
+  getAll(): Promise<MemoryVector[]>;
+  getById(id: string): Promise<MemoryVector | null>;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
 /** Cosine similarity between two equal-length number arrays. */
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let magA = 0;
   let magB = 0;
@@ -59,7 +74,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
  * Stores MemoryVector entries and provides search with cosine-similarity
  * ranking plus filtering by agentId, type, and tags.
  */
-export class VectorStore {
+export class VectorStore implements IVectorStore {
   private _engine: EmbeddingEngine;
   private _vectors: Map<string, MemoryVector> = new Map();
 
