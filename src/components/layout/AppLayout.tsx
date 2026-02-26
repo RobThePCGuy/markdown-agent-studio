@@ -8,6 +8,7 @@ import { AgentEditor } from '../editor/AgentEditor';
 import { InspectorPanel } from '../inspector/InspectorPanel';
 import { useUI } from '../../stores/use-stores';
 import SettingsModal from '../settings/SettingsModal';
+import WorkflowVariableModal from '../workflow/WorkflowVariableModal';
 import { CommandPalette } from '../command-palette/CommandPalette';
 import {
   dispatchRunControlEvent,
@@ -106,6 +107,7 @@ export function AppLayout() {
         </div>
       </div>
       <SettingsModal />
+      <WorkflowVariableModal />
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
     </>
   );

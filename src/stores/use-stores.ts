@@ -37,6 +37,12 @@ export interface UIState {
   soundEnabled: boolean;
   showWelcome: boolean;
   globalMcpServers: MCPServerConfig[];
+  workflowVariableModal: {
+    open: boolean;
+    workflowPath: string;
+    variables: string[];
+    onSubmit: (values: Record<string, string>) => void;
+  } | null;
   setSelectedAgent: (id: string | null) => void;
   setSelectedFile: (path: string | null) => void;
   setActiveTab: (tab: 'graph' | 'editor') => void;
@@ -49,6 +55,7 @@ export interface UIState {
   setSoundEnabled: (enabled: boolean) => void;
   setShowWelcome: (show: boolean) => void;
   setGlobalMcpServers: (servers: MCPServerConfig[]) => void;
+  setWorkflowVariableModal: (modal: UIState['workflowVariableModal']) => void;
 }
 
 const persistedApiKey = (() => {
@@ -87,6 +94,7 @@ export const uiStore = createStore<UIState>((set) => ({
   soundEnabled: persistedSoundEnabled,
   showWelcome: false,
   globalMcpServers: persistedMcpServers,
+  workflowVariableModal: null,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
   setSelectedFile: (path) => set({ selectedFilePath: path, selectedAgentId: null }),
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -112,6 +120,7 @@ export const uiStore = createStore<UIState>((set) => ({
     try { localStorage.setItem('mas-mcp-servers', JSON.stringify(servers)); } catch { /* localStorage may be unavailable */ }
     set({ globalMcpServers: servers });
   },
+  setWorkflowVariableModal: (modal) => set({ workflowVariableModal: modal }),
 }));
 
 // React hooks
