@@ -377,4 +377,64 @@ describe('ToolHandler', () => {
       expect(vfs.getState().read('memory/notes.md')).toBe('ok');
     });
   });
+
+  describe('blackboard tools (integration)', () => {
+    it('blackboard_write stores value and blackboard_read retrieves it', async () => {
+      const { createBlackboardStore } = await import('../stores/blackboard-store');
+      const bbStore = createBlackboardStore();
+      const bbHandler = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/test.md',
+        currentActivationId: 'act-bb',
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        blackboardStore: bbStore,
+      });
+
+      const writeResult = await bbHandler.handle('blackboard_write', { key: 'goal', value: 'finish task' });
+      expect(writeResult).toContain('Wrote "goal"');
+
+      const readResult = await bbHandler.handle('blackboard_read', { key: 'goal' });
+      expect(readResult).toContain('finish task');
+    });
+  });
+
+  describe('pub/sub tools (integration)', () => {
+    it('publish and subscribe round-trip', async () => {
+      const { createPubSubStore } = await import('../stores/pub-sub-store');
+      const psStore = createPubSubStore();
+      const psHandler = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/sender.md',
+        currentActivationId: 'act-ps',
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        pubSubStore: psStore,
+      });
+
+      // Subscribe first
+      const subResult = await psHandler.handle('subscribe', { channel: 'updates' });
+      expect(subResult).toContain('Subscribed');
+
+      // Publish a message
+      const pubResult = await psHandler.handle('publish', { channel: 'updates', message: 'hello world' });
+      expect(pubResult).toContain('Published');
+
+      // Check pending messages
+      const checkResult = await psHandler.handle('subscribe', { channel: 'updates', check: true });
+      expect(checkResult).toContain('hello world');
+    });
+  });
 });
