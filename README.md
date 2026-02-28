@@ -240,21 +240,21 @@ Agents access tools based on their safety mode and permission settings. The full
 | `memory_write` | Write an entry to working memory with tags |
 | `memory_read` | Search working memory by query or tags |
 
-**Knowledge Base** *(not yet wired into the runtime)*
+**Knowledge Base**
 
 | Tool | Description |
 |------|-------------|
 | `knowledge_query` | Semantic search across all agents' long-term memory (requires vector memory) |
 | `knowledge_contribute` | Add typed knowledge as tagged working memory (skill, fact, procedure, observation, mistake, preference) |
 
-**Messaging** *(not yet wired into the runtime)*
+**Messaging**
 
 | Tool | Description |
 |------|-------------|
 | `publish` | Broadcast a message to a named channel |
 | `subscribe` | Listen to a channel and check for pending messages |
 
-**Shared State** *(not yet wired into the runtime)*
+**Shared State**
 
 | Tool | Description |
 |------|-------------|
@@ -368,9 +368,9 @@ Memory is what makes agents learn. The system operates in three layers:
 | **Selective** | 30-50% of budget | Add only high-value knowledge; merge duplicates via UPDATE |
 | **Heavy cut** | > 50% of budget | Aggressively compress; target 10-20% reduction; merge related memories |
 
-Each memory is tagged, timestamped, and access-counted. Frequently accessed memories are prioritized for retention. Vector memory (opt-in via Settings) enables semantic retrieval using Transformers.js embeddings backed by IndexedDB, so agents can find related knowledge even with different phrasing. Note: the required `init()` call that loads persisted vectors on startup is not currently invoked in the runtime path, so vectors from previous sessions may not be available until this is addressed.
+Each memory is tagged, timestamped, and access-counted. Frequently accessed memories are prioritized for retention. Vector memory (opt-in via Settings) enables semantic retrieval using Transformers.js embeddings backed by IndexedDB, so agents can find related knowledge even with different phrasing.
 
-Shared memory is visible to all agents in a project. Private memory is scoped to a single agent. The `knowledge_contribute` and `knowledge_query` tools are intended for cross-agent knowledge sharing but are not yet connected to the runtime (see [Built-in Tools](#built-in-tools)).
+Shared memory is visible to all agents in a project. Private memory is scoped to a single agent.
 
 ---
 
@@ -380,9 +380,9 @@ Agents coordinate through four communication primitives:
 
 **Signal parent** - A spawned agent sends a message back to its creator when it finishes or needs attention. The simplest coordination pattern.
 
-**Pub/sub messaging** *(not yet wired into the runtime)* - Agents publish messages to named channels and subscribe to receive them. Messages include timestamps and author IDs. Subscribers only receive messages published after their subscription, with acknowledgment tracking to prevent duplicates. The pub/sub store is not currently passed to the kernel tool context, so these tools will return an error at runtime.
+**Pub/sub messaging** - Agents publish messages to named channels and subscribe to receive them. Messages include timestamps and author IDs. Subscribers only receive messages published after their subscription, with acknowledgment tracking to prevent duplicates.
 
-**Blackboard** *(not yet wired into the runtime)* - A shared key-value store visible to all agents in the current run. Useful for coordination flags, shared config, and status tracking between parallel agents. Cleared when the run ends. The blackboard store is not currently passed to the kernel tool context, so these tools will return an error at runtime.
+**Blackboard** - A shared key-value store visible to all agents in the current run. Useful for coordination flags, shared config, and status tracking between parallel agents. Cleared when the run ends.
 
 **Task queue** *(autonomous mode only)* - A priority-based task list that survives across autonomous cycles. These tools are not part of the default built-in registry; they are injected when an agent runs in autonomous mode. Agents can add, update, and remove tasks with statuses (`pending`, `in_progress`, `done`, `blocked`). Lower priority numbers execute first.
 
