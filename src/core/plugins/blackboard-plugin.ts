@@ -12,9 +12,17 @@ export const blackboardWritePlugin: ToolPlugin = {
     const value = String(args.value || '');
     if (!key) return 'Error: key is required.';
 
-    if (!ctx.blackboard) return 'Error: Blackboard not available.';
+    if (!ctx.blackboardStore) return 'Error: Blackboard not available.';
 
-    ctx.blackboard.set(key, value);
+    ctx.blackboardStore.getState().set(key, value);
+
+    ctx.eventLog.getState().append({
+      type: 'blackboard_write',
+      agentId: ctx.currentAgentId,
+      activationId: ctx.currentActivationId,
+      data: { key, value: String(value).slice(0, 200) },
+    });
+
     return `Wrote "${key}" to blackboard.`;
   },
 };
@@ -26,17 +34,25 @@ export const blackboardReadPlugin: ToolPlugin = {
     key: { type: 'string', description: 'Key to read (omit to list all keys)' },
   },
   async handler(args, ctx) {
-    if (!ctx.blackboard) return 'Error: Blackboard not available.';
+    if (!ctx.blackboardStore) return 'Error: Blackboard not available.';
 
+    const state = ctx.blackboardStore.getState();
     const key = args.key ? String(args.key).trim() : '';
 
+    ctx.eventLog.getState().append({
+      type: 'blackboard_read',
+      agentId: ctx.currentAgentId,
+      activationId: ctx.currentActivationId,
+      data: { key: key || '*' },
+    });
+
     if (!key) {
-      const keys = Array.from(ctx.blackboard.keys());
+      const keys = state.keys();
       if (keys.length === 0) return 'Blackboard is empty.';
-      return 'Blackboard keys:\n' + keys.map((k) => `- ${k}: ${String(ctx.blackboard!.get(k)).slice(0, 100)}`).join('\n');
+      return 'Blackboard keys:\n' + keys.map((k) => `- ${k}: ${String(state.get(k)).slice(0, 100)}`).join('\n');
     }
 
-    const value = ctx.blackboard.get(key);
+    const value = state.get(key);
     if (value === undefined) return `Key "${key}" not found on blackboard.`;
     return `${key}: ${String(value)}`;
   },
