@@ -11,6 +11,8 @@ import { createMemoryDB } from './memory-db';
 import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
 import { AutonomousRunner } from './autonomous-runner';
 import { MCPClientManager } from './mcp-client';
+import { pubSubStore, blackboardStore } from '../stores/use-stores';
+import { VectorMemoryDB } from './vector-memory-db';
 import { WorkflowEngine } from './workflow-engine';
 import { parseWorkflow, type WorkflowDefinition } from './workflow-parser';
 import { extractWorkflowVariables } from './workflow-variables';
@@ -47,10 +49,13 @@ class RunController {
   private memoryManager = new MemoryManager(createMemoryDB(vfsStore));
 
   /** Re-create the memory DB (and manager) based on the current kernel config. */
-  private refreshMemoryManager(config: KernelConfig): void {
+  private async refreshMemoryManager(config: KernelConfig): Promise<void> {
     const db = createMemoryDB(vfsStore, {
       useVectorStore: config.useVectorMemory ?? false,
     });
+    if (db instanceof VectorMemoryDB) {
+      await db.init();
+    }
     this.memoryManager = new MemoryManager(db);
   }
 
@@ -118,6 +123,9 @@ class RunController {
       memoryManager: config.memoryEnabled !== false ? this.memoryManager : undefined,
       mcpManager,
       apiKey,
+      pubSubStore,
+      blackboardStore,
+      vectorStore: config.memoryEnabled !== false ? this.memoryManager.vectorStoreAdapter : undefined,
       onSessionUpdate: () => {
         this.setState({
           totalTokens: kernel.totalTokens,
@@ -135,9 +143,11 @@ class RunController {
     if (this.state.isRunning) return;
 
     const config = uiStore.getState().kernelConfig;
-    this.refreshMemoryManager(config);
+    await this.refreshMemoryManager(config);
     // Keep per-run session context isolated for correct summarization.
     sessionStore.getState().clearAll();
+    pubSubStore.getState().clear();
+    blackboardStore.getState().clear();
     const kernel = await this.createKernel(config);
     kernel.enqueue({
       agentId: agentPath,
@@ -187,9 +197,11 @@ class RunController {
     if (this.state.isRunning) return;
 
     const config = uiStore.getState().kernelConfig;
-    this.refreshMemoryManager(config);
+    await this.refreshMemoryManager(config);
     // Ensure autonomous-cycle summarization only includes this autonomous run.
     sessionStore.getState().clearAll();
+    pubSubStore.getState().clear();
+    blackboardStore.getState().clear();
 
     // Resolve autonomous controls: agent frontmatter overrides global settings.
     const agentProfile = agentRegistry.getState().get(agentPath);
@@ -234,6 +246,8 @@ class RunController {
         apiKey: uiStore.getState().apiKey,
         providerType: uiStore.getState().provider,
         globalMcpServers: uiStore.getState().globalMcpServers,
+        pubSubStore,
+        blackboardStore,
       },
     );
 
@@ -292,8 +306,10 @@ class RunController {
     }
 
     const config = uiStore.getState().kernelConfig;
-    this.refreshMemoryManager(config);
+    await this.refreshMemoryManager(config);
     sessionStore.getState().clearAll();
+    pubSubStore.getState().clear();
+    blackboardStore.getState().clear();
 
     await this.executeWorkflow({
       workflowPath,
@@ -313,8 +329,10 @@ class RunController {
     if (!resume) return;
 
     const config = uiStore.getState().kernelConfig;
-    this.refreshMemoryManager(config);
+    await this.refreshMemoryManager(config);
     sessionStore.getState().clearAll();
+    pubSubStore.getState().clear();
+    blackboardStore.getState().clear();
 
     await this.executeWorkflow({
       workflowPath,
