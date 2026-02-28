@@ -21,6 +21,9 @@ import type { EventLogState } from '../stores/event-log';
 import type { SessionStoreState } from '../stores/session-store';
 import type { MemoryStoreState } from '../stores/memory-store';
 import { MCPClientManager, type MCPServerConfig } from './mcp-client';
+import type { PubSubState } from '../stores/pub-sub-store';
+import type { BlackboardState } from '../stores/blackboard-store';
+import type { ToolContext } from './tool-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 import type { ProviderType } from '../stores/use-stores';
 
@@ -46,6 +49,8 @@ export interface AutonomousRunnerDeps {
   eventLog: Store<EventLogState>;
   sessionStore: Store<SessionStoreState>;
   memoryStore: Store<MemoryStoreState>;
+  pubSubStore?: Store<PubSubState>;
+  blackboardStore?: Store<BlackboardState>;
   apiKey: string;
   providerType: ProviderType;
   globalMcpServers?: MCPServerConfig[];
@@ -392,6 +397,9 @@ export class AutonomousRunner {
       memoryManager: kernelConfig.memoryEnabled !== false ? this.deps.memoryManager : undefined,
       toolRegistry: registry,
       taskQueueStore: this.deps.taskQueueStore,
+      pubSubStore: this.deps.pubSubStore,
+      blackboardStore: this.deps.blackboardStore,
+      vectorStore: this.deps.memoryManager.vectorStoreAdapter,
       mcpManager,
       apiKey,
       onSessionUpdate: () => {
