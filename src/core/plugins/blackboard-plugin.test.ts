@@ -10,7 +10,7 @@ function makeContext(overrides?: Partial<ToolContext>): ToolContext {
   const eventLog = createEventLog(vfs);
   return {
     vfs,
-    registry: { getState: () => ({}) } as any,
+    registry: { getState: () => ({}) } as unknown as ToolContext['registry'],
     eventLog,
     currentAgentId: 'agent-1',
     currentActivationId: 'act-1',
