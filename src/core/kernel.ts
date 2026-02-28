@@ -14,6 +14,9 @@ import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { MemoryManager } from './memory-manager';
+import type { PubSubState } from '../stores/pub-sub-store';
+import type { BlackboardState } from '../stores/blackboard-store';
+import type { ToolContext } from './tool-plugin';
 import { MCPClientManager } from './mcp-client';
 
 const WORKSPACE_PREAMBLE =
@@ -86,6 +89,9 @@ interface KernelDeps {
   memoryManager?: MemoryManager;
   toolRegistry?: ToolPluginRegistry;
   taskQueueStore?: Store<TaskQueueState>;
+  pubSubStore?: Store<PubSubState>;
+  blackboardStore?: Store<BlackboardState>;
+  vectorStore?: ToolContext['vectorStore'];
   mcpManager?: MCPClientManager;
   apiKey?: string;
   onSessionUpdate?: (session: AgentSession) => void;
@@ -387,6 +393,9 @@ export class Kernel {
         preferredModel: this.resolveSpawnModel(profile.model),
         memoryStore: this.memoryStore,
         taskQueueStore: this.deps.taskQueueStore,
+        pubSubStore: this.deps.pubSubStore,
+        blackboardStore: this.deps.blackboardStore,
+        vectorStore: this.deps.vectorStore,
       });
 
     let finalText = '';
@@ -678,6 +687,9 @@ export class Kernel {
             preferredModel: this.resolveSpawnModel(profileModel),
             memoryStore: this.memoryStore,
             taskQueueStore: this.deps.taskQueueStore,
+            pubSubStore: this.deps.pubSubStore,
+            blackboardStore: this.deps.blackboardStore,
+            vectorStore: this.deps.vectorStore,
           });
           const result = await handler.handle(tc.name, tc.args);
           const record = { id: tc.id, name: tc.name, args: tc.args, result, timestamp: Date.now() };
