@@ -553,7 +553,7 @@ src/
 ```bash
 npm run dev          # local dev server
 npm run lint         # lint checks
-npm test             # test suite (51 test files)
+npm test             # test suite (52 test files)
 npm run build        # typecheck + production build
 npm run check:all    # lint + test + build + bundle guard
 ```

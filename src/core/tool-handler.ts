@@ -18,6 +18,7 @@ const BUILT_IN_TOOLS = new Set([
   'vfs_delete',
   'spawn_agent',
   'signal_parent',
+  'delegate',
   'web_fetch',
   'web_search',
   'memory_read',
