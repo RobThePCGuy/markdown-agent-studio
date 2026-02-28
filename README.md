@@ -2,6 +2,8 @@
 
 A visual IDE for building AI agents that learn from experience — not from training data or prompt engineering, but from doing the work.
 
+![Markdown Agent Studio Demo](./markdown-agent-studio-demo.gif)
+
 ## The Problem with AI Agents Today
 
 Every AI agent created under the same model starts with the same intelligence. We've tried to differentiate them through prompt engineering (telling them what to be) and fine-tuning (showing them what others have done). But neither of these is actual learning. A prompted agent doesn't get better at writing stories by writing stories. It gets the same result every time, from the same static starting point.
