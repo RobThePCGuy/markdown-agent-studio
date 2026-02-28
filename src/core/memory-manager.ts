@@ -24,6 +24,24 @@ export class MemoryManager {
     return this.db;
   }
 
+  /** Expose a ToolContext-compatible vectorStore when the DB supports it. */
+  get vectorStoreAdapter(): {
+    semanticSearch: (query: string, agentId: string, limit?: number) => Promise<{ type: string; content: string; tags: string[]; agentId: string }[]>;
+    markShared: (id: string, shared: boolean) => Promise<void>;
+  } | undefined {
+    if (!(this.db instanceof VectorMemoryDB)) return undefined;
+    const vectorDb = this.db;
+    return {
+      async semanticSearch(query, agentId, limit) {
+        const results = await vectorDb.semanticSearch(query, agentId, limit);
+        return results.map((r) => ({ type: r.type, content: r.content, tags: [...r.tags], agentId: r.agentId }));
+      },
+      async markShared(id, shared) {
+        await vectorDb.markShared(id, shared);
+      },
+    };
+  }
+
   async store(input: StoreInput): Promise<LongTermMemory> {
     const now = Date.now();
     const entry: LongTermMemory = {

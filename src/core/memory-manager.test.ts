@@ -418,3 +418,25 @@ describe('MemoryManager with VectorMemoryDB', () => {
     expect(results[0].tags).toContain('hello');
   });
 });
+
+// ---------------------------------------------------------------------------
+// MemoryManager.vectorStoreAdapter
+// ---------------------------------------------------------------------------
+
+describe('MemoryManager.vectorStoreAdapter', () => {
+  it('returns undefined for non-vector DB', () => {
+    const db = new MockMemoryDB();
+    const mm = new MemoryManager(db);
+    expect(mm.vectorStoreAdapter).toBeUndefined();
+  });
+
+  it('returns adapter for VectorMemoryDB', async () => {
+    const vectorDb = new VectorMemoryDB({ inMemory: true });
+    await vectorDb.init();
+    const mm = new MemoryManager(vectorDb);
+    const adapter = mm.vectorStoreAdapter;
+    expect(adapter).toBeDefined();
+    expect(typeof adapter!.semanticSearch).toBe('function');
+    expect(typeof adapter!.markShared).toBe('function');
+  });
+});
