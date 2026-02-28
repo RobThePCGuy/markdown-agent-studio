@@ -6,6 +6,7 @@ import type { EventLogState } from '../stores/event-log';
 import type { MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { PubSubState } from '../stores/pub-sub-store';
+import type { BlackboardState } from '../stores/blackboard-store';
 
 type Store<T> = { getState(): T };
 
@@ -39,7 +40,7 @@ export interface ToolContext {
     markShared: (id: string, shared: boolean) => Promise<void>;
   };
   pubSubStore?: Store<PubSubState>;
-  blackboard?: Map<string, unknown>;
+  blackboardStore?: Store<BlackboardState>;
 }
 
 export interface ToolPlugin {
