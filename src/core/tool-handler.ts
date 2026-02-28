@@ -6,6 +6,8 @@ import type { ToolPluginRegistry, ToolContext } from './tool-plugin';
 import type { AgentPolicy } from '../types/agent';
 import type { MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
+import type { PubSubState } from '../stores/pub-sub-store';
+import type { BlackboardState } from '../stores/blackboard-store';
 
 type Store<T> = { getState(): T };
 
@@ -22,6 +24,12 @@ const BUILT_IN_TOOLS = new Set([
   'memory_write',
   'task_queue_read',
   'task_queue_write',
+  'knowledge_query',
+  'knowledge_contribute',
+  'publish',
+  'subscribe',
+  'blackboard_write',
+  'blackboard_read',
 ]);
 
 export interface ToolHandlerConfig {
@@ -43,6 +51,9 @@ export interface ToolHandlerConfig {
   preferredModel?: string;
   memoryStore?: Store<MemoryStoreState>;
   taskQueueStore?: Store<TaskQueueState>;
+  pubSubStore?: Store<PubSubState>;
+  blackboardStore?: Store<BlackboardState>;
+  vectorStore?: ToolContext['vectorStore'];
 }
 
 export class ToolHandler {
@@ -103,6 +114,9 @@ export class ToolHandler {
         preferredModel: this.config.preferredModel,
         memoryStore: this.config.memoryStore,
         taskQueueStore: this.config.taskQueueStore,
+        pubSubStore: this.config.pubSubStore,
+        blackboardStore: this.config.blackboardStore,
+        vectorStore: this.config.vectorStore,
       };
       result = await plugin.handler(args, ctx);
     } else {
