@@ -4,6 +4,7 @@ export interface AgentConfig {
   sessionId: string;
   systemPrompt: string;
   model?: string;
+  maxTokens?: number;
 }
 
 export interface ToolDeclaration {

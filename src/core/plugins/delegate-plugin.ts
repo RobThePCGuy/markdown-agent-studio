@@ -20,9 +20,35 @@ export const delegatePlugin: ToolPlugin = {
     if (ctx.spawnDepth >= ctx.maxDepth) return `Error: Maximum spawn depth (${ctx.maxDepth}) reached.`;
     if (ctx.childCount >= ctx.maxFanout) return `Error: Maximum fanout (${ctx.maxFanout}) reached.`;
 
-    const input = context
-      ? `[Delegated Task from ${ctx.currentAgentId}]\n\n${task}\n\nContext:\n${context}`
-      : `[Delegated Task from ${ctx.currentAgentId}]\n\n${task}`;
+    // Build structured handoff packet
+    const handoffParts: string[] = [];
+    handoffParts.push(`[Delegated Task from ${ctx.currentAgentId}]`);
+    handoffParts.push('');
+    handoffParts.push('## Task');
+    handoffParts.push(task);
+    handoffParts.push('');
+
+    // Include relevant working memory entries
+    if (ctx.memoryStore) {
+      const memories = ctx.memoryStore.getState().read('', []);
+      if (memories.length > 0) {
+        handoffParts.push('## Parent Working Memory');
+        const relevant = memories.slice(-10);
+        for (const m of relevant) {
+          handoffParts.push(`- [${m.key}]: ${m.value.slice(0, 500)}`);
+        }
+        handoffParts.push('');
+      }
+    }
+
+    // Include explicit context if provided
+    if (context) {
+      handoffParts.push('## Additional Context');
+      handoffParts.push(context);
+      handoffParts.push('');
+    }
+
+    const input = handoffParts.join('\n');
 
     ctx.onSpawnActivation({
       agentId: agentPath,

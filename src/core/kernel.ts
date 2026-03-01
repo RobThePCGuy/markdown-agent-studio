@@ -401,7 +401,7 @@ export class Kernel {
     let finalText = '';
 
     try {
-      const MAX_AGENT_TURNS = 25;
+      const MAX_AGENT_TURNS = this.deps.config.maxAgentTurns ?? 25;
       let nudgeCount = 0;
       const maxNudges = this.deps.config.maxNudges ?? 3;
       const minTurns = this.deps.config.minTurnsBeforeStop ?? 0;
@@ -423,6 +423,9 @@ export class Kernel {
           }
         } catch {
           // Memory injection is best-effort
+        }
+        if (!this.memoryManager.isVectorEnabled) {
+          systemPrompt += '\n[Note: Keyword-based memory retrieval is active. Use specific terms in memory_read queries for best results.]\n';
         }
       }
 

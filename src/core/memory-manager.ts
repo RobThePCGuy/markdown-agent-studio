@@ -24,6 +24,11 @@ export class MemoryManager {
     return this.db;
   }
 
+  /** Check if vector-backed memory is active. */
+  get isVectorEnabled(): boolean {
+    return this.db instanceof VectorMemoryDB;
+  }
+
   /** Expose a ToolContext-compatible vectorStore when the DB supports it. */
   get vectorStoreAdapter(): {
     semanticSearch: (query: string, agentId: string, limit?: number) => Promise<{ type: string; content: string; tags: string[]; agentId: string }[]>;
@@ -71,7 +76,7 @@ export class MemoryManager {
   async retrieve(
     agentId: string,
     taskContext: string,
-    maxEntries = 15,
+    maxEntries = 25,
   ): Promise<LongTermMemory[]> {
     // Use semantic search if database supports it
     if (this.db instanceof VectorMemoryDB) {
@@ -129,10 +134,16 @@ export class MemoryManager {
       // Access frequency: log2(accessCount + 1) * 0.5
       score += Math.log2(m.accessCount + 1) * 0.5;
 
-      // Mistake type bonus: +2
-      if (m.type === 'mistake') {
-        score += 2;
-      }
+      // Type-based scoring priorities
+      const typePriority: Record<string, number> = {
+        mistake: 3,
+        procedure: 1.5,
+        skill: 1,
+        fact: 0.5,
+        observation: 0,
+        preference: 0,
+      };
+      score += typePriority[m.type] ?? 0;
 
       return { memory: m, score };
     });
@@ -193,6 +204,14 @@ export class MemoryManager {
     if (lines.length === 2) {
       return '';
     }
+
+    // Warn when memories were omitted due to budget
+    const includedCount = lines.length - 2; // subtract header and blank line
+    if (memories.length > includedCount) {
+      lines.push('');
+      lines.push(`_[${memories.length - includedCount} additional memories omitted due to token budget. Use memory_read for targeted retrieval.]_`);
+    }
+
     return lines.join('\n');
   }
 }

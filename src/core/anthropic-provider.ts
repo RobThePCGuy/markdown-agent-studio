@@ -93,7 +93,7 @@ export class AnthropicProvider implements AIProvider {
 
       const stream = await this.client.messages.create({
         model: config.model ?? 'claude-sonnet-4-5-20250929',
-        max_tokens: 8192,
+        max_tokens: config.maxTokens ?? 8192,
         system: config.systemPrompt,
         messages,
         tools: anthropicTools.length > 0 ? anthropicTools : undefined,

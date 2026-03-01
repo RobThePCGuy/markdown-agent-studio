@@ -59,6 +59,12 @@ export interface KernelConfig {
   useVectorMemory?: boolean;
   /** Maximum number of workflow steps to run in parallel when dependencies allow. */
   workflowMaxParallelSteps?: number;
+  /** Maximum LLM turns per agent session (default: 25). */
+  maxAgentTurns?: number;
+  /** Maximum messages per session for the summarizer (default: 40). */
+  summarizerMaxMessages?: number;
+  /** Maximum characters per message for the summarizer (default: 1200). */
+  summarizerMaxMessageChars?: number;
 }
 
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
@@ -67,7 +73,7 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxFanout: 5,
   tokenBudget: 250000,
   memoryEnabled: true,
-  memoryTokenBudget: 2000,
+  memoryTokenBudget: 4000,
   autonomousMaxCycles: 10,
   autonomousResumeMission: true,
   autonomousStopWhenComplete: false,
@@ -78,4 +84,7 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   autoRecordFailures: true,
   useVectorMemory: false,
   workflowMaxParallelSteps: 1,
+  maxAgentTurns: 25,
+  summarizerMaxMessages: 40,
+  summarizerMaxMessageChars: 1200,
 };

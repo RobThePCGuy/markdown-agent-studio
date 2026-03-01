@@ -162,6 +162,7 @@ export class AutonomousRunner {
       }
 
       const cycleNote = this.buildCycleNote(kernel, completeness, pendingActivations.length);
+      this.updateRunLedger(cycle, kernel);
       this.updateMissionState({
         status: shouldStopForCompletion ? 'completed' : 'running',
         totalCycles: cycle,
@@ -319,7 +320,7 @@ export class AutonomousRunner {
     const notes = this.missionState?.cycleNotes ?? [];
     if (notes.length > 0) {
       parts.push('## Prior Cycle Notes');
-      for (const note of notes.slice(-4)) {
+      for (const note of notes.slice(-8)) {
         parts.push(`- ${note}`);
       }
       parts.push('');
@@ -336,6 +337,15 @@ export class AutonomousRunner {
       parts.push('');
     }
 
+    // Run ledger (what has been done in prior cycles)
+    const ledger = this.deps.vfs.getState().read('memory/autonomous/run-ledger.md');
+    if (ledger) {
+      parts.push('## Run Ledger (What Has Been Done)');
+      const trimmed = ledger.length > 2000 ? '...\n' + ledger.slice(-2000) : ledger;
+      parts.push(trimmed);
+      parts.push('');
+    }
+
     // Work ethic
     parts.push('## Work Ethic');
     parts.push(
@@ -348,6 +358,23 @@ export class AutonomousRunner {
     parts.push('');
 
     // Instructions about available tools
+    // Proof requirements
+    parts.push('## Proof Requirements');
+    parts.push(
+      'Every cycle MUST produce evidence of progress. Before ending this cycle, write a structured ' +
+      'cycle evidence entry to memory_write with key "cycle-evidence" containing:\n' +
+      '- target: What specific thing you worked on this cycle\n' +
+      '- baseline: What the state was before your work\n' +
+      '- variant: What you changed or tested\n' +
+      '- method: How you tested or evaluated the change\n' +
+      '- result: What happened (with specific evidence, not just "it worked")\n' +
+      '- evidence_path: Path to the artifact that proves the result\n' +
+      '- next_change: What the next cycle should do differently based on this result\n\n' +
+      'If you cannot fill all fields, explain specifically what blocked you. ' +
+      'A cycle that claims success without evidence will be treated as incomplete.'
+    );
+    parts.push('');
+
     parts.push('## Autonomous Mode Tools');
     parts.push(
       'You have access to task_queue_read and task_queue_write tools to manage a persistent task queue ' +
@@ -428,7 +455,13 @@ export class AutonomousRunner {
         'Before ending, write a memory_write entry with key "cycle-reflection" that answers:\n' +
         '- What approaches worked in this cycle?\n' +
         '- What approaches FAILED and should not be repeated?\n' +
-        '- What is the most promising next step for the next cycle?',
+        '- What is the most promising next step for the next cycle?\n\n' +
+        '## Completion Proof\n' +
+        'If you believe the mission is complete, you MUST:\n' +
+        '1. List every target from the original mission\n' +
+        '2. For each target, cite the artifact path that proves it was addressed\n' +
+        '3. Identify any targets NOT addressed and explain why\n' +
+        'Write this to memory_write with key "completion-proof".',
     });
 
     this.deps.sessionStore.getState().addUserMessage(
@@ -453,6 +486,18 @@ export class AutonomousRunner {
     // Check if agent barely tried (very few tool calls total)
     const totalToolCalls = sessions.reduce((sum, s) => sum + s.toolCalls.length, 0);
     if (totalToolCalls <= 2) return 'incomplete';
+
+    // Check for cycle evidence in working memory
+    const workingMemory = kernel.lastWorkingMemorySnapshot;
+    const hasEvidence = workingMemory.some(
+      (m) => m.key === 'cycle-evidence' || m.key.startsWith('cycle-evidence'),
+    );
+    if (!hasEvidence) return 'incomplete';
+
+    // Check that evaluation artifacts exist in VFS
+    const vfsState = this.deps.vfs.getState();
+    const artifactPaths = vfsState.getAllPaths().filter((p) => p.startsWith('artifacts/'));
+    if (artifactPaths.length === 0) return 'incomplete';
 
     // Check the last model message for incompleteness signals
     const lastSession = sessions[sessions.length - 1];
@@ -495,6 +540,36 @@ export class AutonomousRunner {
       : '';
 
     return `Cycle ${this._currentCycle}: ${completeness}. Sessions=${sessionCount}, tool_calls=${toolCalls}.${rolloverText} ${summary}`;
+  }
+
+  private updateRunLedger(cycle: number, kernel: Kernel): void {
+    const ledgerPath = 'memory/autonomous/run-ledger.md';
+    const tasks = this.deps.taskQueueStore.getState().getAll();
+    const existing = this.deps.vfs.getState().read(ledgerPath) ?? '';
+
+    const sessions = kernel.completedSessions;
+    const toolCalls = sessions.reduce((sum, s) => sum + s.toolCalls.length, 0);
+    const filesWritten = sessions.flatMap((s) =>
+      s.toolCalls
+        .filter((tc) => tc.name === 'vfs_write')
+        .map((tc) => String(tc.args.path ?? '')),
+    );
+
+    const workingMemory = kernel.lastWorkingMemorySnapshot;
+    const evidence = workingMemory.find((m) => m.key === 'cycle-evidence');
+
+    const entry = [
+      `## Cycle ${cycle}`,
+      `- Tool calls: ${toolCalls}`,
+      `- Files written: ${filesWritten.join(', ') || 'none'}`,
+      `- Tasks pending: ${tasks.filter((t) => t.status === 'pending').length}`,
+      `- Tasks done: ${tasks.filter((t) => t.status === 'done').length}`,
+      evidence ? `- Evidence: ${evidence.value.slice(0, 500)}` : '- Evidence: NONE',
+      '',
+    ].join('\n');
+
+    const updated = existing ? existing + '\n' + entry : entry;
+    this.deps.vfs.getState().write(ledgerPath, updated, {});
   }
 
   private compactText(input: string, maxChars: number): string {

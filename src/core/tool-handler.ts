@@ -125,11 +125,12 @@ export class ToolHandler {
       result = `Error: Unknown tool '${toolName}'. Available tools: ${available}`;
     }
 
+    const truncated = result.length > 500;
     eventLog.getState().append({
       type: 'tool_result',
       agentId: this.config.currentAgentId,
       activationId: this.config.currentActivationId,
-      data: { tool: toolName, result: result.slice(0, 500) },
+      data: { tool: toolName, result: result.slice(0, 500), truncated },
     });
 
     return result;

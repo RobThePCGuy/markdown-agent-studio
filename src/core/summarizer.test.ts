@@ -201,8 +201,8 @@ describe('Summarizer', () => {
     expect(all).toHaveLength(0);
   });
 
-  it('truncates long messages to 500 characters', async () => {
-    const longContent = 'x'.repeat(1000);
+  it('truncates long messages to 1200 characters', async () => {
+    const longContent = 'x'.repeat(2000);
     const session = makeSession({
       messages: [
         { role: 'user', content: longContent, timestamp: 1000 },
@@ -214,14 +214,14 @@ describe('Summarizer', () => {
     await summarizer.summarize('run-1', [], [session]);
 
     const contextArg = mockSummarizeFn.mock.calls[0][0];
-    // The full 1000-char content should NOT appear
+    // The full 2000-char content should NOT appear
     expect(contextArg).not.toContain(longContent);
-    // But a truncated version (500 chars + '...') should
-    expect(contextArg).toContain('x'.repeat(500) + '...');
+    // But a truncated version (1200 chars + '...') should
+    expect(contextArg).toContain('x'.repeat(1200) + '...');
   });
 
-  it('only includes last 20 messages per session', async () => {
-    const messages = Array.from({ length: 30 }, (_, i) => ({
+  it('only includes last 40 messages per session', async () => {
+    const messages = Array.from({ length: 50 }, (_, i) => ({
       role: 'user' as const,
       content: `msg_${String(i).padStart(3, '0')}_end`,
       timestamp: i * 1000,
@@ -233,12 +233,12 @@ describe('Summarizer', () => {
     await summarizer.summarize('run-1', [], [session]);
 
     const contextArg = mockSummarizeFn.mock.calls[0][0];
-    // First 10 messages (000-009) should be excluded (only last 20 kept)
+    // First 10 messages (000-009) should be excluded (only last 40 kept)
     for (let i = 0; i < 10; i++) {
       expect(contextArg).not.toContain(`msg_${String(i).padStart(3, '0')}_end`);
     }
-    // Last 20 messages (010-029) should be present
-    for (let i = 10; i < 30; i++) {
+    // Last 40 messages (010-049) should be present
+    for (let i = 10; i < 50; i++) {
       expect(contextArg).toContain(`msg_${String(i).padStart(3, '0')}_end`);
     }
   });

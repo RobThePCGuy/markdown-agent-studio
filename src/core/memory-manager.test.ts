@@ -185,13 +185,13 @@ describe('MemoryManager', () => {
       expect(results).toHaveLength(3);
     });
 
-    it('defaults maxEntries to 15', async () => {
-      for (let i = 0; i < 20; i++) {
+    it('defaults maxEntries to 25', async () => {
+      for (let i = 0; i < 30; i++) {
         await mm.store({ agentId: 'a', type: 'fact', content: `item ${i}`, tags: [], runId: 'r' });
       }
 
       const results = await mm.retrieve('a', 'item');
-      expect(results).toHaveLength(15);
+      expect(results).toHaveLength(25);
     });
 
     it('returns empty array when no memories match', async () => {
@@ -352,7 +352,7 @@ describe('MemoryManager with VectorMemoryDB', () => {
     const results = await mm.retrieve('agent-A', 'TypeScript programming');
 
     // Semantic search should have been called (not the keyword path)
-    expect(semanticSpy).toHaveBeenCalledWith('TypeScript programming', 'agent-A', 15);
+    expect(semanticSpy).toHaveBeenCalledWith('TypeScript programming', 'agent-A', 25);
     expect(results.length).toBeGreaterThan(0);
 
     // All results should belong to agent-A

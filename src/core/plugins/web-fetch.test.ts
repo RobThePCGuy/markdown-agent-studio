@@ -47,8 +47,9 @@ describe('web_fetch plugin', () => {
     } as unknown as Response);
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com', maxLength: 50 }, mockCtx);
-    expect(result).toContain('[truncated]');
-    expect(result.length).toBeLessThanOrEqual(62); // 50 + '\n[truncated]'
+    expect(result).toContain('[truncated:');
+    expect(result).toContain('showing 25% of content');
+    expect(result).toContain('Use maxLength parameter');
   });
 
   it('returns error for non-ok responses', async () => {

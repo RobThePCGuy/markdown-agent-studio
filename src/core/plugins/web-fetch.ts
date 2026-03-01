@@ -38,7 +38,9 @@ export const webFetchPlugin: ToolPlugin = {
       }
 
       if (text.length > maxLength) {
-        return text.slice(0, maxLength) + '\n[truncated]';
+        const pctKept = Math.round((maxLength / text.length) * 100);
+        return text.slice(0, maxLength) +
+          `\n[truncated: showing ${pctKept}% of content (${maxLength} of ${text.length} chars). Use maxLength parameter to retrieve more.]`;
       }
 
       return text;

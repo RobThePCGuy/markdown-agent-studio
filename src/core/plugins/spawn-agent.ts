@@ -59,6 +59,26 @@ export const spawnAgentPlugin: ToolPlugin = {
       return `Error: fanout limit reached (${totalChildren}/${ctx.maxFanout}). This agent cannot spawn more children.`;
     }
 
+    // Build structured handoff packet with parent working memory
+    const handoffParts: string[] = [];
+    handoffParts.push(`[Spawned Task from ${ctx.currentAgentId}]`);
+    handoffParts.push('');
+    handoffParts.push('## Task');
+    handoffParts.push(task);
+    handoffParts.push('');
+    if (ctx.memoryStore) {
+      const memories = ctx.memoryStore.getState().read('', []);
+      if (memories.length > 0) {
+        handoffParts.push('## Parent Working Memory');
+        const relevant = memories.slice(-10);
+        for (const m of relevant) {
+          handoffParts.push(`- [${m.key}]: ${m.value.slice(0, 500)}`);
+        }
+        handoffParts.push('');
+      }
+    }
+    const handoffInput = handoffParts.join('\n');
+
     // If the agent already exists in the registry, activate it instead of overwriting
     const existingProfile = registry.getState().get(path);
     if (existingProfile) {
@@ -66,7 +86,7 @@ export const spawnAgentPlugin: ToolPlugin = {
 
       ctx.onSpawnActivation({
         agentId: path,
-        input: task,
+        input: handoffInput,
         parentId: ctx.currentAgentId,
         spawnDepth: newDepth,
         priority: newDepth,
@@ -98,7 +118,7 @@ export const spawnAgentPlugin: ToolPlugin = {
 
     ctx.onSpawnActivation({
       agentId: path,
-      input: task,
+      input: handoffInput,
       parentId: ctx.currentAgentId,
       spawnDepth: newDepth,
       priority: newDepth,

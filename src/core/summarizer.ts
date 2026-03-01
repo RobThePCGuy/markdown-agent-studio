@@ -116,8 +116,8 @@ const VALID_MEMORY_TYPES = new Set<string>(['fact', 'procedure', 'observation', 
 // Summarizer
 // ---------------------------------------------------------------------------
 
-const MAX_MESSAGES_PER_SESSION = 20;
-const MAX_MESSAGE_CHARS = 500;
+const MAX_MESSAGES_PER_SESSION = 40;
+const MAX_MESSAGE_CHARS = 1200;
 
 export class Summarizer {
   private manager: MemoryManager;
@@ -249,8 +249,15 @@ export class Summarizer {
         parts.push(`### Agent: ${session.agentId} (activation: ${session.activationId})`);
         parts.push('');
 
-        // Take the last N messages per session
-        const recentMessages = session.messages.slice(-MAX_MESSAGES_PER_SESSION);
+        // Prioritize message types: tool results + model reasoning first, then user prompts
+        if (session.messages.length > MAX_MESSAGES_PER_SESSION) {
+          parts.push(`[Note: ${session.messages.length - MAX_MESSAGES_PER_SESSION} earlier messages omitted from this session]`);
+        }
+        const toolMessages = session.messages.filter((m) => m.role === 'tool');
+        const assistantMessages = session.messages.filter((m) => m.role === 'assistant');
+        const userMessages = session.messages.filter((m) => m.role === 'user');
+        const prioritized = [...toolMessages, ...assistantMessages, ...userMessages];
+        const recentMessages = prioritized.slice(-MAX_MESSAGES_PER_SESSION);
 
         for (const msg of recentMessages) {
           // Truncate message content to MAX_MESSAGE_CHARS
