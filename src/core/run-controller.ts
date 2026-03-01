@@ -54,7 +54,14 @@ class RunController {
       useVectorStore: config.useVectorMemory ?? false,
     });
     if (db instanceof VectorMemoryDB) {
-      await db.init();
+      try {
+        await db.init();
+      } catch (err) {
+        console.warn('[RunController] Vector memory init failed, falling back to plain memory:', err);
+        const fallback = createMemoryDB(vfsStore, { useVectorStore: false });
+        this.memoryManager = new MemoryManager(fallback);
+        return;
+      }
     }
     this.memoryManager = new MemoryManager(db);
   }

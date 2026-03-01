@@ -141,7 +141,9 @@ export class OpenAIProvider implements AIProvider {
         let args: Record<string, unknown> = {};
         try {
           args = JSON.parse(accum.args || '{}');
-        } catch { /* empty args on parse failure */ }
+        } catch (e) {
+          console.warn(`OpenAI: failed to parse tool args for "${accum.name}":`, e);
+        }
 
         toolCalls.push({
           id: accum.id,

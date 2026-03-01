@@ -160,7 +160,8 @@ export class VFSMemoryDB implements MemoryDB {
     try {
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
-    } catch {
+    } catch (e) {
+      console.warn('VFSMemoryDB: corrupted memory file, returning empty:', e);
       return [];
     }
   }

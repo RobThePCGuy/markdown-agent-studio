@@ -1,4 +1,8 @@
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
+
+// Don't attempt to load models from the local server – fetch from Hugging Face CDN
+// and let the browser Cache API handle persistence across sessions.
+env.allowLocalModels = false;
 
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;

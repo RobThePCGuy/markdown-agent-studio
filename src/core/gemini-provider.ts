@@ -74,7 +74,7 @@ export class GeminiProvider implements AIProvider {
         }
 
         // Only include tool results whose names match the model's function calls
-        const matchedToolMsgs = toolMsgs.filter(t => calledNames.has(t.toolCall!.name));
+        const matchedToolMsgs = toolMsgs.filter(t => t.toolCall && calledNames.has(t.toolCall.name));
 
         // Append as a single "function" role Content (matches SDK convention)
         if (matchedToolMsgs.length > 0) {
@@ -82,7 +82,7 @@ export class GeminiProvider implements AIProvider {
             role: 'function',
             parts: matchedToolMsgs.map(t => ({
               functionResponse: {
-                name: t.toolCall!.name,
+                name: t.toolCall!.name, // safe: filtered by toolCall above
                 response: { result: t.content },
               },
             })),

@@ -132,7 +132,9 @@ export class AnthropicProvider implements AIProvider {
               let args: Record<string, unknown> = {};
               try {
                 args = JSON.parse(currentToolUse.jsonAccum || '{}');
-              } catch { /* empty args on parse failure */ }
+              } catch (e) {
+                console.warn(`Anthropic: failed to parse tool args for "${currentToolUse.name}":`, e);
+              }
 
               assistantContent.push({
                 type: 'tool_use',

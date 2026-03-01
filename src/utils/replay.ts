@@ -12,22 +12,32 @@ export function restoreCheckpoint(
   const vfs = vfsStore.getState();
   const registry = agentRegistry.getState();
 
-  // Clear registry first to avoid stale lookups while files are replaced.
+  // Pre-validate checkpoint data before any destructive operations.
+  const paths = Object.keys(checkpoint.files).sort((a, b) => a.localeCompare(b));
+  const agentEntries: Array<{ path: string; content: string }> = [];
+  for (const path of paths) {
+    const content = checkpoint.files[path];
+    if (typeof content !== 'string') {
+      throw new Error(`Checkpoint file "${path}" has invalid content`);
+    }
+    if (path.startsWith('agents/')) {
+      agentEntries.push({ path, content });
+    }
+  }
+
+  // Clear existing state only after validation passes.
   for (const agent of registry.listAll()) {
     registry.unregister(agent.path);
   }
-
-  // Remove every current file before restoring snapshot files.
   for (const path of vfs.getAllPaths()) {
     vfs.deleteFile(path);
   }
 
-  const paths = Object.keys(checkpoint.files).sort((a, b) => a.localeCompare(b));
+  // Restore from checkpoint.
   for (const path of paths) {
-    const content = checkpoint.files[path];
-    vfs.write(path, content, { authorAgentId: 'replay' });
-    if (path.startsWith('agents/')) {
-      registry.registerFromFile(path, content);
-    }
+    vfs.write(path, checkpoint.files[path], { authorAgentId: 'replay' });
+  }
+  for (const { path, content } of agentEntries) {
+    registry.registerFromFile(path, content);
   }
 }

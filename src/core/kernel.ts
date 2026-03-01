@@ -185,6 +185,7 @@ export class Kernel {
   killAll(): void {
     this.globalController.abort();
     this._paused = true;
+    this.semaphore.drain();
     for (const session of this.activeSessions.values()) {
       session.controller.abort();
       session.status = 'aborted';
@@ -209,6 +210,7 @@ export class Kernel {
   }
 
   async runUntilEmpty(): Promise<void> {
+    this.seenHashes.clear();
     if (this.memoryStore) {
       this.currentRunId = `run-${Date.now()}`;
       this.memoryStore.getState().initRun(this.currentRunId);
@@ -310,7 +312,12 @@ export class Kernel {
     const { activation } = opts;
     let release: (() => void) | undefined;
     if (opts.useSemaphore) {
-      release = await this.semaphore.acquire();
+      try {
+        release = await this.semaphore.acquire();
+      } catch {
+        // Semaphore was drained (killAll) while waiting
+        return 'Error: Session cancelled.';
+      }
     }
 
     const controller = new AbortController();
