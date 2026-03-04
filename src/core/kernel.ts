@@ -66,7 +66,6 @@ const REFLECTION_PROMPT =
   '- Key "next-steps": What remains incomplete and what to try next';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
-const LEGACY_GEMINI_MODEL = /^gemini-1\.5/i;
 const QUOTA_ERROR_PATTERNS = [
   /quota/i,
   /rate[\s-]?limit/i,
@@ -428,8 +427,13 @@ export class Kernel {
           if (memoryContext) {
             systemPrompt = memoryContext + '\n\n' + systemPrompt;
           }
-        } catch {
-          // Memory injection is best-effort
+        } catch (err) {
+          this.deps.eventLog.getState().append({
+            type: 'warning',
+            agentId: activation.agentId,
+            activationId: activation.id,
+            data: { message: `Memory injection failed: ${err instanceof Error ? err.message : String(err)}` },
+          });
         }
         if (!this.memoryManager.isVectorEnabled) {
           systemPrompt += '\n[Note: Keyword-based memory retrieval is active. Use specific terms in memory_read queries for best results.]\n';
@@ -784,10 +788,7 @@ export class Kernel {
   /** Returns the user's explicitly configured model, or undefined if none set. */
   private resolvePreferredModel(): string | undefined {
     const configured = typeof this.deps.config.model === 'string' ? this.deps.config.model.trim() : '';
-    if (configured && !LEGACY_GEMINI_MODEL.test(configured)) {
-      return configured;
-    }
-    return undefined;
+    return configured || undefined;
   }
 
   /** Returns the model to inject into spawned agents (config model or parent model). */
@@ -795,24 +796,16 @@ export class Kernel {
     const preferred = this.resolvePreferredModel();
     if (preferred) return preferred;
     const profile = typeof profileModel === 'string' ? profileModel.trim() : '';
-    if (profile && !LEGACY_GEMINI_MODEL.test(profile)) {
-      return profile;
-    }
-    return undefined;
+    return profile || undefined;
   }
 
   private resolveSessionModel(profileModel: string | undefined): string {
     // Settings (config) model takes priority - it's the user's explicit global choice.
     const preferred = this.resolvePreferredModel();
-    if (preferred) {
-      return preferred;
-    }
+    if (preferred) return preferred;
     // Agent profile model is used as a per-agent fallback when no config model is set.
     const profile = typeof profileModel === 'string' ? profileModel.trim() : '';
-    if (profile && !LEGACY_GEMINI_MODEL.test(profile)) {
-      return profile;
-    }
-    return DEFAULT_MODEL;
+    return profile || DEFAULT_MODEL;
   }
 
   private isQuotaError(message: unknown): boolean {

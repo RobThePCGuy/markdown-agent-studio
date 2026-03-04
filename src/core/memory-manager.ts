@@ -4,6 +4,23 @@ import { VectorMemoryDB } from './vector-memory-db';
 
 let ltmCounter = 0;
 
+// ---------------------------------------------------------------------------
+// Type-aware recency decay rates
+// ---------------------------------------------------------------------------
+// Each type decays at a different rate per day, reflecting how long that
+// category of knowledge stays relevant.
+
+const RECENCY_DECAY_RATES: Record<MemoryType, number> = {
+  mistake: 0.03,      // ~100 days to zero — prevent repeated failures long-term
+  procedure: 0.1,     // ~30 days — workflows stay relevant for weeks
+  skill: 0.1,         // ~30 days — techniques stay relevant
+  fact: 0.1,          // ~30 days — knowledge evolves
+  observation: 0.3,   // ~10 days — patterns are time-sensitive
+  preference: 0,      // never decays — style choices are evergreen
+};
+
+const MAX_RECENCY_BONUS = 3;
+
 export interface StoreInput {
   agentId: string;
   type: MemoryType;
@@ -78,17 +95,33 @@ export class MemoryManager {
     taskContext: string,
     maxEntries = 25,
   ): Promise<LongTermMemory[]> {
-    // Use semantic search if database supports it
+    // Use semantic search if database supports it, with time-weighted re-ranking
     if (this.db instanceof VectorMemoryDB) {
-      const results = await this.db.semanticSearch(taskContext, agentId, maxEntries);
-      // Update access tracking on retrieved results
+      // Fetch more candidates than needed so re-ranking has room to promote
+      const fetchLimit = Math.min(maxEntries * 3, 75);
+      const results = await this.db.semanticSearch(taskContext, agentId, fetchLimit);
+
+      // Apply secondary scoring: recency + access frequency bonuses
       const now = Date.now();
-      for (const mem of results) {
+      const reranked = results.map((mem) => {
+        const ageDays = (now - mem.createdAt) / (1000 * 60 * 60 * 24);
+        const decayRate = RECENCY_DECAY_RATES[mem.type] ?? 0.1;
+        const recencyBonus = Math.max(0, MAX_RECENCY_BONUS - ageDays * decayRate);
+        const accessBonus = Math.log2((mem.accessCount || 0) + 1) * 0.5;
+        return { mem, bonus: recencyBonus + accessBonus };
+      });
+
+      // Re-sort by bonus descending to break ties among semantically similar memories
+      reranked.sort((a, b) => b.bonus - a.bonus);
+      const top = reranked.slice(0, maxEntries).map((r) => r.mem);
+
+      // Update access tracking on retrieved results
+      for (const mem of top) {
         mem.accessCount = (mem.accessCount || 0) + 1;
         mem.lastAccessedAt = now;
         await this.db.put(mem);
       }
-      return results;
+      return top;
     }
 
     // Fallback: keyword scoring for non-vector databases
@@ -127,9 +160,10 @@ export class MemoryManager {
         }
       }
 
-      // Recency bonus: max(0, 2 - ageDays * 0.3)
+      // Type-aware recency bonus
       const ageDays = (now - m.createdAt) / (1000 * 60 * 60 * 24);
-      score += Math.max(0, 2 - ageDays * 0.3);
+      const decayRate = RECENCY_DECAY_RATES[m.type] ?? 0.1;
+      score += Math.max(0, MAX_RECENCY_BONUS - ageDays * decayRate);
 
       // Access frequency: log2(accessCount + 1) * 0.5
       score += Math.log2(m.accessCount + 1) * 0.5;

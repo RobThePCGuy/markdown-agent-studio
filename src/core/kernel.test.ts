@@ -126,7 +126,7 @@ describe('Kernel', () => {
     expect(kernel.totalTokens).toBeGreaterThan(0);
   });
 
-  it('normalizes legacy gemini-1.5 model to configured kernel model', async () => {
+  it('config model takes priority over agent profile model', async () => {
     vfs.getState().write(
       'agents/legacy.md',
       '---\nname: "Legacy"\nmodel: "gemini-1.5-pro"\n---\nLegacy agent.',

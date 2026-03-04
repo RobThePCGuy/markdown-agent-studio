@@ -5,7 +5,7 @@ import { createProvider } from './provider-factory';
 import { createBuiltinRegistry } from './plugins';
 import { taskQueueReadPlugin } from './plugins/task-queue-read';
 import { taskQueueWritePlugin } from './plugins/task-queue-write';
-import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
+import { Summarizer, createSummarizeFn, createConsolidateFn, getDefaultSummarizeModel, type SummarizerEventFn } from './summarizer';
 import {
   prepareMissionState,
   saveMissionState,
@@ -638,12 +638,24 @@ export class AutonomousRunner {
     const { apiKey } = this.deps;
     if (!hasUsableApiKey(apiKey) || completedSessions.length === 0) return false;
 
-    const summarizeModel = kernelConfig.model || 'gemini-2.0-flash';
+    const providerType = this.deps.providerType ?? 'gemini';
+    const summarizeModel = kernelConfig.model || getDefaultSummarizeModel(providerType);
+    const onSummarizerEvent: SummarizerEventFn = (level, message) => {
+      if (level === 'error' || level === 'warning') {
+        this.deps.eventLog.getState().append({
+          type: 'warning',
+          agentId: this.config.agentPath,
+          activationId: 'system',
+          data: { message: `[Summarizer] ${message}` },
+        });
+      }
+    };
     const summarizer = new Summarizer(
       this.deps.memoryManager,
-      createGeminiSummarizeFn(apiKey, summarizeModel),
+      createSummarizeFn(providerType, apiKey, summarizeModel),
       this.deps.vfs,
-      createGeminiConsolidateFn(apiKey, summarizeModel),
+      createConsolidateFn(providerType, apiKey, summarizeModel),
+      onSummarizerEvent,
     );
     try {
       await summarizer.summarize(
@@ -652,8 +664,13 @@ export class AutonomousRunner {
         completedSessions,
       );
       return true;
-    } catch {
-      // Summarization is best-effort
+    } catch (err) {
+      this.deps.eventLog.getState().append({
+        type: 'warning',
+        agentId: this.config.agentPath,
+        activationId: 'system',
+        data: { message: `[Summarizer] Cycle summarization failed: ${err instanceof Error ? err.message : String(err)}` },
+      });
       return false;
     }
   }

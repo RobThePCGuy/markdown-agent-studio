@@ -48,14 +48,18 @@ import { VectorStore } from './vector-store';
 function makeMemory(
   overrides: Partial<Omit<MemoryVector, 'embedding'>> = {},
 ): Omit<MemoryVector, 'embedding'> {
+  const now = Date.now();
   return {
     id: overrides.id ?? 'mem-1',
     agentId: overrides.agentId ?? 'agent-A',
     content: overrides.content ?? 'TypeScript is a typed superset of JavaScript',
     type: overrides.type ?? 'fact',
     tags: overrides.tags ?? ['typescript', 'programming'],
-    createdAt: overrides.createdAt ?? Date.now(),
-    updatedAt: overrides.updatedAt ?? Date.now(),
+    createdAt: overrides.createdAt ?? now,
+    updatedAt: overrides.updatedAt ?? now,
+    accessCount: overrides.accessCount ?? 0,
+    runId: overrides.runId ?? '',
+    lastAccessedAt: overrides.lastAccessedAt ?? now,
     shared: overrides.shared ?? false,
     ...(overrides.cycleId !== undefined ? { cycleId: overrides.cycleId } : {}),
   };

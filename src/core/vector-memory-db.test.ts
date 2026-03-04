@@ -226,6 +226,42 @@ describe('VectorMemoryDB', () => {
     expect(mem.createdAt).toBe(5000);
   });
 
+  // ---- Round-trip field preservation for accessCount, runId, lastAccessedAt
+  it('preserves accessCount, runId, and lastAccessedAt through round-trip', async () => {
+    await db.put(makeLTM({
+      id: 'rt-1',
+      accessCount: 7,
+      runId: 'run-abc',
+      lastAccessedAt: 9999,
+    }));
+
+    const all = await db.getAll();
+    expect(all).toHaveLength(1);
+    const mem = all[0];
+    expect(mem.accessCount).toBe(7);
+    expect(mem.runId).toBe('run-abc');
+    expect(mem.lastAccessedAt).toBe(9999);
+  });
+
+  it('preserves accessCount through semantic search round-trip', async () => {
+    await db.put(makeLTM({
+      id: 'search-rt-1',
+      agentId: 'agent-A',
+      content: 'TypeScript generics are useful',
+      accessCount: 12,
+      runId: 'run-xyz',
+      lastAccessedAt: 8888,
+    }));
+
+    const results = await db.semanticSearch('TypeScript', 'agent-A');
+    expect(results.length).toBeGreaterThan(0);
+    const found = results.find((r) => r.id === 'search-rt-1');
+    expect(found).toBeDefined();
+    expect(found!.accessCount).toBe(12);
+    expect(found!.runId).toBe('run-xyz');
+    expect(found!.lastAccessedAt).toBe(8888);
+  });
+
   // ---- Additional: multiple puts and getAll returns all
   it('multiple puts and getAll returns all entries', async () => {
     await db.put(makeLTM({ id: 'm1', content: 'Alpha' }));

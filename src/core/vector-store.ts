@@ -13,6 +13,9 @@ export interface MemoryVector {
   embedding: number[];
   createdAt: number;
   updatedAt: number;
+  accessCount: number;
+  runId: string;
+  lastAccessedAt: number;
   cycleId?: string;
   shared: boolean;
 }

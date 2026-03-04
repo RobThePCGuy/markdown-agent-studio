@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Summarizer } from './summarizer';
+import { Summarizer, createSummarizeFn, createConsolidateFn, getDefaultSummarizeModel } from './summarizer';
 import type { SummarizeFn, ExtractedMemory } from './summarizer';
 import { MemoryManager, _resetLtmCounter } from './memory-manager';
 import { InMemoryMemoryDB } from './memory-db';
@@ -485,6 +485,57 @@ describe('Summarizer', () => {
       // Should contain similar existing memories found via semantic search
       expect(consolidateArg).toContain('Similar existing:');
       expect(consolidateArg).toContain('ltm-existing-1');
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-provider dispatcher tests
+// ---------------------------------------------------------------------------
+
+describe('Multi-provider dispatchers', () => {
+  describe('getDefaultSummarizeModel', () => {
+    it('returns gemini-2.0-flash for gemini', () => {
+      expect(getDefaultSummarizeModel('gemini')).toBe('gemini-2.0-flash');
+    });
+
+    it('returns gpt-4o-mini for openai', () => {
+      expect(getDefaultSummarizeModel('openai')).toBe('gpt-4o-mini');
+    });
+
+    it('returns claude-sonnet-4-5-20250929 for anthropic', () => {
+      expect(getDefaultSummarizeModel('anthropic')).toBe('claude-sonnet-4-5-20250929');
+    });
+  });
+
+  describe('createSummarizeFn', () => {
+    it('returns a function for gemini provider', () => {
+      const fn = createSummarizeFn('gemini', 'fake-key');
+      expect(typeof fn).toBe('function');
+    });
+
+    it('returns a function for openai provider', () => {
+      const fn = createSummarizeFn('openai', 'fake-key');
+      expect(typeof fn).toBe('function');
+    });
+
+    it('returns a function for anthropic provider', () => {
+      const fn = createSummarizeFn('anthropic', 'fake-key');
+      expect(typeof fn).toBe('function');
+    });
+
+    it('uses custom model when provided', () => {
+      // Just verify it doesn't throw — the actual model is passed to the SDK
+      const fn = createSummarizeFn('openai', 'fake-key', 'gpt-4o');
+      expect(typeof fn).toBe('function');
+    });
+  });
+
+  describe('createConsolidateFn', () => {
+    it('returns a function for each provider', () => {
+      expect(typeof createConsolidateFn('gemini', 'key')).toBe('function');
+      expect(typeof createConsolidateFn('openai', 'key')).toBe('function');
+      expect(typeof createConsolidateFn('anthropic', 'key')).toBe('function');
     });
   });
 });

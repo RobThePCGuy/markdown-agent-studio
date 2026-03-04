@@ -26,13 +26,16 @@ function toMemoryVector(entry: LongTermMemory): Omit<MemoryVector, 'embedding'> 
     tags: [...entry.tags],
     createdAt: entry.createdAt,
     updatedAt: entry.lastAccessedAt,
+    accessCount: entry.accessCount,
+    runId: entry.runId,
+    lastAccessedAt: entry.lastAccessedAt,
     shared: entry.agentId === 'global',
   };
 }
 
 /**
  * Convert a MemoryVector back to LongTermMemory.
- * Fields that don't exist in MemoryVector (accessCount, runId) get defaults.
+ * Uses the accessCount, runId, and lastAccessedAt fields stored on the vector.
  */
 function toLongTermMemory(vec: MemoryVector): LongTermMemory {
   return {
@@ -42,9 +45,9 @@ function toLongTermMemory(vec: MemoryVector): LongTermMemory {
     content: vec.content,
     tags: [...vec.tags],
     createdAt: vec.createdAt,
-    lastAccessedAt: vec.updatedAt,
-    accessCount: 0,
-    runId: '',
+    lastAccessedAt: vec.lastAccessedAt ?? vec.updatedAt,
+    accessCount: vec.accessCount ?? 0,
+    runId: vec.runId ?? '',
   };
 }
 

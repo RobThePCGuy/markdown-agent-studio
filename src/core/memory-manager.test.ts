@@ -270,6 +270,60 @@ describe('MemoryManager', () => {
     });
   });
 
+  describe('type-aware recency decay', () => {
+    it('mistakes decay much slower than observations', async () => {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      // Directly insert into mock DB with old createdAt
+      await db.put({
+        id: 'old-mistake',
+        agentId: 'a',
+        type: 'mistake',
+        content: 'do not use eval',
+        tags: ['security'],
+        createdAt: thirtyDaysAgo,
+        lastAccessedAt: thirtyDaysAgo,
+        accessCount: 0,
+        runId: 'r',
+      });
+      await db.put({
+        id: 'old-observation',
+        agentId: 'a',
+        type: 'observation',
+        content: 'build was slow today',
+        tags: ['perf'],
+        createdAt: thirtyDaysAgo,
+        lastAccessedAt: thirtyDaysAgo,
+        accessCount: 0,
+        runId: 'r',
+      });
+
+      const results = await mm.retrieve('a', 'zzz-no-keyword-match');
+      // mistake (decay 0.03/day → bonus ~2.1 after 30d, plus type priority +3)
+      // should rank above observation (decay 0.3/day → bonus 0 after 10d, type priority 0)
+      expect(results[0].type).toBe('mistake');
+    });
+
+    it('preferences never decay', async () => {
+      const oneHundredDaysAgo = Date.now() - 100 * 24 * 60 * 60 * 1000;
+      await db.put({
+        id: 'old-pref',
+        agentId: 'a',
+        type: 'preference',
+        content: 'user prefers dark mode',
+        tags: ['ui'],
+        createdAt: oneHundredDaysAgo,
+        lastAccessedAt: oneHundredDaysAgo,
+        accessCount: 0,
+        runId: 'r',
+      });
+
+      const results = await mm.retrieve('a', 'zzz-no-match');
+      // Even 100 days old, preference should still have a recency bonus of 3 (max)
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('preference');
+    });
+  });
+
   describe('buildMemoryPrompt', () => {
     it('formats memories as markdown with header', async () => {
       await mm.store({ agentId: 'a', type: 'fact', content: 'The API uses REST', tags: ['api', 'rest'], runId: 'r' });
@@ -351,8 +405,8 @@ describe('MemoryManager with VectorMemoryDB', () => {
 
     const results = await mm.retrieve('agent-A', 'TypeScript programming');
 
-    // Semantic search should have been called (not the keyword path)
-    expect(semanticSpy).toHaveBeenCalledWith('TypeScript programming', 'agent-A', 25);
+    // Semantic search should have been called with 3x limit for re-ranking headroom
+    expect(semanticSpy).toHaveBeenCalledWith('TypeScript programming', 'agent-A', 75);
     expect(results.length).toBeGreaterThan(0);
 
     // All results should belong to agent-A
@@ -386,10 +440,8 @@ describe('MemoryManager with VectorMemoryDB', () => {
     putSpy.mockClear();
     const results2 = await mm.retrieve('agent-A', 'testing');
     expect(results2).toHaveLength(1);
-    // accessCount is 1 because VectorMemoryDB round-trips through MemoryVector
-    // which resets accessCount to 0, then we increment to 1 again.
-    // The important thing is that put() is called each time.
-    expect(results2[0].accessCount).toBe(1);
+    // accessCount should now be 2 because the round-trip preserves the count
+    expect(results2[0].accessCount).toBe(2);
     expect(results2[0].lastAccessedAt).toBeGreaterThanOrEqual(results1[0].lastAccessedAt);
     expect(putSpy).toHaveBeenCalled();
   });

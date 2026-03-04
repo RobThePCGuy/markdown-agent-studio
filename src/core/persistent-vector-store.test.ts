@@ -4,14 +4,18 @@ import { PersistentVectorStore } from './persistent-vector-store';
 import type { MemoryVector } from './vector-store';
 
 function makeVector(id: string, content: string, agentId = 'agent-a'): Omit<MemoryVector, 'embedding'> {
+  const now = Date.now();
   return {
     id,
     agentId,
     content,
     type: 'fact',
     tags: ['test'],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
+    accessCount: 0,
+    runId: '',
+    lastAccessedAt: now,
     shared: false,
   };
 }

@@ -8,7 +8,7 @@ import type { EventLogEntry } from '../types/events';
 import { restoreCheckpoint } from '../utils/replay';
 import { MemoryManager } from './memory-manager';
 import { createMemoryDB } from './memory-db';
-import { Summarizer, createGeminiSummarizeFn, createGeminiConsolidateFn } from './summarizer';
+import { Summarizer, createSummarizeFn, createConsolidateFn, getDefaultSummarizeModel, type SummarizerEventFn } from './summarizer';
 import { AutonomousRunner } from './autonomous-runner';
 import { MCPClientManager } from './mcp-client';
 import { pubSubStore, blackboardStore } from '../stores/use-stores';
@@ -174,18 +174,36 @@ class RunController {
           .filter((s) => s.completedAt);
 
         // Run summarization in background
-        const apiKey = uiStore.getState().apiKey;
+        const { apiKey, provider: providerType } = uiStore.getState();
         if (this.hasUsableApiKey(apiKey) && completedSessions.length > 0) {
-          const summarizeModel = config.model || 'gemini-2.0-flash';
+          const summarizeModel = config.model || getDefaultSummarizeModel(providerType);
+          const onSummarizerEvent: SummarizerEventFn = (level, message) => {
+            if (level === 'error' || level === 'warning') {
+              eventLogStore.getState().append({
+                type: 'warning',
+                agentId: 'system',
+                activationId: 'system',
+                data: { message: `[Summarizer] ${message}` },
+              });
+            }
+          };
           const summarizer = new Summarizer(
             this.memoryManager,
-            createGeminiSummarizeFn(apiKey, summarizeModel),
+            createSummarizeFn(providerType, apiKey, summarizeModel),
             vfsStore,
-            createGeminiConsolidateFn(apiKey, summarizeModel),
+            createConsolidateFn(providerType, apiKey, summarizeModel),
+            onSummarizerEvent,
           );
           summarizer
             .summarize(`run-${Date.now()}`, workingSnapshot, completedSessions)
-            .catch(() => {});
+            .catch((err) => {
+              eventLogStore.getState().append({
+                type: 'warning',
+                agentId: 'system',
+                activationId: 'system',
+                data: { message: `[Summarizer] Post-run summarization failed: ${err instanceof Error ? err.message : String(err)}` },
+              });
+            });
         }
       }
     } finally {
@@ -363,43 +381,23 @@ class RunController {
 
   private getWorkflowResumePayload(
     workflowPath: string,
-    workflow: WorkflowDefinition,
+    _workflow: WorkflowDefinition,
   ): WorkflowResumePayload | null {
     const failedEvent = this.findLatestFailedWorkflowEvent(workflowPath);
     if (!failedEvent) return null;
 
     const resumeRaw = failedEvent.data.workflowResume as Record<string, unknown> | undefined;
-    if (resumeRaw && typeof resumeRaw === 'object') {
-      const variables = (resumeRaw.variables as Record<string, string>) ?? {};
-      const completedOutputs =
-        (resumeRaw.completedOutputs as Record<string, Record<string, unknown>>) ?? {};
-      const perStepTokens = (resumeRaw.perStepTokens as Record<string, number>) ?? {};
-      const completedStepsRaw = resumeRaw.completedSteps;
-      const completedSteps = typeof completedStepsRaw === 'number'
-        ? completedStepsRaw
-        : Object.keys(completedOutputs).length;
-      return { variables, completedOutputs, perStepTokens, completedSteps };
-    }
+    if (!resumeRaw || typeof resumeRaw !== 'object') return null;
 
-    // Backward-compat fallback for legacy failed events.
-    const variables = (failedEvent.data.variables as Record<string, string>) ?? {};
-    const perStepTokens = (failedEvent.data.perStepTokens as Record<string, number>) ?? {};
-    const completedStepCount = (failedEvent.data.completedSteps as number) ?? 0;
-    const completedOutputs: Record<string, Record<string, unknown>> = {};
-    for (let i = 0; i < completedStepCount && i < workflow.executionOrder.length; i++) {
-      const stepId = workflow.executionOrder[i];
-      completedOutputs[stepId] = {
-        result: '[resumed from previous run]',
-        tokens: perStepTokens[stepId] ?? 0,
-      };
-    }
-
-    return {
-      variables,
-      completedOutputs,
-      perStepTokens,
-      completedSteps: completedStepCount,
-    };
+    const variables = (resumeRaw.variables as Record<string, string>) ?? {};
+    const completedOutputs =
+      (resumeRaw.completedOutputs as Record<string, Record<string, unknown>>) ?? {};
+    const perStepTokens = (resumeRaw.perStepTokens as Record<string, number>) ?? {};
+    const completedStepsRaw = resumeRaw.completedSteps;
+    const completedSteps = typeof completedStepsRaw === 'number'
+      ? completedStepsRaw
+      : Object.keys(completedOutputs).length;
+    return { variables, completedOutputs, perStepTokens, completedSteps };
   }
 
   private extractLastModelMessage(kernel: Kernel): string {
