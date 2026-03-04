@@ -12,13 +12,11 @@ import { MCPClientManager } from '../core/mcp-client';
 
 const MODE_ALIASES: Record<string, AgentExecutionMode> = {
   safe: 'safe',
-  street: 'safe',
   balanced: 'balanced',
-  autonomous: 'gloves_off',
   gloves_off: 'gloves_off',
   'gloves-off': 'gloves_off',
   glovesoff: 'gloves_off',
-  track: 'gloves_off',
+  autonomous: 'gloves_off',
 };
 
 function parseMode(input: unknown): AgentExecutionMode {
@@ -365,12 +363,9 @@ function parseCustomTools(
 function parseAutonomousConfig(
   frontmatter: Record<string, unknown>,
 ): AutonomousConfig | undefined {
-  const mode = typeof frontmatter.mode === 'string'
-    ? frontmatter.mode.trim().toLowerCase()
-    : '';
   const autoBlock = frontmatter.autonomous;
   const hasAutoBlock = autoBlock && typeof autoBlock === 'object' && !Array.isArray(autoBlock);
-  if (mode !== 'autonomous' && !hasAutoBlock) return undefined;
+  if (!hasAutoBlock) return undefined;
 
   let maxCycles = 10;
   let stopWhenComplete: boolean | undefined;

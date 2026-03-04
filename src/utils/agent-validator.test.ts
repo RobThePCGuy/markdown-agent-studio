@@ -130,7 +130,7 @@ Do work.`;
     expect(modeDiag!.severity).toBe('warning');
   });
 
-  it('accepts autonomous mode without unknown-mode warning', () => {
+  it('accepts autonomous as a valid mode alias', () => {
     const content = `---
 name: "Agent"
 mode: autonomous

@@ -3,6 +3,9 @@ import type { WorkingMemoryEntry, MemoryType, LongTermMemory } from '../types/me
 import type { LiveSession } from '../types/session';
 import type { VFSState } from '../stores/vfs-store';
 import { VectorMemoryDB } from './vector-memory-db';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 type Store<T> = { getState(): T };
 
@@ -17,6 +20,8 @@ export interface ExtractedMemory {
 }
 
 export type SummarizeFn = (context: string) => Promise<ExtractedMemory[]>;
+
+export type SummarizerEventFn = (level: 'info' | 'warning' | 'error', message: string) => void;
 
 // ---------------------------------------------------------------------------
 // System prompt for the LLM summarizer
@@ -124,17 +129,20 @@ export class Summarizer {
   private summarizeFn: SummarizeFn;
   private vfs?: Store<VFSState>;
   private consolidateFn?: ConsolidateFn;
+  private onEvent?: SummarizerEventFn;
 
   constructor(
     manager: MemoryManager,
     summarizeFn: SummarizeFn,
     vfs?: Store<VFSState>,
     consolidateFn?: ConsolidateFn,
+    onEvent?: SummarizerEventFn,
   ) {
     this.manager = manager;
     this.summarizeFn = summarizeFn;
     this.vfs = vfs;
     this.consolidateFn = consolidateFn;
+    this.onEvent = onEvent;
   }
 
   /**
@@ -151,13 +159,19 @@ export class Summarizer {
     let extracted: ExtractedMemory[];
     try {
       extracted = await this.summarizeFn(context);
-    } catch {
-      // Gracefully handle summarize function errors - just return
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.onEvent?.('error', `Memory extraction failed: ${msg}`);
       return;
     }
 
     if (extracted.length === 0 && !this.consolidateFn) {
+      this.onEvent?.('info', 'No memories extracted from run — nothing to store.');
       return;
+    }
+
+    if (extracted.length > 0) {
+      this.onEvent?.('info', `Extracted ${extracted.length} candidate memories from run.`);
     }
 
     // Determine the agent ID to associate memories with.
@@ -175,13 +189,15 @@ export class Summarizer {
         const consolidationContext = await this.buildConsolidationContext(extracted, existing, agentId);
         const result = await this.consolidateFn(consolidationContext);
         await this.applyConsolidation(result, agentId, runId);
+        this.onEvent?.('info', `Consolidation complete — applied ${result.operations.length} operations.`);
         return;
-      } catch {
-        // Fall through to legacy add-all behavior
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.onEvent?.('warning', `Memory consolidation failed (${msg}), storing extracted memories directly.`);
       }
     }
 
-    // Legacy fallback: add all extracted memories directly
+    // Direct store: add all extracted memories without consolidation
     for (const memory of extracted) {
       await this.manager.store({
         agentId,
@@ -191,6 +207,7 @@ export class Summarizer {
         runId,
       });
     }
+    this.onEvent?.('info', `Stored ${extracted.length} memories directly (no consolidation).`);
   }
 
   /**
@@ -385,40 +402,165 @@ export class Summarizer {
 // Factory helpers for creating LLM-backed summarize/consolidate functions
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Provider type (re-exported for convenience)
+// ---------------------------------------------------------------------------
+
+type ProviderType = 'gemini' | 'anthropic' | 'openai';
+
+// ---------------------------------------------------------------------------
+// Gemini factories
+// ---------------------------------------------------------------------------
+
 export function createGeminiSummarizeFn(apiKey: string, model: string): SummarizeFn {
   return async (context: string) => {
-    try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const client = new GoogleGenerativeAI(apiKey);
-      const genModel = client.getGenerativeModel({ model });
-      const result = await genModel.generateContent(
-        SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
-      );
-      const text = result.response.text();
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) return [];
-      return JSON.parse(jsonMatch[0]);
-    } catch {
-      return [];
-    }
+    const client = new GoogleGenerativeAI(apiKey);
+    const genModel = client.getGenerativeModel({ model });
+    const result = await genModel.generateContent(
+      SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
+    );
+    const text = result.response.text();
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    return JSON.parse(jsonMatch[0]);
   };
 }
 
 export function createGeminiConsolidateFn(apiKey: string, model: string): ConsolidateFn {
   return async (context: string) => {
-    try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const client = new GoogleGenerativeAI(apiKey);
-      const genModel = client.getGenerativeModel({ model });
-      const result = await genModel.generateContent(
-        CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
-      );
-      const text = result.response.text();
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return { operations: [] };
-      return JSON.parse(jsonMatch[0]);
-    } catch {
-      return { operations: [] };
-    }
+    const client = new GoogleGenerativeAI(apiKey);
+    const genModel = client.getGenerativeModel({ model });
+    const result = await genModel.generateContent(
+      CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
+    );
+    const text = result.response.text();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { operations: [] };
+    return JSON.parse(jsonMatch[0]);
   };
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI factories
+// ---------------------------------------------------------------------------
+
+export function createOpenAISummarizeFn(apiKey: string, model: string): SummarizeFn {
+  return async (context: string) => {
+    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: SUMMARIZER_SYSTEM_PROMPT },
+        { role: 'user', content: context },
+      ],
+    });
+    const text = response.choices[0]?.message?.content ?? '';
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    return JSON.parse(jsonMatch[0]);
+  };
+}
+
+export function createOpenAIConsolidateFn(apiKey: string, model: string): ConsolidateFn {
+  return async (context: string) => {
+    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: CONSOLIDATION_SYSTEM_PROMPT },
+        { role: 'user', content: context },
+      ],
+    });
+    const text = response.choices[0]?.message?.content ?? '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { operations: [] };
+    return JSON.parse(jsonMatch[0]);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Anthropic factories
+// ---------------------------------------------------------------------------
+
+/** Extract text from an Anthropic response content array. */
+function extractAnthropicText(content: Array<{ type: string; [key: string]: unknown }>): string {
+  return content
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as unknown as { text: string }).text)
+    .join('');
+}
+
+export function createAnthropicSummarizeFn(apiKey: string, model: string): SummarizeFn {
+  return async (context: string) => {
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    const response = await client.messages.create({
+      model,
+      max_tokens: 4096,
+      system: SUMMARIZER_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: context }],
+    });
+    const text = extractAnthropicText(response.content as Array<{ type: string }>);
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    return JSON.parse(jsonMatch[0]);
+  };
+}
+
+export function createAnthropicConsolidateFn(apiKey: string, model: string): ConsolidateFn {
+  return async (context: string) => {
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    const response = await client.messages.create({
+      model,
+      max_tokens: 4096,
+      system: CONSOLIDATION_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: context }],
+    });
+    const text = extractAnthropicText(response.content as Array<{ type: string }>);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { operations: [] };
+    return JSON.parse(jsonMatch[0]);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Multi-provider dispatchers
+// ---------------------------------------------------------------------------
+
+const DEFAULT_SUMMARIZE_MODELS: Record<ProviderType, string> = {
+  gemini: 'gemini-2.0-flash',
+  openai: 'gpt-4o-mini',
+  anthropic: 'claude-sonnet-4-5-20250929',
+};
+
+/** Return the default lightweight model for summarization given a provider. */
+export function getDefaultSummarizeModel(providerType: ProviderType): string {
+  return DEFAULT_SUMMARIZE_MODELS[providerType] ?? 'gemini-2.0-flash';
+}
+
+/** Create a SummarizeFn backed by the user's selected provider. */
+export function createSummarizeFn(providerType: ProviderType, apiKey: string, model?: string): SummarizeFn {
+  const resolvedModel = model || getDefaultSummarizeModel(providerType);
+  switch (providerType) {
+    case 'openai':
+      return createOpenAISummarizeFn(apiKey, resolvedModel);
+    case 'anthropic':
+      return createAnthropicSummarizeFn(apiKey, resolvedModel);
+    case 'gemini':
+    default:
+      return createGeminiSummarizeFn(apiKey, resolvedModel);
+  }
+}
+
+/** Create a ConsolidateFn backed by the user's selected provider. */
+export function createConsolidateFn(providerType: ProviderType, apiKey: string, model?: string): ConsolidateFn {
+  const resolvedModel = model || getDefaultSummarizeModel(providerType);
+  switch (providerType) {
+    case 'openai':
+      return createOpenAIConsolidateFn(apiKey, resolvedModel);
+    case 'anthropic':
+      return createAnthropicConsolidateFn(apiKey, resolvedModel);
+    case 'gemini':
+    default:
+      return createGeminiConsolidateFn(apiKey, resolvedModel);
+  }
 }

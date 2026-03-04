@@ -196,7 +196,7 @@ Do work.`;
   it('parses autonomous configuration including mission continuity options', () => {
     const content = `---
 name: "Learner"
-mode: autonomous
+mode: gloves_off
 autonomous:
   max_cycles: 24
   stop_when_complete: false
@@ -215,7 +215,19 @@ Keep learning.`;
     });
   });
 
-  it('accepts autonomous block even without mode=autonomous', () => {
+  it('parses mode: autonomous as gloves_off', () => {
+    const content = `---
+name: "Auto"
+mode: autonomous
+---
+
+Do work.`;
+
+    const profile = parseAgentFile('agents/auto.md', content);
+    expect(profile.policy.mode).toBe('gloves_off');
+  });
+
+  it('accepts autonomous block with any mode', () => {
     const content = `---
 name: "Hybrid"
 safety_mode: balanced

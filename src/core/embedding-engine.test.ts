@@ -39,6 +39,7 @@ const mockPipe = vi.fn(async (text: string) => ({
 
 vi.mock('@xenova/transformers', () => ({
   pipeline: vi.fn(async () => mockPipe),
+  env: { allowLocalModels: true },
 }));
 
 // ---------------------------------------------------------------------------
