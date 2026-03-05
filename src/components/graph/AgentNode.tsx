@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import type { GraphAgentNodeData } from '../../hooks/useGraphData';
 import styles from './AgentNode.module.css';
 
@@ -18,7 +18,7 @@ function compactTokens(tokens: number): string {
   return `${(tokens / 1_000_000).toFixed(1)}M`;
 }
 
-export function AgentNode({ data }: NodeProps) {
+export function AgentNode({ data }: { data: Record<string, unknown> }) {
   const d = data as GraphAgentNodeData;
   const isSleeping = d.status === 'idle' || d.status === 'completed';
   const color = isSleeping ? '#7f849c' : (statusColors[d.status] ?? 'var(--text-dim)');

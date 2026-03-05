@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
 import type { GraphActivityKind, GraphActivityNodeData } from '../../hooks/useGraphData';
 import styles from './ActivityNode.module.css';
 
@@ -20,7 +20,7 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export function ActivityNode({ data }: NodeProps) {
+export function ActivityNode({ data }: { data: Record<string, unknown> }) {
   const d = data as GraphActivityNodeData;
   const palette = activityPalette[d.activityKind] ?? activityPalette.tool;
 

@@ -1,14 +1,8 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { GraphWorkflowStepNodeData } from '../../hooks/useGraphData';
 import styles from './WorkflowStepNode.module.css';
 
-export type WorkflowStepStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-export type GraphWorkflowStepNodeData = Record<string, unknown> & {
-  kind: 'workflowStep';
-  stepId: string;
-  agent: string;
-  status: WorkflowStepStatus;
-};
+type WorkflowStepStatus = GraphWorkflowStepNodeData['status'];
 
 const statusColors: Record<WorkflowStepStatus, { border: string; dot: string }> = {
   pending: { border: '#585b70', dot: '#585b70' },
@@ -17,7 +11,7 @@ const statusColors: Record<WorkflowStepStatus, { border: string; dot: string }> 
   failed: { border: '#f38ba8', dot: 'var(--status-red)' },
 };
 
-export function WorkflowStepNode({ data }: NodeProps) {
+export function WorkflowStepNode({ data }: { data: Record<string, unknown> }) {
   const d = data as GraphWorkflowStepNodeData;
   const palette = statusColors[d.status] ?? statusColors.pending;
 

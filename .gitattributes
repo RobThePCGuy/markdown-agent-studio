@@ -1,0 +1,22 @@
+# Normalize line endings: LF in the repo, native on checkout.
+* text=auto
+
+# Force LF for source files (even on Windows checkout).
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.jsx   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+# Binary files — no conversion.
+*.png   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
