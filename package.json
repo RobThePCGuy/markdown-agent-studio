@@ -59,9 +59,10 @@
     "clean": "node -e \"const fs=require('fs');['node_modules','dist','package-lock.json'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch{}})\"",
     "commit:checked": "node scripts/checked-commit.mjs",
     "commit:publish": "node scripts/checked-commit.mjs --stage-publish",
-    "release:patch": "npm run check:all && npm version patch && npm publish",
-    "release:minor": "npm run check:all && npm version minor && npm publish",
-    "release:major": "npm run check:all && npm version major && npm publish",
+    "release:patch": "npm version patch && npm publish",
+    "release:minor": "npm version minor && npm publish",
+    "release:major": "npm version major && npm publish",
+    "prepublishOnly": "npm run check:all"
     "prepack": "npm run build"
   },
   "overrides": {
