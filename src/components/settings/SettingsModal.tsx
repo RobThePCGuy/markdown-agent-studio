@@ -28,6 +28,13 @@ function Label({ text, tip }: { text: string; tip: string }) {
 
 export default function SettingsModal() {
   const open = useUI((s) => s.settingsOpen);
+
+  if (!open) return null;
+
+  return <SettingsModalContent />;
+}
+
+function SettingsModalContent() {
   const provider = useUI((s) => s.provider);
   const providerApiKeys = useUI(useShallow((s) => s.providerApiKeys));
   const currentApiKey = providerApiKeys[provider] ?? '';
@@ -45,7 +52,6 @@ export default function SettingsModal() {
   const [mcpCommand, setMcpCommand] = useState('');
   const [mcpArgs, setMcpArgs] = useState('');
 
-
   // Close on Escape
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -54,24 +60,9 @@ export default function SettingsModal() {
   }, []);
 
   useEffect(() => {
-    if (open) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [open, handleKeyDown]);
-
-  // Reset local state when modal opens (render-time state adjustment)
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (open) {
-      setShowKey(false);
-      setClearConfirm('');
-      setMcpFormOpen(false);
-    }
-  }
-
-  if (!open) return null;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   const close = () => uiStore.getState().setSettingsOpen(false);
 

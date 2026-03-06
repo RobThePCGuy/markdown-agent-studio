@@ -65,6 +65,7 @@
     "prepack": "npm run build"
   },
   "overrides": {
+    "dompurify": "^3.3.2",
     "@eslint/config-array": {
       "minimatch": "^10.2.1"
     },

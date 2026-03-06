@@ -10,7 +10,12 @@ let themeRegistered = false;
 
 export function AgentEditor() {
   const editingFilePath = useUI((s) => s.editingFilePath);
+  return <AgentEditorInner key={editingFilePath ?? '__no-file'} editingFilePath={editingFilePath} />;
+}
+
+function AgentEditorInner({ editingFilePath }: { editingFilePath: string | null }) {
   const setEditorDirty = useUI((s) => s.setEditorDirty);
+  const isAgentFile = editingFilePath?.startsWith('agents/') ?? false;
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const [content, setContent] = useState(() =>
@@ -33,8 +38,7 @@ export function AgentEditor() {
     const model = editor.getModel();
     if (!model) return;
 
-    const isAgent = editingFilePath?.startsWith('agents/') ?? false;
-    const diagnostics = validateAgentContent(value, isAgent);
+    const diagnostics = validateAgentContent(value, isAgentFile);
 
     const markers: monacoEditor.IMarkerData[] = diagnostics.map((d) => ({
       startLineNumber: d.startLine,
@@ -50,17 +54,7 @@ export function AgentEditor() {
     }));
 
     monaco.editor.setModelMarkers(model, 'agent-validator', markers);
-  }, [editingFilePath]);
-
-  // Sync content from VFS when editingFilePath changes (render-time state adjustment)
-  const [prevPath, setPrevPath] = useState(editingFilePath);
-  if (editingFilePath !== prevPath) {
-    setPrevPath(editingFilePath);
-    const newVfsContent = editingFilePath
-      ? vfsStore.getState().read(editingFilePath) ?? ''
-      : '';
-    setContent(newVfsContent);
-  }
+  }, [isAgentFile]);
 
   const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;

@@ -18,17 +18,6 @@ export function InspectorPanel() {
         .sort((a, b) => b.startedAt - a.startedAt)
     : [];
 
-  const [selectedSessionIdx, setSelectedSessionIdx] = useState(0);
-
-  // Reset to latest session when agent changes (render-time state adjustment)
-  const [prevAgentId, setPrevAgentId] = useState(selectedAgentId);
-  if (selectedAgentId !== prevAgentId) {
-    setPrevAgentId(selectedAgentId);
-    setSelectedSessionIdx(0);
-  }
-
-  const activeSession = agentSessions[selectedSessionIdx];
-
   const profile = selectedAgentId ? agents.get(selectedAgentId) : undefined;
 
   return (
@@ -56,10 +45,47 @@ export function InspectorPanel() {
 
       {profile && <PolicyBanner profile={profile} />}
 
-      {viewMode === 'chat' && agentSessions.length > 1 && (
+      <div className={styles.chatArea}>
+        {viewMode === 'chat' && (
+          <ChatSessionsView
+            key={selectedAgentId ?? '__none__'}
+            selectedAgentId={selectedAgentId}
+            agentSessions={agentSessions}
+          />
+        )}
+        {viewMode === 'events' && <EventLogView />}
+        {viewMode === 'memory' && <MemoryPanel />}
+      </div>
+    </div>
+  );
+}
+
+function ChatSessionsView({
+  selectedAgentId,
+  agentSessions,
+}: {
+  selectedAgentId: string | null;
+  agentSessions: Array<{
+    activationId: string;
+    startedAt: number;
+    status: string;
+    tokenCount: number;
+    messages: import('../../types/session').ChatMessage[];
+    streamingText?: string;
+  }>;
+}) {
+  const [selectedSessionIdx, setSelectedSessionIdx] = useState(0);
+  const boundedSessionIdx = agentSessions.length === 0
+    ? 0
+    : Math.min(selectedSessionIdx, agentSessions.length - 1);
+  const activeSession = agentSessions[boundedSessionIdx];
+
+  return (
+    <>
+      {agentSessions.length > 1 && (
         <div className={styles.sessionPicker}>
           <select
-            value={selectedSessionIdx}
+            value={boundedSessionIdx}
             onChange={(e) => setSelectedSessionIdx(Number(e.target.value))}
             className={styles.sessionSelect}
           >
@@ -73,18 +99,12 @@ export function InspectorPanel() {
         </div>
       )}
 
-      <div className={styles.chatArea}>
-        {viewMode === 'chat' && (
-          <ChatLog
-            agentId={selectedAgentId ?? ''}
-            messages={activeSession?.messages ?? []}
-            streamingText={activeSession?.streamingText ?? ''}
-          />
-        )}
-        {viewMode === 'events' && <EventLogView />}
-        {viewMode === 'memory' && <MemoryPanel />}
-      </div>
-    </div>
+      <ChatLog
+        agentId={selectedAgentId ?? ''}
+        messages={activeSession?.messages ?? []}
+        streamingText={activeSession?.streamingText ?? ''}
+      />
+    </>
   );
 }
 

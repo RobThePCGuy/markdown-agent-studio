@@ -24,16 +24,12 @@ export function TopBar() {
   const selectedAgent = selectedAgentId ?? (agentsMap.has(DEMO_AGENT) ? DEMO_AGENT : '');
   const kickoffPrompt = kickoffPromptDraft ?? (agentsMap.has(DEMO_AGENT) ? DEMO_PROMPT : '');
   const soundEnabled = useUI((s) => s.soundEnabled);
-  const [runMode, setRunMode] = useState<'once' | 'autonomous'>('once');
-  const [runModeAgent, setRunModeAgent] = useState<string>(selectedAgent);
+  const [runModeState, setRunModeState] = useState<{ agentId: string; mode: 'once' | 'autonomous' } | null>(null);
   const [isOpeningProject, startProjectTransition] = useTransition();
   const promptInputRef = useRef<HTMLInputElement | null>(null);
-
-  if (runModeAgent !== selectedAgent) {
-    setRunModeAgent(selectedAgent);
-    const profile = selectedAgent ? agentsMap.get(selectedAgent) : null;
-    setRunMode(profile?.autonomousConfig ? 'autonomous' : 'once');
-  }
+  const selectedProfile = selectedAgent ? agentsMap.get(selectedAgent) : null;
+  const defaultRunMode: 'once' | 'autonomous' = selectedProfile?.autonomousConfig ? 'autonomous' : 'once';
+  const runMode = runModeState?.agentId === selectedAgent ? runModeState.mode : defaultRunMode;
 
   const projectName = useProjectStore((s) => s.projectName);
   const syncStatus = useProjectStore((s) => s.syncStatus);
@@ -142,7 +138,10 @@ export function TopBar() {
 
       <select
         value={runMode}
-        onChange={(e) => setRunMode(e.target.value as 'once' | 'autonomous')}
+        onChange={(e) => setRunModeState({
+          agentId: selectedAgent,
+          mode: e.target.value as 'once' | 'autonomous',
+        })}
         className={styles.select}
         disabled={isRunning}
       >

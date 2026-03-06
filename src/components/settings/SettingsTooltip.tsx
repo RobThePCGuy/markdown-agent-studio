@@ -21,19 +21,32 @@ export default function SettingsTooltip({ text, speed = 120 }: SettingsTooltipPr
   // Delay before showing (avoids flicker on accidental hovers)
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (showTimer.current) {
+        clearTimeout(showTimer.current);
+      }
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
+
   const handleEnter = useCallback(() => {
+    if (showTimer.current) clearTimeout(showTimer.current);
+    setDisplayed('');
     showTimer.current = setTimeout(() => setVisible(true), 180);
   }, []);
 
   const handleLeave = useCallback(() => {
     if (showTimer.current) clearTimeout(showTimer.current);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     setVisible(false);
   }, []);
 
   // Typewriter animation driven by requestAnimationFrame
   useEffect(() => {
     if (!visible) {
-      setDisplayed('');
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       return;
     }

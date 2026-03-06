@@ -54,7 +54,6 @@ export class MemoryManager {
   } | undefined {
     if (!(this.db instanceof VectorMemoryDB)) return undefined;
     const vectorDb = this.db;
-    const self = this;
     return {
       async semanticSearch(query, agentId, limit) {
         const results = await vectorDb.semanticSearch(query, agentId, limit);
@@ -64,7 +63,7 @@ export class MemoryManager {
         await vectorDb.markShared(id, shared);
       },
       contribute: async (content, type, tags, agentId, runId) => {
-        const entry = await self.store({
+        const entry = await this.store({
           agentId,
           type: type as MemoryType,
           content,
