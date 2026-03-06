@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useSessionStore, useEventLog } from '../../stores/use-stores';
 import styles from './RunTimeline.module.css';
 
@@ -21,6 +21,7 @@ export function RunTimeline() {
   const sessions = useSessionStore((s) => s.sessions);
   const events = useEventLog((s) => s.entries);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const sessionList = useMemo(
     () => [...sessions.values()].sort((a, b) => a.startedAt - b.startedAt),
@@ -45,46 +46,59 @@ export function RunTimeline() {
   );
 
   return (
-    <div className={styles.container} ref={containerRef}>
-      <div className={styles.tracks}>
-        {sessionList.map((session) => {
-          const left = toPercent(session.startedAt);
-          const right = toPercent(session.completedAt ?? nowMs);
-          const width = Math.max(right - left, 0.5);
-          const agentName = session.agentId.split('/').pop()?.replace('.md', '') ?? session.agentId;
+    <div className={`${styles.container} ${collapsed ? styles.collapsed : ''}`} ref={containerRef}>
+      <button
+        className={styles.toggleBtn}
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Expand timeline' : 'Collapse timeline'}
+      >
+        {collapsed ? '▲ Timeline' : '▼ Timeline'}
+      </button>
+      {!collapsed && (
+        <>
+          <div className={styles.scrollArea}>
+            <div className={styles.tracks}>
+              {sessionList.map((session) => {
+                const left = toPercent(session.startedAt);
+                const right = toPercent(session.completedAt ?? nowMs);
+                const width = Math.max(right - left, 0.5);
+                const agentName = session.agentId.split('/').pop()?.replace('.md', '') ?? session.agentId;
 
-          return (
-            <div key={session.activationId} className={styles.track}>
-              <span className={styles.trackLabel}>{agentName}</span>
-              <div className={styles.trackBar}>
-                <div
-                  className={styles.sessionBar}
-                  style={{
-                    left: `${left}%`,
-                    width: `${width}%`,
-                    background: STATUS_COLORS[session.status] ?? '#585b70',
-                  }}
-                  title={`${agentName}: ${session.status}`}
-                />
-              </div>
+                return (
+                  <div key={session.activationId} className={styles.track}>
+                    <span className={styles.trackLabel}>{agentName}</span>
+                    <div className={styles.trackBar}>
+                      <div
+                        className={styles.sessionBar}
+                        style={{
+                          left: `${left}%`,
+                          width: `${width}%`,
+                          background: STATUS_COLORS[session.status] ?? '#585b70',
+                        }}
+                        title={`${agentName}: ${session.status}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
 
-      <div className={styles.markerTrack}>
-        {relevantEvents.map((evt) => (
-          <div
-            key={evt.id}
-            className={styles.marker}
-            style={{
-              left: `${toPercent(evt.timestamp)}%`,
-              background: EVENT_MARKERS[evt.type] ?? '#585b70',
-            }}
-            title={`${evt.type}: ${evt.agentId}`}
-          />
-        ))}
-      </div>
+            <div className={styles.markerTrack}>
+              {relevantEvents.map((evt) => (
+                <div
+                  key={evt.id}
+                  className={styles.marker}
+                  style={{
+                    left: `${toPercent(evt.timestamp)}%`,
+                    background: EVENT_MARKERS[evt.type] ?? '#585b70',
+                  }}
+                  title={`${evt.type}: ${evt.agentId}`}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
