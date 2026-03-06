@@ -25,18 +25,27 @@ const WORKSPACE_PREAMBLE =
   'Use memory_write only for temporary inter-agent coordination during a run (it is cleared when the run ends).\n' +
   'When stuck on a complex sub-problem, use spawn_agent to create a specialist sub-agent for focused research.\n';
 
-const TOOL_FAILURE_PATTERNS = [
-  /^error:/i,
-  /not found/i,
-  /policy blocked/i,
-  /permission denied/i,
-  /failed to/i,
-  /invalid/i,
-];
-
+/**
+ * Check if a tool result represents a failure.
+ *
+ * We only match results that begin with a known error prefix. This avoids
+ * false positives on arbitrary file content (e.g. Python code containing
+ * "not found" or "invalid") which the old broad regex patterns would flag.
+ *
+ * All tool error strings in this codebase start with "Error:" or
+ * "Policy blocked" so anchored prefix checks are sufficient and safe.
+ */
 function isToolFailure(result: string): boolean {
   if (!result || result.trim() === '') return true;
-  return TOOL_FAILURE_PATTERNS.some((p) => p.test(result));
+  // Only match short results that begin with an error prefix.
+  // Long results (>500 chars) are almost certainly successful content.
+  if (result.length > 500) return false;
+  const trimmed = result.trimStart();
+  return (
+    trimmed.startsWith('Error:') ||
+    trimmed.startsWith('error:') ||
+    trimmed.startsWith('Policy blocked')
+  );
 }
 
 function buildNudgePrompt(currentTurn: number, maxTurns: number, nudgeCount: number): string {
@@ -137,13 +146,26 @@ export class Kernel {
       this.memoryStore = deps.memoryStore ?? createMemoryStore();
     }
     if (!this.deps.toolRegistry) {
-      this.deps.toolRegistry = createBuiltinRegistry();
+      this.deps.toolRegistry = createBuiltinRegistry({
+        includeKnowledgeTools: Boolean(deps.vectorStore),
+      });
     }
   }
+
+  /** Maximum number of completed sessions to keep in memory. */
+  private static readonly MAX_COMPLETED_SESSIONS = 200;
 
   get isPaused(): boolean { return this._paused; }
   get totalTokens(): number { return this._totalTokens; }
   get completedSessions(): AgentSession[] { return this._completedSessions; }
+
+  /** Record a completed session, evicting old entries if the cap is exceeded. */
+  private recordCompleted(session: AgentSession): void {
+    this._completedSessions.push(session);
+    if (this._completedSessions.length > Kernel.MAX_COMPLETED_SESSIONS) {
+      this._completedSessions.splice(0, this._completedSessions.length - 100);
+    }
+  }
   get activeSessionCount(): number { return this.activeSessions.size; }
   get queueLength(): number { return this.queue.length; }
   get lastWorkingMemorySnapshot(): import('../types/memory').WorkingMemoryEntry[] {
@@ -203,7 +225,7 @@ export class Kernel {
       session.controller.abort();
       session.status = 'aborted';
       this.deps.sessionStore?.getState().closeSession(activationId, 'aborted');
-      this._completedSessions.push(session);
+      this.recordCompleted(session);
       this.activeSessions.delete(activationId);
     }
   }
@@ -348,7 +370,7 @@ export class Kernel {
     const profile = this.deps.agentRegistry.getState().get(activation.agentId);
     if (!profile) {
       session.status = 'error';
-      this._completedSessions.push(session);
+      this.recordCompleted(session);
       this.activeSessions.delete(activation.id);
       release?.();
       this.globalController.signal.removeEventListener('abort', onGlobalAbort);
@@ -449,6 +471,25 @@ export class Kernel {
           this.deps.aiProvider.registerSession(activation.id, activation.agentId);
         }
 
+        // Dynamically filter tools based on current budget/limits and context
+        const childCount = this.childCounts.get(activation.agentId) ?? 0;
+        const totalSpawns = childCount + toolHandler.spawnCount;
+        const canSpawn = activation.spawnDepth < this.deps.config.maxDepth &&
+          totalSpawns < this.deps.config.maxFanout;
+        const hiddenTools = new Set<string>();
+        if (!canSpawn) {
+          hiddenTools.add('spawn_agent');
+          hiddenTools.add('delegate');
+        }
+        // Root agents have no parent — hide signal_parent to prevent wasted calls
+        if (!activation.parentId) {
+          hiddenTools.add('signal_parent');
+        }
+        let turnTools = sessionRegistry.toToolDefinitions();
+        if (hiddenTools.size > 0) {
+          turnTools = turnTools.filter((t) => !hiddenTools.has(t.name));
+        }
+
         const stream = this.deps.aiProvider.chat(
           {
             sessionId: activation.id,
@@ -456,7 +497,7 @@ export class Kernel {
             model: this.resolveSessionModel(profile.model),
           },
           session.history,
-          sessionRegistry.toToolDefinitions()
+          turnTools
         );
 
         for await (const chunk of stream) {
@@ -627,7 +668,7 @@ export class Kernel {
       });
       finalText = `Error: ${errorMessage}`;
     } finally {
-      this._completedSessions.push(session);
+      this.recordCompleted(session);
       this.activeSessions.delete(activation.id);
       this.globalController.signal.removeEventListener('abort', onGlobalAbort);
       this.deps.sessionStore?.getState().closeSession(activation.id, session.status);

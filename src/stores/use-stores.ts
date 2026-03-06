@@ -188,6 +188,46 @@ export const uiStore = createStore<UIState>((set) => ({
   }),
 }));
 
+// Wire up disk-based settings persistence (excludes API keys for security).
+diskSync.onSettingsLoaded = (settings) => {
+  const state = uiStore.getState();
+  if (settings.kernelConfig) {
+    state.setKernelConfig(settings.kernelConfig);
+  }
+  if (settings.provider) {
+    state.setProvider(settings.provider as ProviderType);
+  }
+  if (typeof settings.soundEnabled === 'boolean') {
+    state.setSoundEnabled(settings.soundEnabled);
+  }
+  if (settings.globalMcpServers) {
+    state.setGlobalMcpServers(settings.globalMcpServers);
+  }
+};
+
+diskSync.getSettings = () => {
+  const state = uiStore.getState();
+  return {
+    kernelConfig: state.kernelConfig,
+    provider: state.provider,
+    soundEnabled: state.soundEnabled,
+    globalMcpServers: state.globalMcpServers,
+  };
+};
+
+// Subscribe to settings changes and mark dirty for disk persistence.
+uiStore.subscribe((state, prev) => {
+  if (!projectStore.getState().dirHandle) return; // No project connected
+  if (
+    state.kernelConfig !== prev.kernelConfig ||
+    state.provider !== prev.provider ||
+    state.soundEnabled !== prev.soundEnabled ||
+    state.globalMcpServers !== prev.globalMcpServers
+  ) {
+    diskSync.markSettingsDirty();
+  }
+});
+
 // React hooks
 export function useVFS<T>(selector: (state: VFSState) => T): T {
   return useStore(vfsStore, selector);

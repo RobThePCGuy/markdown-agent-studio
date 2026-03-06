@@ -14,7 +14,13 @@ import { publishPlugin, subscribePlugin } from './pub-sub-plugin';
 import { blackboardWritePlugin, blackboardReadPlugin } from './blackboard-plugin';
 import { delegatePlugin } from './delegate-plugin';
 
-export function createBuiltinRegistry(): ToolPluginRegistry {
+export interface BuiltinRegistryOptions {
+  /** When true, include knowledge_query and knowledge_contribute tools. Default: true. */
+  includeKnowledgeTools?: boolean;
+}
+
+export function createBuiltinRegistry(options?: BuiltinRegistryOptions): ToolPluginRegistry {
+  const { includeKnowledgeTools = true } = options ?? {};
   const registry = new ToolPluginRegistry();
   registry.register(vfsReadPlugin);
   registry.register(vfsWritePlugin);
@@ -26,8 +32,10 @@ export function createBuiltinRegistry(): ToolPluginRegistry {
   registry.register(webSearchPlugin);
   registry.register(memoryWritePlugin);
   registry.register(memoryReadPlugin);
-  registry.register(knowledgeQueryPlugin);
-  registry.register(knowledgeContributePlugin);
+  if (includeKnowledgeTools) {
+    registry.register(knowledgeQueryPlugin);
+    registry.register(knowledgeContributePlugin);
+  }
   registry.register(publishPlugin);
   registry.register(subscribePlugin);
   registry.register(blackboardWritePlugin);

@@ -422,7 +422,7 @@ export function createGeminiSummarizeFn(apiKey: string, model: string): Summariz
     const text = result.response.text();
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
-    return JSON.parse(jsonMatch[0]);
+    try { return JSON.parse(jsonMatch[0]); } catch { return []; }
   };
 }
 
@@ -436,7 +436,7 @@ export function createGeminiConsolidateFn(apiKey: string, model: string): Consol
     const text = result.response.text();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { operations: [] };
-    return JSON.parse(jsonMatch[0]);
+    try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
   };
 }
 
@@ -457,7 +457,7 @@ export function createOpenAISummarizeFn(apiKey: string, model: string): Summariz
     const text = response.choices[0]?.message?.content ?? '';
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
-    return JSON.parse(jsonMatch[0]);
+    try { return JSON.parse(jsonMatch[0]); } catch { return []; }
   };
 }
 
@@ -474,7 +474,7 @@ export function createOpenAIConsolidateFn(apiKey: string, model: string): Consol
     const text = response.choices[0]?.message?.content ?? '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { operations: [] };
-    return JSON.parse(jsonMatch[0]);
+    try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
   };
 }
 
@@ -502,7 +502,7 @@ export function createAnthropicSummarizeFn(apiKey: string, model: string): Summa
     const text = extractAnthropicText(response.content as Array<{ type: string }>);
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
-    return JSON.parse(jsonMatch[0]);
+    try { return JSON.parse(jsonMatch[0]); } catch { return []; }
   };
 }
 
@@ -518,7 +518,7 @@ export function createAnthropicConsolidateFn(apiKey: string, model: string): Con
     const text = extractAnthropicText(response.content as Array<{ type: string }>);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { operations: [] };
-    return JSON.parse(jsonMatch[0]);
+    try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
   };
 }
 

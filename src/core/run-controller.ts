@@ -148,6 +148,8 @@ class RunController {
 
   async run(agentPath: string, input: string): Promise<void> {
     if (this.state.isRunning) return;
+    // Set isRunning synchronously to prevent double-run race condition
+    this.setState({ isRunning: true, isPaused: false });
 
     const config = uiStore.getState().kernelConfig;
     await this.refreshMemoryManager(config);
@@ -162,8 +164,6 @@ class RunController {
       spawnDepth: 0,
       priority: 0,
     });
-
-    this.setState({ isRunning: true, isPaused: false });
     try {
       await kernel.runUntilEmpty();
 
@@ -208,6 +208,9 @@ class RunController {
       }
     } finally {
       const hasPendingWork = kernel.activeSessionCount > 0 || kernel.queueLength > 0;
+      if (!hasPendingWork) {
+        this.kernel = null;
+      }
       this.setState({
         isRunning: hasPendingWork,
         isPaused: kernel.isPaused,
@@ -278,7 +281,7 @@ class RunController {
 
     this.autonomousRunner = runner;
 
-    runner.subscribe((s) => {
+    const unsubscribeRunner = runner.subscribe((s) => {
       this.setState({
         currentCycle: s.currentCycle,
         maxCycles: s.maxCycles,
@@ -300,6 +303,7 @@ class RunController {
     try {
       await runner.run();
     } finally {
+      unsubscribeRunner();
       this.autonomousRunner = null;
       this.setState({
         isRunning: false,

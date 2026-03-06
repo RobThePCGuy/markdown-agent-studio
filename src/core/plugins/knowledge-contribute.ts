@@ -35,16 +35,28 @@ export const knowledgeContributePlugin: ToolPlugin = {
 
     if (!content) return 'Error: content is required.';
 
-    // Write to working memory with shared tag
-    if (ctx.memoryStore) {
-      ctx.memoryStore.getState().write({
-        key: `shared:${type}`,
-        value: content,
-        tags: [...tags, 'shared'],
-        authorAgentId: ctx.currentAgentId,
-      });
-    }
+    // Write to vector store for persistent semantic search across agents
+    try {
+      const id = await ctx.vectorStore.contribute(
+        content,
+        type,
+        tags,
+        ctx.currentAgentId,
+      );
 
-    return `Contributed to shared knowledge: [${type}] "${content.slice(0, 80)}..."`;
+      // Also mirror to working memory for intra-run visibility
+      if (ctx.memoryStore) {
+        ctx.memoryStore.getState().write({
+          key: `shared:${type}`,
+          value: content,
+          tags: [...tags, 'shared'],
+          authorAgentId: ctx.currentAgentId,
+        });
+      }
+
+      return `Contributed to shared knowledge (${id}): [${type}] "${content.slice(0, 80)}${content.length > 80 ? '...' : ''}"`;
+    } catch (err) {
+      return `Error: Failed to contribute knowledge: ${err instanceof Error ? err.message : String(err)}`;
+    }
   },
 };

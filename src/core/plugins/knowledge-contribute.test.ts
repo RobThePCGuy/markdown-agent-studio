@@ -32,6 +32,7 @@ function makeContext(overrides?: Partial<ToolContext>): ToolContext {
     vectorStore: {
       semanticSearch: vi.fn().mockResolvedValue([]),
       markShared: vi.fn().mockResolvedValue(undefined),
+      contribute: vi.fn().mockResolvedValue('ltm-1'),
     },
     ...overrides,
   };

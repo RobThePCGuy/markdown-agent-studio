@@ -2,7 +2,10 @@ import type { ToolPlugin } from '../tool-plugin';
 
 export const delegatePlugin: ToolPlugin = {
   name: 'delegate',
-  description: 'Delegate a structured task to a specific agent. The agent will receive the task as input with context.',
+  description:
+    'Delegate a structured task to a specific agent. The agent will receive the task as input with context. ' +
+    'NOTE: The delegated agent runs ASYNCHRONOUSLY after your current turn ends. ' +
+    'Do NOT read files the delegated agent will create in the same turn — they will not exist yet.',
   parameters: {
     agent: { type: 'string', description: 'Path of the agent to delegate to (e.g., agents/worker.md)', required: true },
     task: { type: 'string', description: 'Task description and instructions', required: true },
@@ -59,6 +62,11 @@ export const delegatePlugin: ToolPlugin = {
     });
     ctx.incrementSpawnCount();
 
-    return `Delegated task to ${agentPath}: "${task.slice(0, 80)}${task.length > 80 ? '...' : ''}"`;
+    return (
+      `Delegated task to ${agentPath}: "${task.slice(0, 80)}${task.length > 80 ? '...' : ''}". ` +
+      'IMPORTANT: The delegated agent is QUEUED but has NOT started yet. ' +
+      'Do NOT try to read any outputs it will create — they do not exist yet. ' +
+      'Wait for the child to finish before accessing its results.'
+    );
   },
 };

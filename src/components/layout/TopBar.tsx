@@ -55,13 +55,27 @@ export function TopBar() {
     });
   };
 
-  const handleRun = useCallback((forcedMode?: 'once' | 'autonomous') => {
+  const handleRun = useCallback(async (forcedMode?: 'once' | 'autonomous') => {
     const agentPath = selectedAgent || agents[0]?.path;
     const prompt = kickoffPrompt.trim();
     if (!agentPath || !prompt) return;
+
+    // Require project folder before running (ensures disk persistence)
+    if (!projectName) {
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        await diskSync.start(handle);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Failed to open project:', err);
+        }
+        return; // Don't run if user cancelled folder selection
+      }
+    }
+
     const mode = forcedMode ?? runMode;
     run(agentPath, prompt, mode === 'autonomous' ? { autonomous: true } : undefined);
-  }, [selectedAgent, agents, kickoffPrompt, runMode, run]);
+  }, [selectedAgent, agents, kickoffPrompt, runMode, run, projectName]);
 
   useEffect(() => {
     const onRunOnce = () => handleRun('once');
@@ -219,7 +233,7 @@ export function TopBar() {
         {syncStatus === 'error' && (
           <span className={styles.statusDot} style={{ background: 'var(--status-red)' }} />
         )}
-        {projectName ? projectName : 'Open'}
+        {'\uD83D\uDCC2'}{' '}{projectName ? projectName : 'Open'}
       </button>
 
       <button

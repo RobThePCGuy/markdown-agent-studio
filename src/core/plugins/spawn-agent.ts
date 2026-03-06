@@ -29,7 +29,9 @@ export const spawnAgentPlugin: ToolPlugin = {
     'Create a new agent by writing a markdown file to agents/. ' +
     'The content should start with YAML frontmatter between --- delimiters ' +
     '(with at least a "name" field), followed by markdown instructions. ' +
-    'Example: ---\\nname: "Researcher"\\nmodel: "gemini-2.5-flash"\\n---\\n\\n# MISSION\\n...',
+    'Example: ---\\nname: "Researcher"\\nmodel: "gemini-2.5-flash"\\n---\\n\\n# MISSION\\n... ' +
+    'NOTE: The spawned agent runs ASYNCHRONOUSLY after your current turn ends. ' +
+    'Do NOT read files the child will create in the same turn — they will not exist yet.',
   parameters: {
     filename: { type: 'string', description: 'Filename for the new agent, must end in .md, e.g. "researcher.md"', required: true },
     content: { type: 'string', description: 'Full markdown content with YAML frontmatter', required: true },
@@ -101,7 +103,12 @@ export const spawnAgentPlugin: ToolPlugin = {
         data: { spawned: path, depth: newDepth, task },
       });
 
-      return `Activated existing agent "${existingProfile.name}" at '${path}' (depth ${newDepth}/${ctx.maxDepth}).`;
+      return (
+        `Activated existing agent "${existingProfile.name}" at '${path}' (depth ${newDepth}/${ctx.maxDepth}). ` +
+        'IMPORTANT: The child agent is QUEUED but has NOT executed yet. ' +
+        'Do NOT attempt to read files the child will create until it finishes. ' +
+        'Use signal_parent or check results in a later turn.'
+      );
     }
 
     const meta = {
@@ -131,6 +138,11 @@ export const spawnAgentPlugin: ToolPlugin = {
       data: { spawned: path, depth: newDepth, task },
     });
 
-    return `Created and activated '${profile.name}' at '${path}' (depth ${newDepth}/${ctx.maxDepth})`;
+    return (
+      `Created and activated '${profile.name}' at '${path}' (depth ${newDepth}/${ctx.maxDepth}). ` +
+      'IMPORTANT: The child agent is QUEUED but has NOT executed yet. ' +
+      'Do NOT attempt to read any files the child will create — they do not exist yet. ' +
+      'The child will run after your current turn completes.'
+    );
   },
 };

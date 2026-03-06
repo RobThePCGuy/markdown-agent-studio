@@ -88,12 +88,22 @@ export class VectorMemoryDB implements MemoryDB {
    * embedding.
    */
   async put(entry: LongTermMemory): Promise<void> {
-    // Upsert: delete existing if present, then add
+    // Upsert: delete existing if present, then add.
+    // If add() fails (e.g. embedding generation error) we restore the
+    // previous entry so data is never silently lost.
     const existing = await this._store.getById(entry.id);
     if (existing) {
       await this._store.delete(entry.id);
+      try {
+        await this._store.add(toMemoryVector(entry));
+      } catch (err) {
+        // Restore original entry on failure
+        try { await this._store.add(existing); } catch { /* best effort */ }
+        throw err;
+      }
+    } else {
+      await this._store.add(toMemoryVector(entry));
     }
-    await this._store.add(toMemoryVector(entry));
   }
 
   /** Return all entries as LongTermMemory objects. */

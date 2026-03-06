@@ -59,10 +59,15 @@ export interface ToolHandlerConfig {
 
 export class ToolHandler {
   private config: ToolHandlerConfig;
-  private spawnCount = 0;
+  private _spawnCount = 0;
 
   constructor(config: ToolHandlerConfig) {
     this.config = config;
+  }
+
+  /** Number of agents spawned by this handler in the current session. */
+  get spawnCount(): number {
+    return this._spawnCount;
   }
 
   async handle(toolName: string, args: Record<string, unknown>): Promise<string> {
@@ -107,10 +112,10 @@ export class ToolHandler {
         maxDepth: this.config.maxDepth,
         maxFanout: this.config.maxFanout,
         childCount: this.config.childCount,
-        spawnCount: this.spawnCount,
+        spawnCount: this._spawnCount,
         onSpawnActivation: this.config.onSpawnActivation,
         onRunSessionAndReturn: this.config.onRunSessionAndReturn,
-        incrementSpawnCount: () => { this.spawnCount++; },
+        incrementSpawnCount: () => { this._spawnCount++; },
         apiKey: this.config.apiKey,
         preferredModel: this.config.preferredModel,
         memoryStore: this.config.memoryStore,
@@ -202,7 +207,7 @@ export class ToolHandler {
 
       case 'vfs_write': {
         const path = typeof args.path === 'string' ? args.path : '';
-        if (!path) return null;
+        if (!path) return "Policy blocked 'vfs_write'. Provide a non-empty 'path'.";
         const normalizedPath = this.normalizePath(path);
         if (normalizedPath.startsWith('agents/') && !policy.permissions.editAgents) {
           return `Policy blocked write '${path}'. Enable 'permissions.edit_agents' to modify agent files.`;
@@ -215,6 +220,7 @@ export class ToolHandler {
 
       case 'vfs_delete': {
         const path = typeof args.path === 'string' ? args.path : '';
+        if (!path) return "Policy blocked 'vfs_delete'. Provide a non-empty 'path'.";
         if (!policy.permissions.deleteFiles) {
           return "Policy blocked 'vfs_delete'. Enable 'permissions.delete_files' or set mode to 'gloves_off'.";
         }

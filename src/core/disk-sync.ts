@@ -1,11 +1,24 @@
 import type { VFSState } from '../stores/vfs-store';
 import type { ProjectState } from '../stores/project-store';
 import type { AgentRegistryState } from '../stores/agent-registry';
+import type { KernelConfig } from '../types';
+import type { MCPServerConfig } from './mcp-client';
 
 type Store<T> = {
   getState(): T;
   subscribe(listener: (state: T, prev: T) => void): () => void;
 };
+
+/** Filename for persisted settings inside the project folder (not synced to VFS). */
+const SETTINGS_FILE = '.mas-settings.json';
+
+/** Settings that get persisted to disk (excludes API keys for security). */
+export interface PersistedSettings {
+  kernelConfig?: KernelConfig;
+  provider?: string;
+  soundEnabled?: boolean;
+  globalMcpServers?: MCPServerConfig[];
+}
 
 export class DiskSync {
   private vfs: Store<VFSState>;
@@ -19,6 +32,15 @@ export class DiskSync {
   private _flushChain: Promise<void> = Promise.resolve();
   private _onUnload: (() => void) | null = null;
   private _onVisibilityChange: (() => void) | null = null;
+
+  /** Callback to apply loaded settings to the UI store. */
+  onSettingsLoaded?: (settings: PersistedSettings) => void;
+  /** Callback to read current settings from the UI store for saving. */
+  getSettings?: () => PersistedSettings;
+
+  private _settingsUnsubscribe: (() => void) | null = null;
+  private _settingsDirty = false;
+  private _settingsFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     vfs: Store<VFSState>,
@@ -40,7 +62,20 @@ export class DiskSync {
     this._pendingWrites.clear();
     this._pendingDeletes.clear();
 
-    if (writes.length === 0 && deletes.length === 0) return;
+    // Also flush settings if dirty
+    const shouldFlushSettings = this._settingsDirty;
+    const settingsJson = shouldFlushSettings && this.getSettings
+      ? JSON.stringify(this.getSettings(), null, 2)
+      : null;
+    if (shouldFlushSettings) {
+      this._settingsDirty = false;
+      if (this._settingsFlushTimer) {
+        clearTimeout(this._settingsFlushTimer);
+        this._settingsFlushTimer = null;
+      }
+    }
+
+    if (writes.length === 0 && deletes.length === 0 && !settingsJson) return;
 
     this._flushChain = this._flushChain
       .then(async () => {
@@ -59,11 +94,30 @@ export class DiskSync {
             console.error(`DiskSync: failed to delete ${path}:`, err);
           }
         }
+        // Write settings file
+        if (settingsJson) {
+          try {
+            await this.writeFile(dirHandle, SETTINGS_FILE, settingsJson);
+          } catch (err) {
+            console.error('DiskSync: failed to write settings:', err);
+          }
+        }
       })
       .catch((err) => {
         console.error('DiskSync: unexpected flush failure:', err);
         this.project.getState().setSyncStatus('error');
       });
+  }
+
+  /** Mark settings as dirty — will be flushed on next flush or after a short debounce. */
+  markSettingsDirty(): void {
+    this._settingsDirty = true;
+    // Debounce settings writes to avoid thrashing disk on rapid changes
+    if (this._settingsFlushTimer) clearTimeout(this._settingsFlushTimer);
+    this._settingsFlushTimer = setTimeout(() => {
+      this._settingsFlushTimer = null;
+      this.flush();
+    }, 1000);
   }
 
 
@@ -107,6 +161,37 @@ export class DiskSync {
     }
   }
 
+  /** Read and apply persisted settings from the project folder. */
+  private async loadSettings(handle: FileSystemDirectoryHandle): Promise<void> {
+    try {
+      const fileHandle = await handle.getFileHandle(SETTINGS_FILE);
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      const settings: PersistedSettings = JSON.parse(text);
+      this.onSettingsLoaded?.(settings);
+      console.log('DiskSync: loaded project settings from', SETTINGS_FILE);
+    } catch {
+      // File doesn't exist or is invalid — that's fine, use defaults
+    }
+  }
+
+  /** Directories to skip during recursive loading. */
+  private static IGNORED_DIRS = new Set([
+    '.git', 'node_modules', '.next', '.cache', '__pycache__',
+    '.vscode', '.idea', 'dist', 'build', '.DS_Store',
+  ]);
+
+  /** File extensions to skip (binary / non-text). */
+  private static IGNORED_EXTENSIONS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg',
+    '.woff', '.woff2', '.ttf', '.eot',
+    '.zip', '.tar', '.gz', '.bz2', '.7z',
+    '.exe', '.dll', '.so', '.dylib',
+    '.mp3', '.mp4', '.wav', '.avi', '.mov',
+    '.pdf', '.doc', '.xls', '.ppt',
+    '.sqlite', '.db', '.lock',
+  ]);
+
   /** Recursively read all files from a directory handle into VFS. */
   async readAllFiles(
     dirHandle: FileSystemDirectoryHandle,
@@ -114,6 +199,13 @@ export class DiskSync {
   ): Promise<void> {
     for await (const entry of dirHandle.values()) {
       const entryPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      // Skip the settings file — it's not a VFS file
+      if (!prefix && entry.name === SETTINGS_FILE) continue;
+      // Skip ignored directories
+      if (entry.kind === 'directory' && DiskSync.IGNORED_DIRS.has(entry.name)) continue;
+      // Skip binary / non-text files by extension
+      const ext = entry.name.includes('.') ? '.' + entry.name.split('.').pop()!.toLowerCase() : '';
+      if (entry.kind === 'file' && DiskSync.IGNORED_EXTENSIONS.has(ext)) continue;
       if (entry.kind === 'file') {
         try {
           const fileHandle = entry as FileSystemFileHandle;
@@ -137,6 +229,9 @@ export class DiskSync {
   /** Start syncing: load files from disk, then subscribe to VFS changes. */
   async start(handle: FileSystemDirectoryHandle): Promise<void> {
     this.project.getState().setSyncStatus('syncing');
+
+    // Load persisted settings first (before files, so config is ready)
+    await this.loadSettings(handle);
 
     // Load existing files from disk into VFS
     this.loading = true;
@@ -203,6 +298,14 @@ export class DiskSync {
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
+    }
+    if (this._settingsUnsubscribe) {
+      this._settingsUnsubscribe();
+      this._settingsUnsubscribe = null;
+    }
+    if (this._settingsFlushTimer) {
+      clearTimeout(this._settingsFlushTimer);
+      this._settingsFlushTimer = null;
     }
     // Clean up event listeners
     if (this._onUnload) {

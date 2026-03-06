@@ -47,6 +47,7 @@ describe('knowledge_query plugin', () => {
     const vectorStore = {
       semanticSearch: vi.fn(),
       markShared: vi.fn(),
+      contribute: vi.fn().mockResolvedValue('ltm-1'),
     };
     const ctx = makeContext({ vectorStore });
     const result = await knowledgeQueryPlugin.handler({ query: '  ' }, ctx);
@@ -59,6 +60,7 @@ describe('knowledge_query plugin', () => {
     const vectorStore = {
       semanticSearch: vi.fn().mockResolvedValue([]),
       markShared: vi.fn(),
+      contribute: vi.fn().mockResolvedValue('ltm-1'),
     };
     const ctx = makeContext({ vectorStore });
     const result = await knowledgeQueryPlugin.handler(
@@ -93,6 +95,7 @@ describe('knowledge_query plugin', () => {
     const vectorStore = {
       semanticSearch: vi.fn().mockResolvedValue(mockResults),
       markShared: vi.fn(),
+      contribute: vi.fn().mockResolvedValue('ltm-1'),
     };
     const ctx = makeContext({ vectorStore });
     const result = await knowledgeQueryPlugin.handler(
@@ -119,6 +122,7 @@ describe('knowledge_query plugin', () => {
     const vectorStore = {
       semanticSearch: vi.fn().mockResolvedValue([]),
       markShared: vi.fn(),
+      contribute: vi.fn().mockResolvedValue('ltm-1'),
     };
     const ctx = makeContext({ vectorStore });
     await knowledgeQueryPlugin.handler({ query: 'test' }, ctx);

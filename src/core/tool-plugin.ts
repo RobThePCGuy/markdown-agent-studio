@@ -38,6 +38,7 @@ export interface ToolContext {
   vectorStore?: {
     semanticSearch: (query: string, agentId: string, limit?: number) => Promise<{ type: string; content: string; tags: string[]; agentId: string }[]>;
     markShared: (id: string, shared: boolean) => Promise<void>;
+    contribute: (content: string, type: string, tags: string[], agentId: string, runId?: string) => Promise<string>;
   };
   pubSubStore?: Store<PubSubState>;
   blackboardStore?: Store<BlackboardState>;

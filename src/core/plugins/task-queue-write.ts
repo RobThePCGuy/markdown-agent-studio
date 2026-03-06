@@ -37,7 +37,10 @@ export const taskQueueWritePlugin: ToolPlugin = {
       return 'Error: Task queue is only available in autonomous mode.';
     }
 
-    const action = args.action as string;
+    const action = (args.action as string | undefined)?.trim();
+    if (!action) {
+      return 'Error: "action" parameter is required. Must be one of: "add", "update", or "remove".';
+    }
     const store = ctx.taskQueueStore.getState();
 
     switch (action) {

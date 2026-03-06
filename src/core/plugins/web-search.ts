@@ -25,7 +25,13 @@ export const webSearchPlugin: ToolPlugin = {
         tools: [{ googleSearch: {} } as unknown as Tool],
       });
 
-      const result = await model.generateContent(query);
+      // 30-second timeout to prevent indefinite hangs
+      const result = await Promise.race([
+        model.generateContent(query),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('web_search timed out after 30 s')), 30_000),
+        ),
+      ]);
       const candidate = result.response.candidates?.[0];
       const text = result.response.text();
 

@@ -70,8 +70,8 @@ export interface KernelConfig {
 export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxConcurrency: 3,
   maxDepth: 5,
-  maxFanout: 5,
-  tokenBudget: 250000,
+  maxFanout: 8,
+  tokenBudget: 500000,
   memoryEnabled: true,
   memoryTokenBudget: 4000,
   autonomousMaxCycles: 10,
@@ -82,9 +82,9 @@ export const DEFAULT_KERNEL_CONFIG: KernelConfig = {
   maxNudges: 3,
   forceReflection: true,
   autoRecordFailures: true,
-  useVectorMemory: false,
+  useVectorMemory: true,
   workflowMaxParallelSteps: 1,
-  maxAgentTurns: 25,
+  maxAgentTurns: 15,
   summarizerMaxMessages: 40,
   summarizerMaxMessageChars: 1200,
 };

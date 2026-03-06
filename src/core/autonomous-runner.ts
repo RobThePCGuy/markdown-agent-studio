@@ -394,7 +394,10 @@ export class AutonomousRunner {
       : new ScriptedAIProvider(DEMO_SCRIPT);
 
     // Clone builtin registry and add task queue tools
-    const registry = createBuiltinRegistry().cloneWith([
+    const vectorAdapter = this.deps.memoryManager.vectorStoreAdapter;
+    const registry = createBuiltinRegistry({
+      includeKnowledgeTools: Boolean(vectorAdapter),
+    }).cloneWith([
       taskQueueReadPlugin,
       taskQueueWritePlugin,
     ]);
@@ -425,7 +428,7 @@ export class AutonomousRunner {
       taskQueueStore: this.deps.taskQueueStore,
       pubSubStore: this.deps.pubSubStore,
       blackboardStore: this.deps.blackboardStore,
-      vectorStore: this.deps.memoryManager.vectorStoreAdapter,
+      vectorStore: vectorAdapter,
       mcpManager,
       apiKey,
       onSessionUpdate: () => {
@@ -525,9 +528,10 @@ export class AutonomousRunner {
     completeness: 'complete' | 'incomplete' | 'uncertain',
     pendingActivationCount: number,
   ): string {
-    const sessionCount = kernel.completedSessions.length;
-    const toolCalls = kernel.completedSessions.reduce((sum, s) => sum + s.toolCalls.length, 0);
-    const lastSession = kernel.completedSessions[kernel.completedSessions.length - 1];
+    const completed = kernel.completedSessions;
+    const sessionCount = completed.length;
+    const toolCalls = completed.reduce((sum, s) => sum + s.toolCalls.length, 0);
+    const lastSession = sessionCount > 0 ? completed[sessionCount - 1] : undefined;
     const lastModel = lastSession
       ? [...lastSession.history].reverse().find((m) => m.role === 'model')
       : undefined;
