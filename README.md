@@ -1,27 +1,27 @@
-# Markdown Agent Studio
+# Markdown Agent Studio (MAS)
 
 [![npm version](https://img.shields.io/npm/v/markdown-agent-studio)](https://www.npmjs.com/package/markdown-agent-studio)
 [![CI](https://github.com/RobThePCGuy/markdown-agent-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/RobThePCGuy/markdown-agent-studio/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org/)
 
-A visual IDE for building AI agents that learn from experience - not from training data or prompt engineering, but from doing the work.
+**Stop writing boilerplate Python. Stop wiring together visual spaghetti graphs. Start building AI teams that actually learn from their mistakes.**
+
+Markdown Agent Studio is a local-first, browser-based IDE for building self-improving AI agent systems. An agent is not a stateless API call - it is a living document that can work, remember, collaborate, and evolve.
 
 ![Markdown Agent Studio Demo](./markdown-agent-studio-demo.gif)
 
-## The Problem with AI Agents Today
+## The Problem
 
-Every AI agent created under the same model starts with the same intelligence. We've tried to differentiate them through prompt engineering (telling them what to be) and fine-tuning (showing them what others have done). But neither of these is actual learning. A prompted agent doesn't get better at writing stories by writing stories. It gets the same result every time, from the same static starting point.
+Every AI agent built on the same model starts with the same intelligence. The industry tries to differentiate them through prompt engineering (telling them what to be) and fine-tuning (showing them what others have done). Neither is actual learning. A prompted agent doesn't get better at writing stories by writing stories. It gets the same result every time, from the same static starting point.
 
-Humans don't work this way. We learn by doing, failing, reflecting, and carrying that experience forward. Our entire lives are spent on this loop. AI agents have no equivalent - until now.
+Humans don't work this way. We learn by doing, failing, reflecting, and carrying that experience forward. AI agents have had no equivalent - until now.
 
-## What This Project Does
+## What MAS Does
 
-Markdown Agent Studio is a workspace where agents develop specialization through their own experience.
+You give an agent a task. It runs, produces output, and reflects on what it did. On the next run, its memory from the previous session feeds back in. It sees what it tried, what fell flat, what worked. It spawns sub-agents to research or review. When context fills up, a summarizer compresses working memory into long-term knowledge - deduplicating what it already knows, preserving what's new.
 
-Here is how it works: you give an agent a task - say, "learn to write better short stories." The agent runs, produces output, and reflects on what it did. On the next run, its memory from the previous session feeds back in. It sees what it tried, what fell flat, what worked. It spawns sub-agents to research narrative structure or study dialogue patterns. When context fills up, a summarizer compresses working memory into long-term knowledge - deduplicating what it already knows, preserving what's new. Run after run, the agent's accumulated knowledge grows deeper and more refined.
-
-The result is an agent that has genuinely specialized - not because a human engineered the right prompt, but because the agent earned its expertise through iterative practice.
+Run after run, the agent's accumulated knowledge grows deeper and more refined. Not because a human engineered the right prompt, but because the agent earned its expertise through iterative practice.
 
 ---
 
@@ -55,7 +55,7 @@ The result is an agent that has genuinely specialized - not because a human engi
 
 ## Why Markdown
 
-Most agent tooling forces a choice: write code (powerful but inaccessible) or use a visual builder (accessible but opaque). Agents defined in Markdown sit in the middle. They're plain text files you can read, edit, version-control, and share. The YAML frontmatter configures behavior; the body is the system prompt. No framework lock-in, no proprietary format.
+Most agent tooling forces a choice: write code (powerful but inaccessible) or use a visual builder (accessible but opaque). Agents defined in Markdown sit in the middle. They're plain text files you can read, edit, version-control, and share. The YAML frontmatter configures behavior; the body is the system prompt. No framework lock-in, no proprietary format, no deployment step.
 
 ```md
 ---
@@ -79,13 +79,13 @@ Spawn a critic agent to review your output. Incorporate feedback.
 Record what you learned to memory before finishing.
 ```
 
-That file *is* the agent. No scaffolding code, no configuration UI, no deployment step.
+That file *is* the agent.
 
 ## How the Learning Loop Works
 
 1. **Run** - The agent executes its task, using tools to research, write, and collaborate with sub-agents.
 2. **Reflect** - Before the session ends, the agent records what it accomplished, what failed, and what to try next.
-3. **Compress** - When context fills up, a summarizer agent distills working memory into long-term knowledge. Duplicates are discarded; new insights are preserved.
+3. **Compress** - When context fills up, a summarizer distills working memory into long-term knowledge. Duplicates are discarded; new insights are preserved.
 4. **Resume** - On the next run, accumulated memory feeds back in. The agent picks up where it left off, building on everything it has learned.
 
 Each cycle makes the agent more capable at its specific task. Not because the model changed, but because the agent's experiential knowledge grew.
@@ -93,6 +93,8 @@ Each cycle makes the agent more capable at its specific task. Not because the mo
 ---
 
 ## Getting Started
+
+MAS runs entirely locally. No backend infrastructure required.
 
 ### Prerequisites
 
@@ -110,7 +112,7 @@ npm run dev
 
 Open `http://localhost:5173`. Pick an agent, enter a prompt, click **Run**.
 
-No API key? That's fine - the app uses a scripted demo provider automatically so you can explore the full experience first.
+No API key? That's fine - the app ships with a scripted demo provider so you can explore the full experience first.
 
 ### Provider Keys
 
@@ -126,7 +128,7 @@ VITE_OPENAI_API_KEY=your_key_here
 VITE_ANTHROPIC_API_KEY=your_key_here
 ```
 
-If no key is set, demo mode is used. Select your provider and model in Settings. State is persisted in browser storage.
+If no key is set, demo mode runs automatically. Select your provider and model in Settings.
 
 ---
 
@@ -354,7 +356,7 @@ Mission state - including task queue, cycle notes (last 12), and token totals - 
 
 ## Memory System
 
-Memory is what makes agents learn. The system operates in three layers:
+Memory is what makes agents learn. The system operates in three layers.
 
 **Working memory** is written during a run via `memory_write`. It holds observations, plans, and intermediate results scoped to the current session.
 
@@ -376,7 +378,7 @@ Shared memory is visible to all agents in a project. Private memory is scoped to
 
 ## Inter-Agent Communication
 
-Agents coordinate through four communication primitives:
+Agents coordinate through four communication primitives.
 
 **Signal parent** - A spawned agent sends a message back to its creator when it finishes or needs attention. The simplest coordination pattern.
 
@@ -390,7 +392,9 @@ Agents coordinate through four communication primitives:
 
 ## Observability
 
-### Graph visualization
+MAS is designed to make agent thinking visible, not buried in terminal output.
+
+### Graph Visualization
 
 The graph view shows agents as color-coded nodes connected by activity edges:
 
@@ -407,7 +411,7 @@ Activity nodes appear as agents work, colored by type: green for thinking, blue 
 
 The HUD overlay (top-left) shows live stats: agent count, running/thinking/web activity counts, spawns, signals, and errors. Total token consumption is shown in workflow mode.
 
-### Inspector panel
+### Inspector Panel
 
 Three tabs on the right side:
 
@@ -417,13 +421,13 @@ Three tabs on the right side:
 
 A policy banner above the tabs shows the selected agent's safety mode and permissions at a glance.
 
-### Run timeline
+### Run Timeline
 
 A horizontal timeline below the graph shows the duration and overlap of all agent activations. Each bar represents one agent's execution, colored by agent identity.
 
-### Audio feedback
+### Audio Feedback
 
-The app plays distinct sounds for agent events: spawn (rising chime), tool calls (soft click), tool results (confirmation tone), signals (double blip), completion (C-E-G chord), errors (warning tone with vibrato), and pause/resume (descending/ascending tones). Toggle with the **MUTE** button in the top bar.
+MAS includes sonification - distinct audio signals for agent events so you can hear your system working even while focused elsewhere. Spawn triggers a rising chime, tool calls get a soft click, signals are a double blip, completion plays a C-E-G chord, and errors sound a warning tone with vibrato. Toggle with **MUTE** in the top bar.
 
 ---
 
@@ -447,7 +451,7 @@ You can also save any agent as a template with **Save as Template**, and create 
 
 ## Configuration
 
-### Settings reference
+### Settings Reference
 
 Open Settings (⚙ in the top bar) to configure:
 
@@ -587,4 +591,4 @@ npm run release:major
 
 ## License
 
-MIT
+MIT © RobThePCGuy
