@@ -595,7 +595,7 @@ export class AutonomousRunner {
 
     for (const pending of pendingActivations) {
       const marker = `carryover:${computeHash(`${pending.agentId}:${pending.input}`)}`;
-      const alreadyTracked = [...existingNotes].some((note) => note.includes(marker));
+      const alreadyTracked = [...existingNotes].some((note) => note?.includes(marker));
       if (alreadyTracked) continue;
 
       const description =
@@ -616,7 +616,7 @@ export class AutonomousRunner {
     if (pending.length > 0) return;
 
     const marker = `auto-seed:cycle-${cycle + 1}`;
-    const alreadySeeded = queueState.getAll().some((task) => task.notes.includes(marker));
+    const alreadySeeded = queueState.getAll().some((task) => task.notes?.includes(marker));
     if (alreadySeeded) return;
 
     const taskId = queueState.add(

@@ -98,7 +98,7 @@ export function createTaskQueueStore() {
     replaceAll(items: TaskItem[]): void {
       const deduped = new Map<string, TaskItem>();
       for (const item of items) {
-        deduped.set(item.id, { ...item });
+        deduped.set(item.id, { ...item, notes: item.notes ?? '' });
       }
       idCounter = Math.max(idCounter, nextCounterFromTasks([...deduped.values()]));
       set({ tasks: deduped });
