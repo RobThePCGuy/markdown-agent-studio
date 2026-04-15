@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
+import { retryWithBackoff } from './retry';
 
 /**
  * Anthropic provider using the Messages API with streaming.
@@ -91,14 +92,18 @@ export class AnthropicProvider implements AIProvider {
         },
       }));
 
-      const stream = await this.client.messages.create({
-        model: config.model ?? 'claude-sonnet-4-5-20250929',
-        max_tokens: config.maxTokens ?? 8192,
-        system: config.systemPrompt,
-        messages,
-        tools: anthropicTools.length > 0 ? anthropicTools : undefined,
-        stream: true,
-      }, { signal: controller.signal });
+      const stream = await retryWithBackoff(
+        () => this.client.messages.create({
+          model: config.model ?? 'claude-sonnet-4-5-20250929',
+          max_tokens: config.maxTokens ?? 8192,
+          system: config.systemPrompt,
+          messages,
+          tools: anthropicTools.length > 0 ? anthropicTools : undefined,
+          stream: true,
+        }, { signal: controller.signal }),
+        3,
+        controller.signal,
+      );
 
       const assistantContent: Anthropic.ContentBlockParam[] = [];
       let currentToolUse: { id: string; name: string; jsonAccum: string } | null = null;

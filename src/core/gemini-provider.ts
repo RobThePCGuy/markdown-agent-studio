@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import type { Content, FunctionCall, Part, Tool, GenerateContentResponse } from '@google/genai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
+import { retryWithBackoff } from './retry';
 
 /**
  * Gemini provider that manages conversation history manually using raw Content
@@ -89,15 +90,19 @@ export class GeminiProvider implements AIProvider {
           }));
       }
 
-      const stream: AsyncGenerator<GenerateContentResponse> = await this.client.models.generateContentStream({
-        model: config.model ?? 'gemini-2.5-flash',
-        contents,
-        config: {
-          systemInstruction: config.systemPrompt,
-          tools: geminiTools,
-          abortSignal: controller.signal,
-        },
-      });
+      const stream: AsyncGenerator<GenerateContentResponse> = await retryWithBackoff(
+        () => this.client.models.generateContentStream({
+          model: config.model ?? 'gemini-2.5-flash',
+          contents,
+          config: {
+            systemInstruction: config.systemPrompt,
+            tools: geminiTools,
+            abortSignal: controller.signal,
+          },
+        }),
+        3,
+        controller.signal,
+      );
 
       let totalTokens = 0;
       // Collect raw parts from stream chunks to preserve thought/thoughtSignature.

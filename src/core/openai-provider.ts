@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
+import { retryWithBackoff } from './retry';
 
 type ChatMessage = OpenAI.ChatCompletionMessageParam;
 
@@ -88,12 +89,16 @@ export class OpenAIProvider implements AIProvider {
           }))
         : undefined;
 
-      const stream = await this.client.chat.completions.create({
-        model: config.model ?? 'gpt-4o',
-        messages,
-        tools: openaiTools,
-        stream: true,
-      }, { signal: controller.signal });
+      const stream = await retryWithBackoff(
+        () => this.client.chat.completions.create({
+          model: config.model ?? 'gpt-4o',
+          messages,
+          tools: openaiTools,
+          stream: true,
+        }, { signal: controller.signal }),
+        3,
+        controller.signal,
+      );
 
       // Accumulate tool calls from streaming deltas
       const toolCallAccum = new Map<number, { id: string; name: string; args: string }>();
