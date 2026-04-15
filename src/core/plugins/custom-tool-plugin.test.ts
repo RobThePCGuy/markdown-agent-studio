@@ -46,47 +46,54 @@ describe('createCustomToolPlugin', () => {
 
   it('substitutes template parameters in prompt', async () => {
     const plugin = createCustomToolPlugin(toolDef);
-    const spawnedActivations: SpawnedActivation[] = [];
+    const capturedActivations: SpawnedActivation[] = [];
     const ctx = makeCtx({
-      onSpawnActivation: (act) => spawnedActivations.push(act),
+      onRunSessionAndReturn: vi.fn(async (act) => {
+        capturedActivations.push(act);
+        return 'done';
+      }),
     });
 
     await plugin.handler({ text: 'Hello world' }, ctx);
 
-    expect(spawnedActivations).toHaveLength(1);
-    expect(spawnedActivations[0].input).toBe('Summarize the following:\n\nHello world');
+    expect(capturedActivations).toHaveLength(1);
+    expect(capturedActivations[0].input).toBe('Summarize the following:\n\nHello world');
   });
 
   it('does not include model in spawned agent frontmatter', async () => {
     const withModel: CustomToolDef = { ...toolDef, model: 'gemini-3-flash-preview' };
     const plugin = createCustomToolPlugin(withModel);
     const vfs = createVFSStore();
-    const spawnedActivations: SpawnedActivation[] = [];
+    let capturedContent = '';
     const ctx = makeCtx({
       vfs,
-      onSpawnActivation: (act) => spawnedActivations.push(act),
+      onRunSessionAndReturn: vi.fn(async (act) => {
+        capturedContent = vfs.getState().read(act.agentId) ?? '';
+        return 'done';
+      }),
     });
 
     await plugin.handler({ text: 'test' }, ctx);
 
-    const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
-    expect(content).not.toContain('model:');
+    expect(capturedContent).not.toContain('model:');
   });
 
   it('defaults to gloves_off safety mode', async () => {
     const plugin = createCustomToolPlugin(toolDef);
     const vfs = createVFSStore();
-    const spawnedActivations: SpawnedActivation[] = [];
+    let capturedContent = '';
     const ctx = makeCtx({
       vfs,
-      onSpawnActivation: (act) => spawnedActivations.push(act),
+      onRunSessionAndReturn: vi.fn(async (act) => {
+        capturedContent = vfs.getState().read(act.agentId) ?? '';
+        return 'done';
+      }),
     });
 
     await plugin.handler({ text: 'test' }, ctx);
 
-    const content = vfs.getState().read(spawnedActivations[0].agentId) ?? '';
-    expect(content).not.toContain('model:');
-    expect(content).toContain('safety_mode: "gloves_off"');
+    expect(capturedContent).not.toContain('model:');
+    expect(capturedContent).toContain('safety_mode: "gloves_off"');
   });
 
   it('respects depth limits', async () => {
@@ -139,18 +146,24 @@ describe('createCustomToolPlugin', () => {
     expect(onSpawnActivation).not.toHaveBeenCalled();
   });
 
-  it('falls back to onSpawnActivation when onRunSessionAndReturn is not provided', async () => {
+  it('returns error when onRunSessionAndReturn is not provided', async () => {
     const plugin = createCustomToolPlugin(toolDef);
+    const vfs = createVFSStore();
+    const registry = createAgentRegistry();
     const onSpawnActivation = vi.fn();
     const ctx = makeCtx({
+      vfs,
+      registry,
       onSpawnActivation,
-      // onRunSessionAndReturn intentionally omitted
+      onRunSessionAndReturn: undefined,
     });
 
     const result = await plugin.handler({ text: 'Hello world' }, ctx);
 
-    expect(onSpawnActivation).toHaveBeenCalledOnce();
-    expect(result).toContain('dispatched as sub-agent');
+    expect(result).toContain('Error:');
+    expect(result).toContain('synchronous execution unavailable');
+    // onSpawnActivation should NOT be called
+    expect(onSpawnActivation).not.toHaveBeenCalled();
   });
 
   it('enforces depth limits even when onRunSessionAndReturn is provided', async () => {
@@ -189,16 +202,18 @@ describe('createCustomToolPlugin', () => {
     };
     const plugin = createCustomToolPlugin(withSchema);
     const vfs = createVFSStore();
-    const spawnedActivations: SpawnedActivation[] = [];
+    let capturedContent = '';
     const ctx = makeCtx({
       vfs,
-      onSpawnActivation: (act) => spawnedActivations.push(act),
+      onRunSessionAndReturn: vi.fn(async (act) => {
+        capturedContent = vfs.getState().read(act.agentId) ?? '';
+        return 'done';
+      }),
     });
 
     await plugin.handler({ text: 'test' }, ctx);
 
-    const content = vfs.getState().read(spawnedActivations[0].agentId);
-    expect(content).toContain('JSON matching this schema');
-    expect(content).toContain('"summary"');
+    expect(capturedContent).toContain('JSON matching this schema');
+    expect(capturedContent).toContain('"summary"');
   });
 });

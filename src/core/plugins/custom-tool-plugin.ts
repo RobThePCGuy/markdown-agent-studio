@@ -90,22 +90,11 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
         }
       }
 
-      // Fallback: fire-and-forget when onRunSessionAndReturn is not provided.
-      // In practice this path is unreachable — the Kernel always provides
-      // onRunSessionAndReturn to the ToolHandler. The temp agent file leaks
-      // here because onSpawnActivation has no completion callback.
-      // TODO: if this path ever becomes reachable, add a session-completion
-      // listener (e.g. subscribe to eventLog for 'complete' events matching
-      // this agentId) and clean up ctx.vfs.deleteFile(path) + ctx.registry.unregister(path).
-      ctx.onSpawnActivation({
-        agentId: path,
-        input: prompt,
-        parentId: ctx.currentAgentId,
-        spawnDepth: newDepth,
-        priority: newDepth,
-      });
-
-      return `Custom tool '${def.name}' dispatched as sub-agent at depth ${newDepth}. The sub-agent will execute the task.`;
+      // onRunSessionAndReturn is always provided by the Kernel.
+      // If we ever reach here, something is structurally wrong.
+      ctx.vfs.getState().deleteFile(path);
+      ctx.registry.getState().unregister(path);
+      return `Error: custom tool '${def.name}' requires synchronous execution unavailable in this context.`;
     },
   };
 }
