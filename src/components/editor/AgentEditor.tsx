@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import Editor, { type OnMount, type Monaco } from '@monaco-editor/react';
-import type { editor as monacoEditor } from 'monaco-editor';
 import { useUI, uiStore, vfsStore, agentRegistry } from '../../stores/use-stores';
 import { EditorToolbar } from './EditorToolbar';
 import { validateAgentContent } from '../../utils/agent-validator';
@@ -16,7 +15,7 @@ export function AgentEditor() {
 function AgentEditorInner({ editingFilePath }: { editingFilePath: string | null }) {
   const setEditorDirty = useUI((s) => s.setEditorDirty);
   const isAgentFile = editingFilePath?.startsWith('agents/') ?? false;
-  const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const [content, setContent] = useState(() =>
     editingFilePath ? vfsStore.getState().read(editingFilePath) ?? '' : ''
@@ -40,7 +39,7 @@ function AgentEditorInner({ editingFilePath }: { editingFilePath: string | null 
 
     const diagnostics = validateAgentContent(value, isAgentFile);
 
-    const markers: monacoEditor.IMarkerData[] = diagnostics.map((d) => ({
+    const markers: Parameters<Monaco['editor']['setModelMarkers']>[2] = diagnostics.map((d) => ({
       startLineNumber: d.startLine,
       endLineNumber: d.endLine,
       startColumn: d.startCol,
