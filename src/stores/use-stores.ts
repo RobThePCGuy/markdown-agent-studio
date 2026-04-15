@@ -13,6 +13,7 @@ import type { KernelConfig } from '../types';
 import { DEFAULT_KERNEL_CONFIG } from '../types';
 import { DiskSync } from '../core/disk-sync';
 import { MCPClientManager, type MCPServerConfig } from '../core/mcp-client';
+import { getOrCreateKey, encryptValue, decryptValue, isEncrypted } from '../utils/crypto-storage';
 
 // Singleton vanilla stores
 export const vfsStore = createVFSStore();
@@ -43,6 +44,7 @@ export interface UIState {
   settingsOpen: boolean;
   soundEnabled: boolean;
   showWelcome: boolean;
+  keysReady: boolean;
   globalMcpServers: MCPServerConfig[];
   workflowVariableModal: {
     workflowPath: string;
@@ -56,6 +58,8 @@ export interface UIState {
   setApiKey: (key: string) => void;
   setProvider: (provider: ProviderType) => void;
   setProviderApiKey: (provider: string, key: string) => void;
+  setProviderApiKeys: (keys: Record<string, string>) => void;
+  setKeysReady: (ready: boolean) => void;
   setEditingFile: (path: string | null) => void;
   setEditorDirty: (dirty: boolean) => void;
   openFileInEditor: (path: string) => void;
@@ -79,10 +83,16 @@ const persistedProvider = (() => {
   catch { return 'gemini' as ProviderType; }
 })();
 
+const _rawProviderApiKeys = (() => {
+  try { return localStorage.getItem('mas-provider-api-keys') ?? ''; }
+  catch { return ''; }
+})();
+
 const persistedProviderApiKeys: Record<string, string> = (() => {
   try {
-    const raw = localStorage.getItem('mas-provider-api-keys');
-    const keys: Record<string, string> = raw ? JSON.parse(raw) : {};
+    // If value is encrypted, return empty — async init will populate after decryption
+    if (isEncrypted(_rawProviderApiKeys)) return {};
+    const keys: Record<string, string> = _rawProviderApiKeys ? JSON.parse(_rawProviderApiKeys) : {};
     // Migrate existing apiKey to gemini slot if not already present
     if (!keys.gemini && persistedApiKey) keys.gemini = persistedApiKey;
     return keys;
@@ -108,6 +118,20 @@ const persistedMcpServers: MCPServerConfig[] = (() => {
   } catch { return []; }
 })();
 
+// --- Crypto helpers for encrypted API key persistence ---
+let _cryptoKey: CryptoKey | null = null;
+async function loadCryptoKey(): Promise<CryptoKey> {
+  if (!_cryptoKey) _cryptoKey = await getOrCreateKey();
+  return _cryptoKey;
+}
+async function writeEncryptedKeys(keys: Record<string, string>): Promise<void> {
+  try {
+    const key = await loadCryptoKey();
+    const encrypted = await encryptValue(key, JSON.stringify(keys));
+    localStorage.setItem('mas-provider-api-keys', encrypted);
+  } catch { /* SubtleCrypto/IndexedDB unavailable — fall back silently */ }
+}
+
 export const uiStore = createStore<UIState>((set) => ({
   selectedAgentId: null,
   selectedFilePath: null,
@@ -121,6 +145,7 @@ export const uiStore = createStore<UIState>((set) => ({
   settingsOpen: false,
   soundEnabled: persistedSoundEnabled,
   showWelcome: false,
+  keysReady: !isEncrypted(_rawProviderApiKeys),
   globalMcpServers: persistedMcpServers,
   workflowVariableModal: null,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
@@ -147,7 +172,7 @@ export const uiStore = createStore<UIState>((set) => ({
   setProviderApiKey: (provider, key) => {
     set((s) => {
       const next = { ...s.providerApiKeys, [provider]: key };
-      try { localStorage.setItem('mas-provider-api-keys', JSON.stringify(next)); } catch { /* */ }
+      writeEncryptedKeys(next);
       // If updating the active provider, also sync apiKey
       if (provider === s.provider) {
         try { localStorage.setItem('mas-api-key', key); } catch { /* */ }
@@ -156,6 +181,15 @@ export const uiStore = createStore<UIState>((set) => ({
       return { providerApiKeys: next };
     });
   },
+  setProviderApiKeys: (keys) => {
+    set((s) => {
+      writeEncryptedKeys(keys);
+      const activeKey = keys[s.provider] ?? '';
+      try { localStorage.setItem('mas-api-key', activeKey); } catch { /* */ }
+      return { providerApiKeys: keys, apiKey: activeKey };
+    });
+  },
+  setKeysReady: (ready) => set({ keysReady: ready }),
   setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
   setEditorDirty: (dirty) => set({ editorDirty: dirty }),
   openFileInEditor: (path) => set({ editingFilePath: path, editorDirty: false, activeTab: 'editor' }),
@@ -187,6 +221,29 @@ export const uiStore = createStore<UIState>((set) => ({
     return { globalMcpServers: next };
   }),
 }));
+
+// --- Async crypto initialization: decrypt or migrate API keys ---
+(async () => {
+  try {
+    if (isEncrypted(_rawProviderApiKeys)) {
+      // Stored value is encrypted — decrypt and patch store
+      const cryptoKey = await loadCryptoKey();
+      const json = await decryptValue(cryptoKey, _rawProviderApiKeys);
+      if (json) {
+        const keys: Record<string, string> = JSON.parse(json);
+        const state = uiStore.getState();
+        state.setProviderApiKeys(keys);
+      }
+    } else if (_rawProviderApiKeys) {
+      // Stored value is plaintext JSON — migrate to encrypted
+      await writeEncryptedKeys(persistedProviderApiKeys);
+    }
+  } catch {
+    // Don't block on crypto failure
+  } finally {
+    uiStore.getState().setKeysReady(true);
+  }
+})();
 
 // Wire up disk-based settings persistence (excludes API keys for security).
 diskSync.onSettingsLoaded = (settings) => {
