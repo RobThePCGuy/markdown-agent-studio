@@ -45,6 +45,7 @@ export interface UIState {
   soundEnabled: boolean;
   showWelcome: boolean;
   keysReady: boolean;
+  keysError: string | null;
   globalMcpServers: MCPServerConfig[];
   workflowVariableModal: {
     workflowPath: string;
@@ -60,6 +61,7 @@ export interface UIState {
   setProviderApiKey: (provider: string, key: string) => void;
   setProviderApiKeys: (keys: Record<string, string>) => void;
   setKeysReady: (ready: boolean) => void;
+  setKeysError: (error: string | null) => void;
   setEditingFile: (path: string | null) => void;
   setEditorDirty: (dirty: boolean) => void;
   openFileInEditor: (path: string) => void;
@@ -129,7 +131,10 @@ async function writeEncryptedKeys(keys: Record<string, string>): Promise<void> {
     const key = await loadCryptoKey();
     const encrypted = await encryptValue(key, JSON.stringify(keys));
     localStorage.setItem('mas-provider-api-keys', encrypted);
-  } catch { /* SubtleCrypto/IndexedDB unavailable — fall back silently */ }
+  } catch {
+    // SubtleCrypto/IndexedDB unavailable — write plaintext as fallback
+    try { localStorage.setItem('mas-provider-api-keys', JSON.stringify(keys)); } catch { /* */ }
+  }
 }
 
 export const uiStore = createStore<UIState>((set) => ({
@@ -146,6 +151,7 @@ export const uiStore = createStore<UIState>((set) => ({
   soundEnabled: persistedSoundEnabled,
   showWelcome: false,
   keysReady: !isEncrypted(_rawProviderApiKeys),
+  keysError: null,
   globalMcpServers: persistedMcpServers,
   workflowVariableModal: null,
   setSelectedAgent: (id) => set({ selectedAgentId: id, selectedFilePath: null }),
@@ -157,7 +163,6 @@ export const uiStore = createStore<UIState>((set) => ({
     return { kernelConfig: next };
   }),
   setApiKey: (key) => {
-    try { localStorage.setItem('mas-api-key', key); } catch { /* localStorage may be unavailable */ }
     set({ apiKey: key });
   },
   setProvider: (provider) => {
@@ -165,7 +170,6 @@ export const uiStore = createStore<UIState>((set) => ({
     // Sync apiKey to the selected provider's key for backwards compatibility
     set((s) => {
       const key = s.providerApiKeys[provider] ?? '';
-      try { localStorage.setItem('mas-api-key', key); } catch { /* */ }
       return { provider, apiKey: key };
     });
   },
@@ -175,7 +179,6 @@ export const uiStore = createStore<UIState>((set) => ({
       writeEncryptedKeys(next);
       // If updating the active provider, also sync apiKey
       if (provider === s.provider) {
-        try { localStorage.setItem('mas-api-key', key); } catch { /* */ }
         return { providerApiKeys: next, apiKey: key };
       }
       return { providerApiKeys: next };
@@ -185,11 +188,11 @@ export const uiStore = createStore<UIState>((set) => ({
     set((s) => {
       writeEncryptedKeys(keys);
       const activeKey = keys[s.provider] ?? '';
-      try { localStorage.setItem('mas-api-key', activeKey); } catch { /* */ }
       return { providerApiKeys: keys, apiKey: activeKey };
     });
   },
   setKeysReady: (ready) => set({ keysReady: ready }),
+  setKeysError: (error) => set({ keysError: error }),
   setEditingFile: (path) => set({ editingFilePath: path, editorDirty: false }),
   setEditorDirty: (dirty) => set({ editorDirty: dirty }),
   openFileInEditor: (path) => set({ editingFilePath: path, editorDirty: false, activeTab: 'editor' }),
@@ -238,8 +241,10 @@ export const uiStore = createStore<UIState>((set) => ({
       // Stored value is plaintext JSON — migrate to encrypted
       await writeEncryptedKeys(persistedProviderApiKeys);
     }
-  } catch {
-    // Don't block on crypto failure
+  } catch (err) {
+    uiStore.getState().setKeysError(
+      'API key decryption failed. Please re-enter your API keys in Settings.'
+    );
   } finally {
     uiStore.getState().setKeysReady(true);
   }
