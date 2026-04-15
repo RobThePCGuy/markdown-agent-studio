@@ -39,21 +39,21 @@ describe('ToolHandler', () => {
     it('returns file content when file exists', async () => {
       vfs.getState().write('artifacts/plan.md', '# Plan', {});
       const result = await handler.handle('vfs_read', { path: 'artifacts/plan.md' });
-      expect(result).toBe('# Plan');
+      expect(result.value).toBe('# Plan');
     });
 
     it('returns error with suggestions when file missing', async () => {
       vfs.getState().write('artifacts/plan.md', '# Plan', {});
       const result = await handler.handle('vfs_read', { path: 'artifacts/plans.md' });
-      expect(result).toContain('not found');
-      expect(result).toContain('artifacts/plan.md');
+      expect(result.value).toContain('not found');
+      expect(result.value).toContain('artifacts/plan.md');
     });
   });
 
   describe('vfs_write', () => {
     it('writes file and returns confirmation', async () => {
       const result = await handler.handle('vfs_write', { path: 'artifacts/spec.md', content: '# Spec' });
-      expect(result).toContain('Written to');
+      expect(result.value).toContain('Written to');
       expect(vfs.getState().read('artifacts/spec.md')).toBe('# Spec');
     });
 
@@ -71,15 +71,15 @@ describe('ToolHandler', () => {
       vfs.getState().write('agents/a.md', 'a', {});
       vfs.getState().write('agents/b.md', 'b', {});
       const result = await handler.handle('vfs_list', { prefix: 'agents/' });
-      expect(result).toContain('agents/a.md');
-      expect(result).toContain('agents/b.md');
+      expect(result.value).toContain('agents/a.md');
+      expect(result.value).toContain('agents/b.md');
     });
 
     it('returns helpful message when no matches', async () => {
       vfs.getState().write('agents/a.md', 'a', {});
       const result = await handler.handle('vfs_list', { prefix: 'tests/' });
-      expect(result).toContain('No files match');
-      expect(result).toContain('agents/');
+      expect(result.value).toContain('No files match');
+      expect(result.value).toContain('agents/');
     });
   });
 
@@ -87,13 +87,13 @@ describe('ToolHandler', () => {
     it('deletes existing file', async () => {
       vfs.getState().write('memory/notes.md', 'notes', {});
       const result = await handler.handle('vfs_delete', { path: 'memory/notes.md' });
-      expect(result).toContain('Deleted');
+      expect(result.value).toContain('Deleted');
       expect(vfs.getState().exists('memory/notes.md')).toBe(false);
     });
 
     it('returns error for nonexistent file', async () => {
       const result = await handler.handle('vfs_delete', { path: 'nope.md' });
-      expect(result).toContain('not found');
+      expect(result.value).toContain('not found');
     });
   });
 
@@ -104,7 +104,7 @@ describe('ToolHandler', () => {
         content: '---\nname: "Researcher"\n---\nDo research.',
         task: 'Find info about topic X',
       });
-      expect(result).toContain('Created and activated');
+      expect(result.value).toContain('Created and activated');
       expect(vfs.getState().exists('agents/researcher.md')).toBe(true);
       expect(registry.getState().get('agents/researcher.md')).toBeTruthy();
       expect(spawnedActivations).toHaveLength(1);
@@ -129,7 +129,7 @@ describe('ToolHandler', () => {
       const result = await deepHandler.handle('spawn_agent', {
         filename: 'child.md', content: 'prompt', task: 'go',
       });
-      expect(result).toContain('depth limit');
+      expect(result.value).toContain('depth limit');
     });
 
     it('blocks when fanout limit reached', async () => {
@@ -150,7 +150,7 @@ describe('ToolHandler', () => {
       const result = await fullHandler.handle('spawn_agent', {
         filename: 'another.md', content: 'prompt', task: 'go',
       });
-      expect(result).toContain('fanout limit');
+      expect(result.value).toContain('fanout limit');
     });
 
     it('normalizes legacy model and defaults safety mode for spawned agents', async () => {
@@ -186,7 +186,7 @@ describe('ToolHandler', () => {
   describe('signal_parent', () => {
     it('queues parent re-activation', async () => {
       const result = await handler.handle('signal_parent', { message: 'Done with research' });
-      expect(result).toContain('Message sent');
+      expect(result.value).toContain('Message sent');
       expect(spawnedActivations).toHaveLength(1);
       expect(spawnedActivations[0].agentId).toBe('agents/orchestrator.md');
     });
@@ -207,14 +207,14 @@ describe('ToolHandler', () => {
         childCount: 0,
       });
       const result = await rootHandler.handle('signal_parent', { message: 'hello' });
-      expect(result).toContain('no parent');
+      expect(result.value).toContain('no parent');
     });
   });
 
   describe('unknown tool', () => {
     it('returns error for unknown tool name', async () => {
       const result = await handler.handle('unknown_tool', {});
-      expect(result).toContain('Unknown tool');
+      expect(result.value).toContain('Unknown tool');
     });
   });
 
@@ -254,8 +254,8 @@ describe('ToolHandler', () => {
       });
 
       const result = await restricted.handle('web_search', { query: 'latest AI' });
-      expect(result).toContain('Policy blocked');
-      expect(result).toContain('web_access');
+      expect(result.value).toContain('Policy blocked');
+      expect(result.value).toContain('web_access');
     });
 
     it('blocks write outside allowed write scopes', async () => {
@@ -279,7 +279,7 @@ describe('ToolHandler', () => {
         path: 'memory/notes.md',
         content: 'x',
       });
-      expect(result).toContain('Policy blocked write');
+      expect(result.value).toContain('Policy blocked write');
       expect(vfs.getState().exists('memory/notes.md')).toBe(false);
     });
 
@@ -305,7 +305,7 @@ describe('ToolHandler', () => {
         path: 'artifacts/../agents/evil.md',
         content: 'malicious',
       });
-      expect(result).toContain('Policy blocked');
+      expect(result.value).toContain('Policy blocked');
       expect(vfs.getState().exists('agents/evil.md')).toBe(false);
     });
 
@@ -331,7 +331,7 @@ describe('ToolHandler', () => {
         path: '../../agents/evil.md',
         content: 'malicious',
       });
-      expect(above).toContain('Policy blocked');
+      expect(above.value).toContain('Policy blocked');
       expect(vfs.getState().exists('agents/evil.md')).toBe(false);
     });
 
@@ -355,14 +355,14 @@ describe('ToolHandler', () => {
       });
 
       const readResult = await restricted.handle('vfs_read', { path: 123 });
-      expect(readResult).toContain("Policy blocked 'vfs_read'");
-      expect(readResult).toContain("non-empty string 'path'");
-      expect(readResult).not.toContain('artifacts/secret.md');
+      expect(readResult.value).toContain("Policy blocked 'vfs_read'");
+      expect(readResult.value).toContain("non-empty string 'path'");
+      expect(readResult.value).not.toContain('artifacts/secret.md');
 
       const listResult = await restricted.handle('vfs_list', { prefix: '' });
-      expect(listResult).toContain("Policy blocked 'vfs_list'");
-      expect(listResult).toContain("non-empty string 'prefix'");
-      expect(listResult).not.toContain('artifacts/secret.md');
+      expect(listResult.value).toContain("Policy blocked 'vfs_list'");
+      expect(listResult.value).toContain("non-empty string 'prefix'");
+      expect(listResult.value).not.toContain('artifacts/secret.md');
     });
 
     it('requires list prefixes to stay within allowed read roots', async () => {
@@ -391,12 +391,12 @@ describe('ToolHandler', () => {
       });
 
       const blocked = await restricted.handle('vfs_list', { prefix: 'a' });
-      expect(blocked).toContain("Policy blocked list prefix 'a'");
-      expect(blocked).not.toContain('artifacts/secret.md');
+      expect(blocked.value).toContain("Policy blocked list prefix 'a'");
+      expect(blocked.value).not.toContain('artifacts/secret.md');
 
       const allowed = await restricted.handle('vfs_list', { prefix: 'agents/' });
-      expect(allowed).toContain('agents/a.md');
-      expect(allowed).not.toContain('artifacts/secret.md');
+      expect(allowed.value).toContain('agents/a.md');
+      expect(allowed.value).not.toContain('artifacts/secret.md');
     });
 
     it('bypasses restrictions in gloves_off mode', async () => {
@@ -425,7 +425,7 @@ describe('ToolHandler', () => {
         path: 'memory/notes.md',
         content: 'ok',
       });
-      expect(result).toContain('Written to');
+      expect(result.value).toContain('Written to');
       expect(vfs.getState().read('memory/notes.md')).toBe('ok');
     });
   });
@@ -450,10 +450,10 @@ describe('ToolHandler', () => {
       });
 
       const writeResult = await bbHandler.handle('blackboard_write', { key: 'goal', value: 'finish task' });
-      expect(writeResult).toContain('Wrote "goal"');
+      expect(writeResult.value).toContain('Wrote "goal"');
 
       const readResult = await bbHandler.handle('blackboard_read', { key: 'goal' });
-      expect(readResult).toContain('finish task');
+      expect(readResult.value).toContain('finish task');
     });
   });
 
@@ -478,15 +478,109 @@ describe('ToolHandler', () => {
 
       // Subscribe first
       const subResult = await psHandler.handle('subscribe', { channel: 'updates' });
-      expect(subResult).toContain('Subscribed');
+      expect(subResult.value).toContain('Subscribed');
 
       // Publish a message
       const pubResult = await psHandler.handle('publish', { channel: 'updates', message: 'hello world' });
-      expect(pubResult).toContain('Published');
+      expect(pubResult.value).toContain('Published');
 
       // Check pending messages
       const checkResult = await psHandler.handle('subscribe', { channel: 'updates', check: true });
-      expect(checkResult).toContain('hello world');
+      expect(checkResult.value).toContain('hello world');
+    });
+  });
+
+  describe('structured ToolResult', () => {
+    it('returns ok: true for successful tool calls', async () => {
+      vfs.getState().write('artifacts/plan.md', '# Plan', {});
+      const result = await handler.handle('vfs_read', { path: 'artifacts/plan.md' });
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe('# Plan');
+      expect(result.errorType).toBeUndefined();
+    });
+
+    it('returns ok: false with permanent errorType for Error: prefixed results', async () => {
+      const result = await handler.handle('vfs_read', { path: 'nonexistent.md' });
+      expect(result.ok).toBe(false);
+      expect(result.errorType).toBe('permanent');
+      expect(result.value).toContain('not found');
+    });
+
+    it('returns ok: false with policy errorType for policy blocks', async () => {
+      const restrictedPolicy: AgentPolicy = {
+        mode: 'safe',
+        reads: ['memory/**'],
+        writes: ['artifacts/**'],
+        allowedTools: [],
+        blockedTools: [],
+        glovesOffTriggers: [],
+        permissions: {
+          spawnAgents: false,
+          editAgents: false,
+          deleteFiles: false,
+          webAccess: false,
+          signalParent: true,
+          customTools: false,
+        },
+      };
+
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-typed',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: restrictedPolicy,
+      });
+
+      const result = await restricted.handle('web_search', { query: 'test' });
+      expect(result.ok).toBe(false);
+      expect(result.errorType).toBe('policy');
+      expect(result.value).toContain('Policy blocked');
+    });
+
+    it('returns ok: false with permanent errorType for unknown tools', async () => {
+      const result = await handler.handle('no_such_tool', {});
+      expect(result.ok).toBe(false);
+      expect(result.errorType).toBe('permanent');
+      expect(result.value).toContain('Unknown tool');
+    });
+
+    it('returns ok: false with transient errorType when plugin throws', async () => {
+      const { ToolPluginRegistry: TPR } = await import('./tool-plugin');
+      const customRegistry = createBuiltinRegistry();
+      customRegistry.register({
+        name: 'throw_tool',
+        description: 'A tool that throws',
+        parameters: {},
+        handler: async () => { throw new Error('boom'); },
+      });
+
+      const throwHandler = new ToolHandler({
+        pluginRegistry: customRegistry,
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/test.md',
+        currentActivationId: 'act-throw',
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+      });
+
+      const result = await throwHandler.handle('throw_tool', {});
+      expect(result.ok).toBe(false);
+      expect(result.errorType).toBe('transient');
+      expect(result.value).toContain('boom');
     });
   });
 });

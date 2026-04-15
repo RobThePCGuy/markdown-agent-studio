@@ -8,6 +8,7 @@ import type { MemoryStoreState } from '../stores/memory-store';
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { PubSubState } from '../stores/pub-sub-store';
 import type { BlackboardState } from '../stores/blackboard-store';
+import { type ToolResult, successResult, errorResult } from './tool-result';
 
 type Store<T> = { getState(): T };
 
@@ -71,7 +72,7 @@ export class ToolHandler {
     return this._spawnCount;
   }
 
-  async handle(toolName: string, args: Record<string, unknown>): Promise<string> {
+  async handle(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
     const { eventLog } = this.config;
 
     eventLog.getState().append({
@@ -81,21 +82,21 @@ export class ToolHandler {
       data: { tool: toolName, args },
     });
 
-    const policyError = this.policyError(toolName, args);
-    if (policyError) {
+    const policyErr = this.policyError(toolName, args);
+    if (policyErr) {
       eventLog.getState().append({
         type: 'warning',
         agentId: this.config.currentAgentId,
         activationId: this.config.currentActivationId,
-        data: { message: policyError, tool: toolName },
+        data: { message: policyErr, tool: toolName },
       });
       eventLog.getState().append({
         type: 'tool_result',
         agentId: this.config.currentAgentId,
         activationId: this.config.currentActivationId,
-        data: { tool: toolName, result: policyError.slice(0, 500) },
+        data: { tool: toolName, result: policyErr.slice(0, 500) },
       });
-      return policyError;
+      return errorResult(policyErr, 'policy');
     }
 
     const plugin = this.config.pluginRegistry.get(toolName);
@@ -126,10 +127,31 @@ export class ToolHandler {
         blackboardStore: this.config.blackboardStore,
         vectorStore: this.config.vectorStore,
       };
-      result = await plugin.handler(args, ctx);
+      try {
+        result = await plugin.handler(args, ctx);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result = `Error: ${msg}`;
+        const truncated = result.length > 500;
+        eventLog.getState().append({
+          type: 'tool_result',
+          agentId: this.config.currentAgentId,
+          activationId: this.config.currentActivationId,
+          data: { tool: toolName, result: result.slice(0, 500), truncated },
+        });
+        return errorResult(result, 'transient');
+      }
     } else {
       const available = this.config.pluginRegistry.getAll().map((p) => p.name).join(', ');
       result = `Error: Unknown tool '${toolName}'. Available tools: ${available}`;
+      const truncated = result.length > 500;
+      eventLog.getState().append({
+        type: 'tool_result',
+        agentId: this.config.currentAgentId,
+        activationId: this.config.currentActivationId,
+        data: { tool: toolName, result: result.slice(0, 500), truncated },
+      });
+      return errorResult(result, 'permanent');
     }
 
     const truncated = result.length > 500;
@@ -140,7 +162,20 @@ export class ToolHandler {
       data: { tool: toolName, result: result.slice(0, 500), truncated },
     });
 
-    return result;
+    // Classify the string result from the plugin
+    if (!result || result.trim() === '') {
+      return errorResult(result, 'permanent');
+    }
+    if (result.length <= 500) {
+      const trimmed = result.trimStart();
+      if (trimmed.startsWith('Policy blocked')) {
+        return errorResult(result, 'policy');
+      }
+      if (trimmed.startsWith('Error:') || trimmed.startsWith('error:')) {
+        return errorResult(result, 'permanent');
+      }
+    }
+    return successResult(result);
   }
 
   private policyError(toolName: string, args: Record<string, unknown>): string | null {

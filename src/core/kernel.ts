@@ -12,6 +12,7 @@ import { createMCPBridgePlugins } from './plugins/mcp-bridge-plugin';
 import { computeHash } from '../utils/vfs-helpers';
 import { resolvePolicyForInput } from '../utils/parse-agent';
 import { createMemoryStore, type MemoryStoreState } from '../stores/memory-store';
+import { isToolError } from './tool-result';
 import type { TaskQueueState } from '../stores/task-queue-store';
 import type { MemoryManager } from './memory-manager';
 import type { PubSubState } from '../stores/pub-sub-store';
@@ -25,28 +26,6 @@ const WORKSPACE_PREAMBLE =
   'Use memory_write only for temporary inter-agent coordination during a run (it is cleared when the run ends).\n' +
   'When stuck on a complex sub-problem, use spawn_agent to create a specialist sub-agent for focused research.\n';
 
-/**
- * Check if a tool result represents a failure.
- *
- * We only match results that begin with a known error prefix. This avoids
- * false positives on arbitrary file content (e.g. Python code containing
- * "not found" or "invalid") which the old broad regex patterns would flag.
- *
- * All tool error strings in this codebase start with "Error:" or
- * "Policy blocked" so anchored prefix checks are sufficient and safe.
- */
-function isToolFailure(result: string): boolean {
-  if (!result || result.trim() === '') return true;
-  // Only match short results that begin with an error prefix.
-  // Long results (>500 chars) are almost certainly successful content.
-  if (result.length > 500) return false;
-  const trimmed = result.trimStart();
-  return (
-    trimmed.startsWith('Error:') ||
-    trimmed.startsWith('error:') ||
-    trimmed.startsWith('Policy blocked')
-  );
-}
 
 function buildNudgePrompt(currentTurn: number, maxTurns: number, nudgeCount: number): string {
   const remaining = maxTurns - currentTurn;
@@ -528,14 +507,14 @@ export class Kernel {
               hadToolCalls = true;
               sessionUsedTools = true;
               const tc = chunk.toolCall!;
-              const result = await toolHandler.handle(tc.name, tc.args);
+              const toolResult = await toolHandler.handle(tc.name, tc.args);
 
               // Track tool failures
-              if (isToolFailure(result)) {
+              if (isToolError(toolResult)) {
                 toolFailures.push({
                   tool: tc.name,
                   args: JSON.stringify(tc.args).slice(0, 200),
-                  error: result.slice(0, 300),
+                  error: toolResult.value.slice(0, 300),
                 });
               }
 
@@ -543,13 +522,13 @@ export class Kernel {
                 id: tc.id,
                 name: tc.name,
                 args: tc.args,
-                result,
+                result: toolResult.value,
                 timestamp: Date.now(),
               };
               session.toolCalls.push(record);
               session.history.push({
                 role: 'tool' as const,
-                content: result,
+                content: toolResult.value,
                 toolCall: record,
               });
               this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
@@ -750,10 +729,10 @@ export class Kernel {
             blackboardStore: this.deps.blackboardStore,
             vectorStore: this.deps.vectorStore,
           });
-          const result = await handler.handle(tc.name, tc.args);
-          const record = { id: tc.id, name: tc.name, args: tc.args, result, timestamp: Date.now() };
+          const toolResult = await handler.handle(tc.name, tc.args);
+          const record = { id: tc.id, name: tc.name, args: tc.args, result: toolResult.value, timestamp: Date.now() };
           session.toolCalls.push(record);
-          session.history.push({ role: 'tool' as const, content: result, toolCall: record });
+          session.history.push({ role: 'tool' as const, content: toolResult.value, toolCall: record });
           this.deps.sessionStore?.getState().addToolResult(activation.id, record.id, record.name, record.args, record.result);
           break;
         }
