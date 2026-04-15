@@ -477,7 +477,7 @@ function makeConsolidateFn(callLLM: LLMCallFn): ConsolidateFn {
 
 const DEFAULT_SUMMARIZE_MODELS: Record<ProviderType, string> = {
   gemini: 'gemini-2.5-flash',
-  openai: 'gpt-4o-mini',
+  openai: 'gpt-4.1-mini',
   anthropic: 'claude-sonnet-4-5-20250929',
 };
 

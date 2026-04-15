@@ -499,8 +499,8 @@ describe('Multi-provider dispatchers', () => {
       expect(getDefaultSummarizeModel('gemini')).toBe('gemini-2.5-flash');
     });
 
-    it('returns gpt-4o-mini for openai', () => {
-      expect(getDefaultSummarizeModel('openai')).toBe('gpt-4o-mini');
+    it('returns gpt-4.1-mini for openai', () => {
+      expect(getDefaultSummarizeModel('openai')).toBe('gpt-4.1-mini');
     });
 
     it('returns claude-sonnet-4-5-20250929 for anthropic', () => {

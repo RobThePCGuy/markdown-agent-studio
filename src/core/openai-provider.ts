@@ -91,7 +91,7 @@ export class OpenAIProvider implements AIProvider {
 
       const stream = await retryWithBackoff(
         () => this.client.chat.completions.create({
-          model: config.model ?? 'gpt-4o',
+          model: config.model ?? 'gpt-4.1',
           messages,
           tools: openaiTools,
           stream: true,

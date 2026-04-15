@@ -11,7 +11,7 @@ export interface AgentDiagnostic {
   severity: DiagnosticSeverity;
 }
 
-const KNOWN_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+const KNOWN_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano'];
 const KNOWN_MODES = ['safe', 'street', 'balanced', 'gloves_off', 'gloves-off', 'glovesoff', 'autonomous', 'track'];
 
 function hasNonStringItems(value: unknown[]): boolean {
