@@ -126,14 +126,27 @@ async function loadCryptoKey(): Promise<CryptoKey> {
   if (!_cryptoKey) _cryptoKey = await getOrCreateKey();
   return _cryptoKey;
 }
+/** Write keys to localStorage, encrypted if possible, plaintext as fallback. */
 async function writeEncryptedKeys(keys: Record<string, string>): Promise<void> {
   try {
     const key = await loadCryptoKey();
     const encrypted = await encryptValue(key, JSON.stringify(keys));
     localStorage.setItem('mas-provider-api-keys', encrypted);
   } catch {
-    // SubtleCrypto/IndexedDB unavailable — write plaintext as fallback
+    // SubtleCrypto/IndexedDB unavailable — write plaintext so key changes aren't lost
     try { localStorage.setItem('mas-provider-api-keys', JSON.stringify(keys)); } catch { /* */ }
+  }
+}
+
+/** Attempt to encrypt existing plaintext keys. Returns true if migration succeeded. */
+async function tryMigrateToEncrypted(keys: Record<string, string>): Promise<boolean> {
+  try {
+    const key = await loadCryptoKey();
+    const encrypted = await encryptValue(key, JSON.stringify(keys));
+    localStorage.setItem('mas-provider-api-keys', encrypted);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -238,8 +251,9 @@ export const uiStore = createStore<UIState>((set) => ({
         state.setProviderApiKeys(keys);
       }
     } else if (_rawProviderApiKeys) {
-      // Stored value is plaintext JSON — migrate to encrypted
-      await writeEncryptedKeys(persistedProviderApiKeys);
+      // Stored value is plaintext JSON — try to migrate to encrypted.
+      // If crypto is unavailable, leave plaintext as-is (no-op, no loop on next load).
+      await tryMigrateToEncrypted(persistedProviderApiKeys);
     }
   } catch (err) {
     uiStore.getState().setKeysError(

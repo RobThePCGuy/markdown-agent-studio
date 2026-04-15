@@ -367,6 +367,7 @@ class RunController {
 
   async resumeWorkflow(workflowPath: string): Promise<void> {
     if (this.state.isRunning) return;
+    await this.waitForKeys();
 
     const content = vfsStore.getState().read(workflowPath);
     if (!content) return;
