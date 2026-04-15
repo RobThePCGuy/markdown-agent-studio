@@ -28,6 +28,18 @@ export const webFetchPlugin: ToolPlugin = {
     });
 
     if (!response.ok) {
+      // Retryable HTTP errors (429, 500, 502, 503, 529) — throw so retryWithBackoff can retry
+      const retryableStatuses = new Set([429, 500, 502, 503, 529]);
+      if (retryableStatuses.has(response.status)) {
+        const retryAfter = response.headers.get('retry-after');
+        const err = new Error(`HTTP ${response.status} ${response.statusText}`);
+        (err as Error & { status: number }).status = response.status;
+        if (retryAfter) {
+          (err as Error & { retryAfter: string }).retryAfter = retryAfter;
+        }
+        throw err;
+      }
+      // Non-retryable HTTP errors (404, 403, etc.) — return string (permanent failure)
       return `Error: HTTP ${response.status} ${response.statusText}`;
     }
 

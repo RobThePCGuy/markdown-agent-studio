@@ -57,9 +57,57 @@ describe('web_fetch plugin', () => {
       ok: false,
       status: 404,
       statusText: 'Not Found',
+      headers: new Headers(),
     } as unknown as Response);
 
     const result = await webFetchPlugin.handler({ url: 'https://example.com/nope' }, mockCtx);
+    expect(result).toContain('Error');
+    expect(result).toContain('404');
+  });
+
+  it('throws for HTTP 429 (retryable status)', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: new Headers({ 'retry-after': '5' }),
+    } as unknown as Response);
+
+    await expect(
+      webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx),
+    ).rejects.toThrow('HTTP 429');
+
+    // Verify status property is attached for isRetryableError detection
+    try {
+      await webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx);
+    } catch (err) {
+      expect((err as Error & { status: number }).status).toBe(429);
+      expect((err as Error & { retryAfter: string }).retryAfter).toBe('5');
+    }
+  });
+
+  it('throws for HTTP 503 (retryable status)', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers(),
+    } as unknown as Response);
+
+    await expect(
+      webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx),
+    ).rejects.toThrow('HTTP 503');
+  });
+
+  it('returns error string for HTTP 404 (non-retryable status)', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      headers: new Headers(),
+    } as unknown as Response);
+
+    const result = await webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx);
     expect(result).toContain('Error');
     expect(result).toContain('404');
   });
