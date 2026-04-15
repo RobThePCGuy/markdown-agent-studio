@@ -14,6 +14,8 @@ export interface VFSState {
   getAllPaths(): string[];
 }
 
+const MAX_VERSIONS_PER_FILE = 20;
+
 export function createVFSStore() {
   return createStore<VFSState>((set, get) => ({
     files: new Map<string, VFSFile>(),
@@ -36,10 +38,13 @@ export function createVFSStore() {
       };
 
       if (existing) {
+        const allVersions = [...existing.versions, version];
         const updated: VFSFile = {
           ...existing,
           content,
-          versions: [...existing.versions, version],
+          versions: allVersions.length > MAX_VERSIONS_PER_FILE
+            ? allVersions.slice(-MAX_VERSIONS_PER_FILE)
+            : allVersions,
           updatedAt: now,
         };
         set((state) => {
