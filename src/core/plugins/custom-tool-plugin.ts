@@ -83,6 +83,8 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
           });
           return result;
         } finally {
+          // Clean up transient agent — removes the node from the graph view.
+          // This is intentional: custom tool agents are ephemeral workers.
           ctx.vfs.getState().deleteFile(path);
           ctx.registry.getState().unregister(path);
         }

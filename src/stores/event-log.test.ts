@@ -95,6 +95,32 @@ describe('Event Log', () => {
     expect(log.getState().entries).toHaveLength(3);
     expect(log.getState().checkpoints).toHaveLength(0);
   });
+
+  it('getCheckpoint falls back correctly with interleaved checkpoint/non-checkpoint events', () => {
+    vfs.getState().write('artifacts/a.md', 'A', {});
+    // Event 0: activation (checkpoint-worthy)
+    log.getState().append({ type: 'activation', agentId: 'a', activationId: 'x', data: {} });
+    // Events 1-3: non-checkpoint events
+    log.getState().append({ type: 'tool_call', agentId: 'a', activationId: 'x', data: {} });
+    log.getState().append({ type: 'tool_result', agentId: 'a', activationId: 'x', data: {} });
+    log.getState().append({ type: 'signal', agentId: 'a', activationId: 'x', data: {} });
+    // Event 4: file_change (checkpoint-worthy)
+    vfs.getState().write('artifacts/b.md', 'B', {});
+    log.getState().append({ type: 'file_change', agentId: 'a', activationId: 'x', data: {} });
+
+    expect(log.getState().entries).toHaveLength(5);
+    expect(log.getState().checkpoints).toHaveLength(2);
+
+    // Exact match for a checkpoint event
+    const entry0 = log.getState().entries[0];
+    expect(log.getState().getCheckpoint(entry0.id)?.eventId).toBe(entry0.id);
+
+    // Fallback for a non-checkpoint event: should return a checkpoint (not undefined)
+    const entry2 = log.getState().entries[2]; // tool_result — no checkpoint
+    const fallback = log.getState().getCheckpoint(entry2.id);
+    expect(fallback).toBeDefined();
+    expect(fallback!.timestamp).toBeLessThanOrEqual(entry2.timestamp);
+  });
 });
 
 describe('Checkpoint Trimming', () => {

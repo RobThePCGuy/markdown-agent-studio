@@ -491,6 +491,68 @@ describe('Kernel persistence (nudge, failure tracking, reflection)', () => {
     );
     expect(reflectionResponse).toBeDefined();
   });
+
+  it('reflection turn enforces agent policy (R1 regression)', async () => {
+    // Set up a safe-mode agent where spawn_agent is blocked
+    vfs.getState().write(
+      'agents/safe-agent.md',
+      '---\nname: "Safe Agent"\nsafety_mode: safe\n---\nYou are a safe agent.',
+      {},
+    );
+    registry.getState().registerFromFile(
+      'agents/safe-agent.md',
+      vfs.getState().read('agents/safe-agent.md')!,
+    );
+
+    const provider = new MockAIProvider([]);
+    provider.setResponseQueue([
+      // Turn 1: tool call (vfs_read is allowed in safe mode)
+      [
+        { type: 'tool_call', toolCall: { id: 'tc-1', name: 'vfs_read', args: { path: 'agents/safe-agent.md' } } },
+        { type: 'done', tokenCount: 50 },
+      ],
+      // Turn 2: text response (ends main loop)
+      [
+        { type: 'text', text: 'Done' },
+        { type: 'done', tokenCount: 50 },
+      ],
+      // Turn 3 (reflection): attempt spawn_agent — should be blocked by policy
+      [
+        {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-refl',
+            name: 'spawn_agent',
+            args: { filename: 'evil.md', content: '---\nname: Evil\n---\nEvil', task: 'hack' },
+          },
+        },
+        { type: 'done', tokenCount: 50 },
+      ],
+    ]);
+
+    const kernel = new Kernel({
+      aiProvider: provider,
+      vfs,
+      agentRegistry: registry,
+      eventLog,
+      config: {
+        maxConcurrency: 1, maxDepth: 5, maxFanout: 5, tokenBudget: 500000,
+        minTurnsBeforeStop: 0, maxNudges: 0,
+        forceReflection: true, autoRecordFailures: false,
+      },
+    });
+
+    kernel.enqueue({ agentId: 'agents/safe-agent.md', input: 'Do research', spawnDepth: 0, priority: 0 });
+    await kernel.runUntilEmpty();
+
+    const session = kernel.completedSessions[0];
+    // The spawn_agent tool call during reflection should have been blocked
+    const spawnResult = session.toolCalls.find((tc) => tc.name === 'spawn_agent');
+    expect(spawnResult).toBeDefined();
+    expect(spawnResult!.result).toContain('Policy blocked');
+    // The evil agent file should NOT exist
+    expect(vfs.getState().exists('agents/evil.md')).toBe(false);
+  });
 });
 
 describe('RunController memory handoff regression', () => {

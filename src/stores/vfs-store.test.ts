@@ -49,6 +49,19 @@ describe('VFS Store', () => {
       const versions = store.getState().getVersions('artifacts/plan.md');
       expect(versions[0].authorAgentId).toBe('writer');
     });
+
+    it('caps version history at 20 per file', () => {
+      for (let i = 1; i <= 30; i++) {
+        store.getState().write('artifacts/plan.md', `v${i}`, {});
+      }
+      const versions = store.getState().getVersions('artifacts/plan.md');
+      expect(versions).toHaveLength(20);
+      // Should keep the most recent 20 (v11–v30)
+      expect(versions[0].content).toBe('v11');
+      expect(versions[19].content).toBe('v30');
+      // Current content should be the latest write
+      expect(store.getState().read('artifacts/plan.md')).toBe('v30');
+    });
   });
 
   describe('list', () => {
