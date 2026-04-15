@@ -642,7 +642,7 @@ export class Kernel {
         this._totalTokens < this.deps.config.tokenBudget
       ) {
         session.history.push({ role: 'user', content: REFLECTION_PROMPT });
-        await this.runReflectionTurn(session, activation, systemPrompt, sessionRegistry, profile.model);
+        await this.runReflectionTurn(session, activation, systemPrompt, sessionRegistry, profile.model, policyResolution.policy);
       }
 
       if (session.status === 'running') {
@@ -693,6 +693,7 @@ export class Kernel {
     systemPrompt: string,
     sessionRegistry: ToolPluginRegistry,
     profileModel: string | undefined,
+    policy: import('../types/agent').AgentPolicy,
   ): Promise<void> {
     if (hasRegisterSession(this.deps.aiProvider)) {
       this.deps.aiProvider.registerSession(activation.id, activation.agentId);
@@ -739,7 +740,7 @@ export class Kernel {
             maxDepth: this.deps.config.maxDepth,
             maxFanout: this.deps.config.maxFanout,
             childCount: this.childCounts.get(activation.agentId) ?? 0,
-
+            policy,
             apiKey: this.deps.apiKey,
             providerApiKeys: this.deps.providerApiKeys,
             preferredModel: this.resolveSpawnModel(profileModel),
