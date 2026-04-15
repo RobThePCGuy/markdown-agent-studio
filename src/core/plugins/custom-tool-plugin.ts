@@ -88,7 +88,8 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
         }
       }
 
-      // Fallback to fire-and-forget
+      // Fallback to fire-and-forget — temp agent file is NOT cleaned up here
+      // because we have no callback for when the spawned session completes.
       ctx.onSpawnActivation({
         agentId: path,
         input: prompt,

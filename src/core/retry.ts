@@ -35,7 +35,7 @@ export function isRetryableError(err: unknown): boolean {
  */
 function backoffDelay(attempt: number, baseMs = 1000, maxMs = 15000): number {
   const expDelay = Math.min(baseMs * Math.pow(2, attempt), maxMs);
-  return Math.random() * expDelay;
+  return Math.max(200, Math.random() * expDelay);
 }
 
 /**

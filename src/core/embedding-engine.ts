@@ -1,4 +1,7 @@
-import { pipeline } from '@huggingface/transformers';
+import { pipeline, env } from '@huggingface/transformers';
+
+// Skip local model lookup — fetch directly from Hugging Face CDN.
+env.allowLocalModels = false;
 
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
