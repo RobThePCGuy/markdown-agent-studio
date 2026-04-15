@@ -58,6 +58,8 @@ export interface ToolHandlerConfig {
   pubSubStore?: Store<PubSubState>;
   blackboardStore?: Store<BlackboardState>;
   vectorStore?: ToolContext['vectorStore'];
+  /** AbortSignal from the session controller — passed to retryWithBackoff for responsive cancellation. */
+  signal?: AbortSignal;
 }
 
 export class ToolHandler {
@@ -136,19 +138,19 @@ export class ToolHandler {
           result = await retryWithBackoff(
             () => plugin.handler(args, ctx),
             maxAttempts,
+            this.config.signal,
           );
         } else {
           result = await plugin.handler(args, ctx);
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        result = `Error: ${msg}`;
-        const truncated = result.length > 500;
+        result = `Error: tool '${toolName}' threw: ${msg}`;
         eventLog.getState().append({
           type: 'tool_result',
           agentId: this.config.currentAgentId,
           activationId: this.config.currentActivationId,
-          data: { tool: toolName, result: result.slice(0, 500), truncated },
+          data: { tool: toolName, result: result.slice(0, 500), threw: true },
         });
         return errorResult(result, 'transient');
       }

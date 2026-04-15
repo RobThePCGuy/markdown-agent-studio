@@ -405,6 +405,7 @@ export class Kernel {
         pubSubStore: this.deps.pubSubStore,
         blackboardStore: this.deps.blackboardStore,
         vectorStore: this.deps.vectorStore,
+        signal: controller.signal,
       });
 
     let finalText = '';

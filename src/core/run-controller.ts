@@ -149,6 +149,18 @@ class RunController {
 
   async run(agentPath: string, input: string): Promise<void> {
     if (this.state.isRunning) return;
+
+    // Wait for encrypted API keys to be decrypted (typically <50ms)
+    if (!uiStore.getState().keysReady) {
+      await new Promise<void>((resolve) => {
+        const unsub = uiStore.subscribe((state) => {
+          if (state.keysReady) { unsub(); resolve(); }
+        });
+        // Resolve immediately if ready by the time subscription fires
+        if (uiStore.getState().keysReady) { unsub(); resolve(); }
+      });
+    }
+
     // Set isRunning synchronously to prevent double-run race condition
     this.setState({ isRunning: true, isPaused: false });
 
