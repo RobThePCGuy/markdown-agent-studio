@@ -232,8 +232,8 @@ Agents access tools based on their safety mode and permission settings. The full
 
 | Tool | Description |
 |------|-------------|
-| `web_search` | Search the web (uses provider's search API) |
-| `web_fetch` | Fetch and parse a URL's content |
+| `web_search` | Search the web via Gemini's grounding API. **Requires a Gemini API key regardless of which provider is selected.** |
+| `web_fetch` | Fetch and parse a URL's content. **Subject to browser CORS restrictions** — most third-party URLs will be blocked unless they serve permissive CORS headers. |
 
 **Memory**
 
