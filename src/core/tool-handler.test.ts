@@ -555,7 +555,7 @@ describe('ToolHandler', () => {
     });
 
     it('returns ok: false with transient errorType when plugin throws', async () => {
-      const { ToolPluginRegistry: TPR } = await import('./tool-plugin');
+      const { ToolPluginRegistry: _TPR } = await import('./tool-plugin');
       const customRegistry = createBuiltinRegistry();
       customRegistry.register({
         name: 'throw_tool',

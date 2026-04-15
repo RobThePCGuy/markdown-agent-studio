@@ -255,7 +255,7 @@ export const uiStore = createStore<UIState>((set) => ({
       // If crypto is unavailable, leave plaintext as-is (no-op, no loop on next load).
       await tryMigrateToEncrypted(persistedProviderApiKeys);
     }
-  } catch (err) {
+  } catch (_err) {
     uiStore.getState().setKeysError(
       'API key decryption failed. Please re-enter your API keys in Settings.'
     );
