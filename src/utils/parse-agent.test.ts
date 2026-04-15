@@ -25,7 +25,7 @@ You are a writer.`;
     expect(result.name).toBe('simple');
     expect(result.systemPrompt).toBe(content);
     expect(result.frontmatter).toEqual({});
-    expect(result.policy.mode).toBe('gloves_off');
+    expect(result.policy.mode).toBe('safe');
   });
 
   it('handles malformed YAML gracefully and defaults to safe mode', () => {
@@ -292,9 +292,9 @@ describe('mode alias canonicalization', () => {
     }
   });
 
-  it('defaults unknown modes to gloves_off', () => {
+  it('defaults unknown modes to safe (least privilege)', () => {
     const profile = parseAgentFile(`agents/test.md`, `---\nname: test\nsafety_mode: "yolo"\n---\nDo stuff`);
-    expect(profile.policy.mode).toBe('gloves_off');
+    expect(profile.policy.mode).toBe('safe');
   });
 });
 

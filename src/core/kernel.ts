@@ -729,6 +729,7 @@ export class Kernel {
             pubSubStore: this.deps.pubSubStore,
             blackboardStore: this.deps.blackboardStore,
             vectorStore: this.deps.vectorStore,
+            signal: session.controller.signal,
           });
           const toolResult = await handler.handle(tc.name, tc.args);
           const record = { id: tc.id, name: tc.name, args: tc.args, result: toolResult.value, timestamp: Date.now() };

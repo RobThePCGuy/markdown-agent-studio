@@ -36,7 +36,7 @@ describe('Kernel', () => {
     });
 
     // Set up a basic agent
-    vfs.getState().write('agents/writer.md', '---\nname: "Writer"\n---\nYou are a writer.', {});
+    vfs.getState().write('agents/writer.md', '---\nname: "Writer"\nsafety_mode: gloves_off\n---\nYou are a writer.', {});
     registry.getState().registerFromFile('agents/writer.md', vfs.getState().read('agents/writer.md')!);
   });
 
@@ -290,7 +290,7 @@ describe('Kernel persistence (nudge, failure tracking, reflection)', () => {
     vfs = createVFSStore();
     registry = createAgentRegistry();
     eventLog = createEventLog();
-    vfs.getState().write('agents/writer.md', '---\nname: "Writer"\n---\nYou are a writer.', {});
+    vfs.getState().write('agents/writer.md', '---\nname: "Writer"\nsafety_mode: gloves_off\n---\nYou are a writer.', {});
     registry.getState().registerFromFile('agents/writer.md', vfs.getState().read('agents/writer.md')!);
   });
 

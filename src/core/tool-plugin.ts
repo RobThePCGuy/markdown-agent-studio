@@ -51,6 +51,17 @@ export interface ToolPlugin {
   parameters: Record<string, ToolParameter>;
   /** Enable retry on transient errors. `true` uses default (3 attempts), or pass `{ maxAttempts }`. */
   retryable?: boolean | { maxAttempts: number };
+  /**
+   * Execute the tool and return a result string.
+   *
+   * **Error contract:**
+   * - **Throw** for transient/retryable failures (network errors, timeouts, rate limits).
+   *   Thrown errors are classified as `errorType: 'transient'` and retried if `retryable` is set.
+   *   Attach a `.status` property (e.g., HTTP 429) for status-code-based retry detection.
+   * - **Return an error string** (starting with `"Error: "`) for permanent failures (404, auth,
+   *   invalid input). These are classified as `errorType: 'permanent'` and never retried.
+   * - **Return a success string** for successful results.
+   */
   handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<string>;
 }
 

@@ -34,9 +34,13 @@ const MODE_ALIASES: Record<string, AgentExecutionMode> = {
 };
 
 function parseMode(input: unknown): AgentExecutionMode {
-  if (typeof input !== 'string') return 'gloves_off';
+  if (typeof input !== 'string') return 'safe';
   const normalized = input.trim().toLowerCase();
-  return MODE_ALIASES[normalized] ?? 'gloves_off';
+  const mode = MODE_ALIASES[normalized];
+  if (!mode && normalized) {
+    console.warn(`[MAS] Unknown safety_mode "${normalized}" — defaulting to "safe". Valid modes: safe, balanced, gloves_off`);
+  }
+  return mode ?? 'safe';
 }
 
 function defaultPermissions(mode: AgentExecutionMode): AgentPermissions {

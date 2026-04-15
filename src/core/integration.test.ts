@@ -63,7 +63,7 @@ describe('Integration: full agent loop', () => {
     });
 
     // Set up the parent agent
-    vfs.getState().write('agents/parent.md', '---\nname: "Parent"\n---\nYou orchestrate.', {});
+    vfs.getState().write('agents/parent.md', '---\nname: "Parent"\nsafety_mode: gloves_off\n---\nYou orchestrate.', {});
     registry.getState().registerFromFile('agents/parent.md', vfs.getState().read('agents/parent.md')!);
 
     kernel.enqueue({

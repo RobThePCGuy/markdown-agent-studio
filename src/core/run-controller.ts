@@ -147,19 +147,20 @@ class RunController {
     return kernel;
   }
 
+  /** Wait for encrypted API keys to be decrypted (typically <50ms). */
+  private async waitForKeys(): Promise<void> {
+    if (uiStore.getState().keysReady) return;
+    await new Promise<void>((resolve) => {
+      const unsub = uiStore.subscribe((state) => {
+        if (state.keysReady) { unsub(); resolve(); }
+      });
+      if (uiStore.getState().keysReady) { unsub(); resolve(); }
+    });
+  }
+
   async run(agentPath: string, input: string): Promise<void> {
     if (this.state.isRunning) return;
-
-    // Wait for encrypted API keys to be decrypted (typically <50ms)
-    if (!uiStore.getState().keysReady) {
-      await new Promise<void>((resolve) => {
-        const unsub = uiStore.subscribe((state) => {
-          if (state.keysReady) { unsub(); resolve(); }
-        });
-        // Resolve immediately if ready by the time subscription fires
-        if (uiStore.getState().keysReady) { unsub(); resolve(); }
-      });
-    }
+    await this.waitForKeys();
 
     // Set isRunning synchronously to prevent double-run race condition
     this.setState({ isRunning: true, isPaused: false });
@@ -236,6 +237,7 @@ class RunController {
 
   async runAutonomous(agentPath: string, input: string): Promise<void> {
     if (this.state.isRunning) return;
+    await this.waitForKeys();
 
     const config = uiStore.getState().kernelConfig;
     await this.refreshMemoryManager(config);
@@ -333,6 +335,7 @@ class RunController {
 
   async runWorkflow(workflowPath: string, variables?: Record<string, string>): Promise<void> {
     if (this.state.isRunning) return;
+    await this.waitForKeys();
 
     const content = vfsStore.getState().read(workflowPath);
     if (!content) return;

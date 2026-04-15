@@ -27,19 +27,15 @@ export const webSearchPlugin: ToolPlugin = {
     // Network/API errors now propagate (caught by tool-handler retry wrapper)
     const client = new GoogleGenAI({ apiKey: geminiKey });
 
-    // 30-second timeout to prevent indefinite hangs
-    const result = await Promise.race([
-      client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: query,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('web_search timed out after 30 s')), 30_000),
-      ),
-    ]);
+    // 30-second timeout via AbortSignal — cancels the HTTP connection on timeout
+    const result = await client.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: query,
+      config: {
+        tools: [{ googleSearch: {} }],
+        abortSignal: AbortSignal.timeout(30_000),
+      },
+    });
     const candidate = result.candidates?.[0];
     const text = result.text ?? '';
 
