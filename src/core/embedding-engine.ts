@@ -1,8 +1,6 @@
-import { pipeline, env } from '@huggingface/transformers';
-
-// Skip local model lookup — fetch directly from Hugging Face CDN.
-env.allowLocalModels = false;
-
+// The canonical v3 name is 'sentence-transformers/all-MiniLM-L6-v2' but the
+// Xenova alias resolves to the same ONNX files. Changing it would force a
+// re-download for existing users whose browser Cache API has the Xenova URL.
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
 
@@ -10,8 +8,9 @@ const EMBEDDING_DIM = 384;
  * Wraps Transformers.js to generate text embeddings using the
  * all-MiniLM-L6-v2 sentence-transformer model.
  *
- * The model is lazy-loaded on the first call to embed() or embedBatch()
- * so construction is synchronous and free of side-effects.
+ * The @huggingface/transformers module (including the ONNX runtime) is
+ * loaded lazily via dynamic import() on first use. This keeps it out of
+ * the main bundle chunk — it only loads when vector memory is enabled.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- v3 pipeline() returns a complex union too deep for ReturnType
 type FeatureExtractionPipeline = (text: string, options?: any) => Promise<{ data: Float32Array }>;
@@ -50,9 +49,11 @@ export class EmbeddingEngine {
     return results;
   }
 
-  /** Lazy-load the pipeline on first use. */
+  /** Lazy-load the transformers module and pipeline on first use. */
   private async _getPipeline(): Promise<FeatureExtractionPipeline> {
     if (this._pipe === null) {
+      const { pipeline, env } = await import('@huggingface/transformers');
+      env.allowLocalModels = false;
       // @ts-expect-error -- v3 pipeline() return type union is too complex for TS to represent
       this._pipe = pipeline('feature-extraction', MODEL_NAME);
     }

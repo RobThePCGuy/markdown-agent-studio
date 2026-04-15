@@ -128,4 +128,21 @@ describe('retryWithBackoff', () => {
     // (allowing for timer imprecision)
     expect(elapsed).toBeGreaterThanOrEqual(150);
   });
+
+  it('cleans up abort listener after backoff sleep completes normally', async () => {
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+
+    const fn = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('rate limit'), { status: 429 }))
+      .mockResolvedValueOnce('ok');
+
+    await retryWithBackoff(fn, 3, controller.signal);
+
+    // removeEventListener should have been called to clean up the abort listener
+    expect(removeSpy.mock.calls.some(
+      ([event]) => event === 'abort'
+    )).toBe(true);
+    removeSpy.mockRestore();
+  });
 });

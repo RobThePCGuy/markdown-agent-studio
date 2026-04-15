@@ -1,3 +1,5 @@
+// Inline styles are intentional — this component renders when the app has
+// crashed, so CSS modules may not be available. Deferred for a design pass.
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 
 interface Props {

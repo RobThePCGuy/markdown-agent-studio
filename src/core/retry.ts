@@ -45,8 +45,10 @@ function backoffDelay(attempt: number, baseMs = 1000, maxMs = 15000): number {
 function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) { resolve(); return; }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+    const onAbort = () => { clearTimeout(timer); cleanup(); resolve(); };
+    const cleanup = () => signal?.removeEventListener('abort', onAbort);
+    const timer = setTimeout(() => { cleanup(); resolve(); }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
