@@ -276,6 +276,28 @@ Do work.`;
   });
 });
 
+describe('mode alias canonicalization', () => {
+  it('maps all gloves_off aliases to the same canonical form', () => {
+    const variants = ['gloves_off', 'gloves-off', 'glovesoff', 'autonomous', 'track'];
+    for (const alias of variants) {
+      const profile = parseAgentFile(`agents/test.md`, `---\nname: test\nsafety_mode: "${alias}"\n---\nDo stuff`);
+      expect(profile.policy.mode).toBe('gloves_off');
+    }
+  });
+
+  it('maps safe aliases to canonical safe', () => {
+    for (const alias of ['safe', 'street']) {
+      const profile = parseAgentFile(`agents/test.md`, `---\nname: test\nsafety_mode: "${alias}"\n---\nDo stuff`);
+      expect(profile.policy.mode).toBe('safe');
+    }
+  });
+
+  it('defaults unknown modes to gloves_off', () => {
+    const profile = parseAgentFile(`agents/test.md`, `---\nname: test\nsafety_mode: "yolo"\n---\nDo stuff`);
+    expect(profile.policy.mode).toBe('gloves_off');
+  });
+});
+
 describe('parseMCPServers', () => {
   it('parses mcp_servers from frontmatter', () => {
     const md = `---

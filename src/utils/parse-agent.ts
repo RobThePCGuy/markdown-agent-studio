@@ -10,6 +10,18 @@ import type {
 import { computeHash } from './vfs-helpers';
 import { MCPClientManager } from '../core/mcp-client';
 
+/**
+ * Canonical execution modes: "safe" | "balanced" | "gloves_off"
+ *
+ * All aliases normalize to one of these three values.
+ * Use the canonical form in agent frontmatter for clarity.
+ *
+ * | Canonical     | Accepted aliases                              |
+ * |---------------|-----------------------------------------------|
+ * | safe          | safe, street                                  |
+ * | balanced      | balanced                                      |
+ * | gloves_off    | gloves_off, gloves-off, glovesoff, autonomous, track |
+ */
 const MODE_ALIASES: Record<string, AgentExecutionMode> = {
   safe: 'safe',
   street: 'safe',
