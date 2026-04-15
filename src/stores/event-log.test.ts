@@ -232,3 +232,84 @@ describe('getCheckpoint fallback', () => {
     expect(result).toBeUndefined();
   });
 });
+
+describe('pagination', () => {
+  it('paginates entries with offset and limit', () => {
+    const log = createEventLog();
+    for (let i = 0; i < 50; i++) {
+      log.getState().append({
+        type: 'tool_call',
+        agentId: 'agent-a',
+        activationId: 'act-1',
+        data: { index: i },
+      });
+    }
+
+    const page = log.getState().getPage(0, 10);
+    expect(page.entries).toHaveLength(10);
+    expect(page.total).toBe(50);
+    expect(page.hasMore).toBe(true);
+    expect((page.entries[0].data as { index: number }).index).toBe(0);
+
+    const page2 = log.getState().getPage(40, 10);
+    expect(page2.entries).toHaveLength(10);
+    expect(page2.hasMore).toBe(false);
+
+    const page3 = log.getState().getPage(45, 10);
+    expect(page3.entries).toHaveLength(5);
+    expect(page3.hasMore).toBe(false);
+  });
+
+  it('filters by agent with pagination', () => {
+    const log = createEventLog();
+    for (let i = 0; i < 30; i++) {
+      log.getState().append({
+        type: 'tool_call',
+        agentId: i % 2 === 0 ? 'agent-a' : 'agent-b',
+        activationId: 'act-1',
+        data: {},
+      });
+    }
+
+    const page = log.getState().getPageByAgent('agent-a', 0, 5);
+    expect(page.entries).toHaveLength(5);
+    expect(page.total).toBe(15);
+    expect(page.entries.every((e) => e.agentId === 'agent-a')).toBe(true);
+  });
+});
+
+describe('archival', () => {
+  it('archives entries older than a threshold and clears them', () => {
+    const log = createEventLog();
+    for (let i = 0; i < 20; i++) {
+      log.getState().append({
+        type: 'tool_call',
+        agentId: 'agent-a',
+        activationId: 'act-1',
+        data: { index: i },
+      });
+    }
+
+    const archived = log.getState().archiveAndClear(10);
+    expect(archived).toHaveLength(10);
+    expect(log.getState().entries).toHaveLength(10);
+    expect((archived[0].data as { index: number }).index).toBe(0);
+    expect((log.getState().entries[0].data as { index: number }).index).toBe(10);
+  });
+
+  it('returns empty array when nothing to archive', () => {
+    const log = createEventLog();
+    for (let i = 0; i < 5; i++) {
+      log.getState().append({
+        type: 'tool_call',
+        agentId: 'agent-a',
+        activationId: 'act-1',
+        data: {},
+      });
+    }
+
+    const archived = log.getState().archiveAndClear(10);
+    expect(archived).toHaveLength(0);
+    expect(log.getState().entries).toHaveLength(5);
+  });
+});

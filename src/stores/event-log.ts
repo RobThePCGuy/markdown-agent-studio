@@ -14,6 +14,12 @@ interface AppendInput {
   data: Record<string, unknown>;
 }
 
+export interface PageResult {
+  entries: EventLogEntry[];
+  total: number;
+  hasMore: boolean;
+}
+
 export interface EventLogState {
   entries: EventLogEntry[];
   checkpoints: ReplayCheckpoint[];
@@ -24,6 +30,9 @@ export interface EventLogState {
   checkpointCount(): number;
   exportJSON(): string;
   clear(): void;
+  getPage(offset: number, limit: number): PageResult;
+  getPageByAgent(agentId: string, offset: number, limit: number): PageResult;
+  archiveAndClear(keepLast: number): EventLogEntry[];
 }
 
 const MAX_CHECKPOINTS = 200;
@@ -137,6 +146,38 @@ export function createEventLog(vfs?: Store<VFSState>) {
 
     clear(): void {
       set({ entries: [], checkpoints: [] });
+    },
+
+    getPage(offset: number, limit: number): PageResult {
+      const all = get().entries;
+      const entries = all.slice(offset, offset + limit);
+      return {
+        entries,
+        total: all.length,
+        hasMore: offset + limit < all.length,
+      };
+    },
+
+    // O(n) scan is fine: MAX_ENTRIES caps at 10K, <1ms on modern JS
+    getPageByAgent(agentId: string, offset: number, limit: number): PageResult {
+      const filtered = get().entries.filter((e) => e.agentId === agentId);
+      const entries = filtered.slice(offset, offset + limit);
+      return {
+        entries,
+        total: filtered.length,
+        hasMore: offset + limit < filtered.length,
+      };
+    },
+
+    archiveAndClear(keepLast: number): EventLogEntry[] {
+      const all = get().entries;
+      if (all.length <= keepLast) return [];
+      const cutoff = all.length - keepLast;
+      const archived = all.slice(0, cutoff);
+      set((state) => ({
+        entries: state.entries.slice(cutoff),
+      }));
+      return archived;
     },
   }));
 }
