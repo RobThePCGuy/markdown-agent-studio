@@ -32,7 +32,7 @@ export default defineConfig({
             return 'vendor-monaco'
           }
 
-          if (id.includes('/@google/generative-ai/') || id.includes('\\@google\\generative-ai\\')) {
+          if (id.includes('/@google/genai/') || id.includes('\\@google\\genai\\')) {
             return 'vendor-google'
           }
 

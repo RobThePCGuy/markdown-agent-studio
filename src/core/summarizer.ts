@@ -3,7 +3,7 @@ import type { WorkingMemoryEntry, MemoryType, LongTermMemory } from '../types/me
 import type { LiveSession } from '../types/session';
 import type { VFSState } from '../stores/vfs-store';
 import { VectorMemoryDB } from './vector-memory-db';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
@@ -414,12 +414,12 @@ type ProviderType = 'gemini' | 'anthropic' | 'openai';
 
 export function createGeminiSummarizeFn(apiKey: string, model: string): SummarizeFn {
   return async (context: string) => {
-    const client = new GoogleGenerativeAI(apiKey);
-    const genModel = client.getGenerativeModel({ model });
-    const result = await genModel.generateContent(
-      SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context
-    );
-    const text = result.response.text();
+    const client = new GoogleGenAI({ apiKey });
+    const result = await client.models.generateContent({
+      model,
+      contents: SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context,
+    });
+    const text = result.text ?? '';
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
     try { return JSON.parse(jsonMatch[0]); } catch { return []; }
@@ -428,12 +428,12 @@ export function createGeminiSummarizeFn(apiKey: string, model: string): Summariz
 
 export function createGeminiConsolidateFn(apiKey: string, model: string): ConsolidateFn {
   return async (context: string) => {
-    const client = new GoogleGenerativeAI(apiKey);
-    const genModel = client.getGenerativeModel({ model });
-    const result = await genModel.generateContent(
-      CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context
-    );
-    const text = result.response.text();
+    const client = new GoogleGenAI({ apiKey });
+    const result = await client.models.generateContent({
+      model,
+      contents: CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context,
+    });
+    const text = result.text ?? '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { operations: [] };
     try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
@@ -527,14 +527,14 @@ export function createAnthropicConsolidateFn(apiKey: string, model: string): Con
 // ---------------------------------------------------------------------------
 
 const DEFAULT_SUMMARIZE_MODELS: Record<ProviderType, string> = {
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-2.5-flash',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-sonnet-4-5-20250929',
 };
 
 /** Return the default lightweight model for summarization given a provider. */
 export function getDefaultSummarizeModel(providerType: ProviderType): string {
-  return DEFAULT_SUMMARIZE_MODELS[providerType] ?? 'gemini-2.0-flash';
+  return DEFAULT_SUMMARIZE_MODELS[providerType] ?? 'gemini-2.5-flash';
 }
 
 /** Create a SummarizeFn backed by the user's selected provider. */

@@ -487,7 +487,7 @@ function SettingsModalContent() {
               }
             >
               <option value="off">Off (JSON-based)</option>
-              <option value="on">On (LanceDB + Embeddings)</option>
+              <option value="on">On (Vector Embeddings)</option>
             </select>
           </label>
 

@@ -102,6 +102,7 @@ interface KernelDeps {
   vectorStore?: ToolContext['vectorStore'];
   mcpManager?: MCPClientManager;
   apiKey?: string;
+  providerApiKeys?: Record<string, string>;
   onSessionUpdate?: (session: AgentSession) => void;
   onStreamChunk?: (agentId: string, chunk: StreamChunk) => void;
   onBudgetWarning?: (activationId: string) => void;
@@ -418,6 +419,7 @@ export class Kernel {
         childCount: this.childCounts.get(activation.agentId) ?? 0,
         policy: policyResolution.policy,
         apiKey: this.deps.apiKey,
+        providerApiKeys: this.deps.providerApiKeys,
         preferredModel: this.resolveSpawnModel(profile.model),
         memoryStore: this.memoryStore,
         taskQueueStore: this.deps.taskQueueStore,
@@ -739,6 +741,7 @@ export class Kernel {
             childCount: this.childCounts.get(activation.agentId) ?? 0,
 
             apiKey: this.deps.apiKey,
+            providerApiKeys: this.deps.providerApiKeys,
             preferredModel: this.resolveSpawnModel(profileModel),
             memoryStore: this.memoryStore,
             taskQueueStore: this.deps.taskQueueStore,

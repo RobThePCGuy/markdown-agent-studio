@@ -187,7 +187,7 @@ Every agent runs under one of three safety modes that control what it's allowed 
 | Default reads | `agents/**`, `memory/**`, `artifacts/**` | `**` | `**` |
 | Default writes | `memory/**`, `artifacts/**` | `memory/**`, `artifacts/**` | `**` |
 
-Aliases: `street` maps to `safe`; `autonomous` and `track` map to `gloves_off`.
+Aliases: `street` maps to `safe`; `autonomous`, `track`, `gloves-off`, and `glovesoff` map to `gloves_off`.
 
 You can override individual permissions regardless of mode:
 
@@ -457,11 +457,11 @@ Open Settings (⚙ in the top bar) to configure:
 
 **API** - Provider (Gemini, Anthropic, OpenAI), API key, model selection.
 
-**Kernel limits** - Max Concurrency (1-10, default 3), Max Depth (1-20, default 5), Max Fanout (1-20, default 5), Token Budget (default 250,000), Workflow Parallel Steps (1-10, default 1).
+**Kernel limits** - Max Concurrency (1-10, default 3), Max Depth (1-20, default 5), Max Fanout (1-20, default 8), Token Budget (default 500,000), Workflow Parallel Steps (1-10, default 1).
 
 **Agent persistence** - Min Turns Before Stop (0-25, default 5), Force Reflection (auto-inject reflection prompt), Auto-Record Failures (write tool failures to memory).
 
-**Memory** - Enable Memory, Use Vector Memory (LanceDB + embeddings vs JSON-based), Memory Token Budget (500-8000, default 2000).
+**Memory** - Enable Memory, Use Vector Memory (vector embeddings vs JSON-based), Memory Token Budget (500-8000, default 2000).
 
 **Autonomous defaults** - Default Max Cycles, Resume Previous Mission, Stop When Complete, Seed Continuation Tasks.
 

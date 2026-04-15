@@ -12,11 +12,13 @@ import { MCPClientManager } from '../core/mcp-client';
 
 const MODE_ALIASES: Record<string, AgentExecutionMode> = {
   safe: 'safe',
+  street: 'safe',
   balanced: 'balanced',
   gloves_off: 'gloves_off',
   'gloves-off': 'gloves_off',
   glovesoff: 'gloves_off',
   autonomous: 'gloves_off',
+  track: 'gloves_off',
 };
 
 function parseMode(input: unknown): AgentExecutionMode {
@@ -423,6 +425,7 @@ export function parseAgentFile(path: string, content: string): AgentProfile {
       mcpServers: mcpServers && mcpServers.length > 0 ? mcpServers : undefined,
     };
   } catch {
+    // Malformed YAML: default to safe mode (least privilege), not gloves_off.
     return {
       id: path,
       path,
@@ -431,7 +434,7 @@ export function parseAgentFile(path: string, content: string): AgentProfile {
       systemPrompt: content,
       frontmatter: {},
       contentHash: computeHash(content),
-      policy: parseAgentPolicy({}),
+      policy: parseAgentPolicy({ safety_mode: 'safe' }),
     };
   }
 }

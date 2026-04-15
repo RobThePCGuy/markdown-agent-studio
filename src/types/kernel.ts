@@ -55,7 +55,7 @@ export interface KernelConfig {
   forceReflection?: boolean;
   /** Auto-write tool failures to working memory. */
   autoRecordFailures?: boolean;
-  /** Use vector-backed (LanceDB + embeddings) memory instead of JSON-based. */
+  /** Use vector-backed memory with embeddings instead of JSON-based. */
   useVectorMemory?: boolean;
   /** Maximum number of workflow steps to run in parallel when dependencies allow. */
   workflowMaxParallelSteps?: number;

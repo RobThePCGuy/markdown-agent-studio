@@ -28,7 +28,7 @@ You are a writer.`;
     expect(result.policy.mode).toBe('gloves_off');
   });
 
-  it('handles malformed YAML gracefully', () => {
+  it('handles malformed YAML gracefully and defaults to safe mode', () => {
     const content = `---
 name: [broken yaml
 ---
@@ -36,6 +36,12 @@ Body here.`;
     const result = parseAgentFile('agents/broken.md', content);
     expect(result.name).toBe('broken');
     expect(result.systemPrompt).toContain('Body here.');
+    // Malformed YAML must NOT grant gloves_off — least privilege
+    expect(result.policy.mode).toBe('safe');
+    expect(result.policy.permissions.spawnAgents).toBe(false);
+    expect(result.policy.permissions.editAgents).toBe(false);
+    expect(result.policy.permissions.deleteFiles).toBe(false);
+    expect(result.policy.permissions.webAccess).toBe(false);
   });
 
   it('uses frontmatter id if provided', () => {
@@ -225,6 +231,34 @@ Do work.`;
 
     const profile = parseAgentFile('agents/auto.md', content);
     expect(profile.policy.mode).toBe('gloves_off');
+  });
+
+  it('parses mode: street as safe', () => {
+    const content = `---
+name: "Street"
+safety_mode: street
+---
+
+Do work.`;
+
+    const profile = parseAgentFile('agents/street.md', content);
+    expect(profile.policy.mode).toBe('safe');
+    expect(profile.policy.permissions.spawnAgents).toBe(false);
+    expect(profile.policy.permissions.webAccess).toBe(false);
+  });
+
+  it('parses mode: track as gloves_off', () => {
+    const content = `---
+name: "Track"
+safety_mode: track
+---
+
+Do work.`;
+
+    const profile = parseAgentFile('agents/track.md', content);
+    expect(profile.policy.mode).toBe('gloves_off');
+    expect(profile.policy.permissions.spawnAgents).toBe(true);
+    expect(profile.policy.permissions.editAgents).toBe(true);
   });
 
   it('accepts autonomous block with any mode', () => {

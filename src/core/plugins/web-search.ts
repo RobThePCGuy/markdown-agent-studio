@@ -1,39 +1,46 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { Tool, GroundingChunk } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
+import type { GroundingChunk } from '@google/genai';
 import type { ToolPlugin } from '../tool-plugin';
 
 export const webSearchPlugin: ToolPlugin = {
   name: 'web_search',
   description:
-    'Search the web using Google Search. Returns a summary with source URLs.',
+    'Search the web using Google Search. Returns a summary with source URLs. Requires a Gemini API key.',
   parameters: {
     query: { type: 'string', description: 'Search query', required: true },
   },
   async handler(args, ctx) {
     const query = args.query as string;
 
-    if (!ctx.apiKey) {
-      return 'Error: No API key available for web search. Set your Gemini API key in Settings.';
+    // Resolve the Gemini API key: use the dedicated Gemini key from the
+    // per-provider key map. Only fall back to ctx.apiKey if the per-provider
+    // map is not available (backward compat for single-key setups).
+    const geminiKey = ctx.providerApiKeys
+      ? ctx.providerApiKeys.gemini
+      : ctx.apiKey;
+
+    if (!geminiKey) {
+      return 'Error: No Gemini API key available for web search. Web search requires a Gemini API key — set one in Settings even if you use another provider.';
     }
 
     try {
-      const client = new GoogleGenerativeAI(ctx.apiKey);
-      const model = client.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        // googleSearch is the correct tool for Gemini 2.0+; the installed SDK
-        // types only export googleSearchRetrieval (older models), so we cast.
-        tools: [{ googleSearch: {} } as unknown as Tool],
-      });
+      const client = new GoogleGenAI({ apiKey: geminiKey });
 
       // 30-second timeout to prevent indefinite hangs
       const result = await Promise.race([
-        model.generateContent(query),
+        client.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: query,
+          config: {
+            tools: [{ googleSearch: {} }],
+          },
+        }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('web_search timed out after 30 s')), 30_000),
         ),
       ]);
-      const candidate = result.response.candidates?.[0];
-      const text = result.response.text();
+      const candidate = result.candidates?.[0];
+      const text = result.text ?? '';
 
       // Extract grounding sources from metadata
       const chunks: GroundingChunk[] =

@@ -30,3 +30,6 @@ docs/
 
 # Worktrees
 .worktrees/
+
+# Codebase Intent
+.codebase-intent/

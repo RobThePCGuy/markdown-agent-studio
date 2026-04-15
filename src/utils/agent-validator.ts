@@ -12,7 +12,7 @@ export interface AgentDiagnostic {
 }
 
 const KNOWN_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
-const KNOWN_MODES = ['safe', 'balanced', 'gloves_off', 'gloves-off', 'glovesoff', 'autonomous'];
+const KNOWN_MODES = ['safe', 'street', 'balanced', 'gloves_off', 'gloves-off', 'glovesoff', 'autonomous', 'track'];
 
 function hasNonStringItems(value: unknown[]): boolean {
   return value.some((v) => typeof v !== 'string');

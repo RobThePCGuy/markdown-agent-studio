@@ -283,6 +283,58 @@ describe('ToolHandler', () => {
       expect(vfs.getState().exists('memory/notes.md')).toBe(false);
     });
 
+    it('blocks ../ traversal that escapes write scope', async () => {
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-traversal',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: restrictedPolicy,
+      });
+
+      // artifacts/../agents/evil.md should normalize to agents/evil.md and be blocked
+      const result = await restricted.handle('vfs_write', {
+        path: 'artifacts/../agents/evil.md',
+        content: 'malicious',
+      });
+      expect(result).toContain('Policy blocked');
+      expect(vfs.getState().exists('agents/evil.md')).toBe(false);
+    });
+
+    it('blocks leading ../ that resolves above root', async () => {
+      const restricted = new ToolHandler({
+        pluginRegistry: createBuiltinRegistry(),
+        vfs,
+        agentRegistry: registry,
+        eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/restricted.md',
+        currentActivationId: 'act-policy-above-root',
+        parentAgentId: undefined,
+        spawnDepth: 0,
+        maxDepth: 5,
+        maxFanout: 5,
+        childCount: 0,
+        policy: restrictedPolicy,
+      });
+
+      // ../../agents/evil.md should normalize to agents/evil.md and be blocked
+      const above = await restricted.handle('vfs_write', {
+        path: '../../agents/evil.md',
+        content: 'malicious',
+      });
+      expect(above).toContain('Policy blocked');
+      expect(vfs.getState().exists('agents/evil.md')).toBe(false);
+    });
+
     it('blocks vfs_read and vfs_list when args are empty or invalid', async () => {
       vfs.getState().write('artifacts/secret.md', 'secret', {});
 

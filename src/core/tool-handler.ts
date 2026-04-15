@@ -49,6 +49,7 @@ export interface ToolHandlerConfig {
   childCount: number;
   policy?: AgentPolicy;
   apiKey?: string;
+  providerApiKeys?: Record<string, string>;
   preferredModel?: string;
   memoryStore?: Store<MemoryStoreState>;
   taskQueueStore?: Store<TaskQueueState>;
@@ -117,6 +118,7 @@ export class ToolHandler {
         onRunSessionAndReturn: this.config.onRunSessionAndReturn,
         incrementSpawnCount: () => { this._spawnCount++; },
         apiKey: this.config.apiKey,
+        providerApiKeys: this.config.providerApiKeys,
         preferredModel: this.config.preferredModel,
         memoryStore: this.config.memoryStore,
         taskQueueStore: this.config.taskQueueStore,
@@ -239,7 +241,18 @@ export class ToolHandler {
   }
 
   private normalizePath(path: string): string {
-    return path.replace(/\\/g, '/').replace(/^\.\//, '');
+    const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '');
+    // Collapse ../ sequences to prevent policy bypass (e.g. artifacts/../agents/x)
+    const parts = normalized.split('/');
+    const resolved: string[] = [];
+    for (const part of parts) {
+      if (part === '..') {
+        resolved.pop();
+      } else if (part !== '.') {
+        resolved.push(part);
+      }
+    }
+    return resolved.join('/');
   }
 
   private normalizePattern(pattern: string): string {

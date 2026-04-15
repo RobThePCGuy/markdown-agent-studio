@@ -82,7 +82,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@dagrejs/dagre": "^2.0.4",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.50.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@monaco-editor/react": "^4.7.0",
     "@xenova/transformers": "^2.17.2",

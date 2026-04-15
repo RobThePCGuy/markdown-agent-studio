@@ -1,29 +1,25 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { Content, FunctionCall, FunctionDeclarationSchema, GenerateContentRequest, GenerateContentStreamResult, Part, Tool } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
+import type { Content, FunctionCall, Part, Tool, GenerateContentResponse } from '@google/genai';
 import type { AIProvider, AgentConfig, Message, ToolDeclaration, StreamChunk } from '../types';
 
 /**
- * Raw part from Gemini stream response. May include opaque fields
- * (thought, thoughtSignature) that the SDK type system does not expose.
- */
-type RawPart = Part & Record<string, unknown>;
-
-/**
  * Gemini provider that manages conversation history manually using raw Content
- * objects and model.generateContentStream() instead of ChatSession.
+ * objects and ai.models.generateContentStream() instead of ChatSession.
  *
  * This avoids ChatSession's async history-update timing issues and preserves
- * thought signatures (opaque fields Gemini 3 returns on model Content) by
+ * thought signatures (opaque fields Gemini returns on model Content) by
  * storing the model's raw response Content and replaying it verbatim.
+ *
+ * Migrated from deprecated @google/generative-ai to @google/genai (2026-04).
  */
 export class GeminiProvider implements AIProvider {
-  private client: GoogleGenerativeAI;
+  private client: GoogleGenAI;
   private activeStreams = new Map<string, AbortController>();
   /** Raw Gemini Content[] per session - preserves thought signatures exactly. */
   private sessionContents = new Map<string, Content[]>();
 
   constructor(apiKey: string) {
-    this.client = new GoogleGenerativeAI(apiKey);
+    this.client = new GoogleGenAI({ apiKey });
   }
 
   async *chat(
@@ -35,16 +31,11 @@ export class GeminiProvider implements AIProvider {
     this.activeStreams.set(config.sessionId, controller);
 
     try {
-      const model = this.client.getGenerativeModel({
-        model: config.model ?? 'gemini-2.5-flash',
-        systemInstruction: config.systemPrompt,
-      });
-
       const geminiTools: Tool[] | undefined = tools.length > 0 ? [{
         functionDeclarations: tools.map((t) => ({
           name: t.name,
           description: t.description,
-          parameters: t.parameters as FunctionDeclarationSchema,
+          parametersJsonSchema: t.parameters,
         })),
       }] : undefined;
 
@@ -61,7 +52,7 @@ export class GeminiProvider implements AIProvider {
         if (lastContent?.role === 'model') {
           for (const part of lastContent.parts ?? []) {
             if (part.functionCall) {
-              calledNames.add(part.functionCall.name);
+              calledNames.add(part.functionCall.name!);
             }
           }
         }
@@ -76,10 +67,10 @@ export class GeminiProvider implements AIProvider {
         // Only include tool results whose names match the model's function calls
         const matchedToolMsgs = toolMsgs.filter(t => t.toolCall && calledNames.has(t.toolCall.name));
 
-        // Append as a single "function" role Content (matches SDK convention)
+        // Append as a "user" role Content with functionResponse parts
         if (matchedToolMsgs.length > 0) {
           contents.push({
-            role: 'function',
+            role: 'user',
             parts: matchedToolMsgs.map(t => ({
               functionResponse: {
                 name: t.toolCall!.name, // safe: filtered by toolCall above
@@ -98,18 +89,22 @@ export class GeminiProvider implements AIProvider {
           }));
       }
 
-      const result: GenerateContentStreamResult = await model.generateContentStream(
-        { contents, tools: geminiTools } as GenerateContentRequest,
-        { signal: controller.signal },
-      );
+      const stream: AsyncGenerator<GenerateContentResponse> = await this.client.models.generateContentStream({
+        model: config.model ?? 'gemini-2.5-flash',
+        contents,
+        config: {
+          systemInstruction: config.systemPrompt,
+          tools: geminiTools,
+          abortSignal: controller.signal,
+        },
+      });
 
       let totalTokens = 0;
-      // Collect raw parts from stream chunks (not from aggregated response,
-      // which strips thought/thoughtSignature fields via aggregateResponses).
-      const rawModelParts: RawPart[] = [];
+      // Collect raw parts from stream chunks to preserve thought/thoughtSignature.
+      const rawModelParts: Part[] = [];
       let modelRole = 'model';
 
-      for await (const chunk of result.stream) {
+      for await (const chunk of stream) {
         if (controller.signal.aborted) {
           yield { type: 'error', error: 'Aborted' };
           return;
@@ -124,10 +119,9 @@ export class GeminiProvider implements AIProvider {
 
         for (const part of candidate.content?.parts ?? []) {
           // Store the raw part reference - preserves thought, thoughtSignature,
-          // and any other opaque fields from the JSON-parsed SSE data.
-          // Cast needed: SDK Part union types lack index signatures but the
-          // JSON-parsed SSE data may carry additional opaque fields.
-          rawModelParts.push(part as RawPart);
+          // and any other fields. The new @google/genai SDK Part type natively
+          // includes thought/thoughtSignature, so no cast needed.
+          rawModelParts.push(part);
 
           if (part.text) {
             yield { type: 'text', text: part.text };
@@ -137,7 +131,7 @@ export class GeminiProvider implements AIProvider {
               type: 'tool_call',
               toolCall: {
                 id: (part.functionCall as FunctionCall & { id?: string }).id ?? `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                name: part.functionCall.name,
+                name: part.functionCall.name!,
                 args: (part.functionCall.args ?? {}) as Record<string, unknown>,
               },
             };
@@ -153,7 +147,6 @@ export class GeminiProvider implements AIProvider {
       }
 
       // Build model Content from raw stream parts (preserves thought signatures).
-      // Do NOT use result.response - the SDK's aggregateResponses strips unknown fields.
       if (rawModelParts.length > 0) {
         const modelContent = { role: modelRole, parts: rawModelParts };
         this.sessionContents.set(config.sessionId, [...contents, modelContent]);

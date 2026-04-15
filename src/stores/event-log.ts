@@ -27,6 +27,7 @@ export interface EventLogState {
 }
 
 const MAX_CHECKPOINTS = 200;
+const MAX_ENTRIES = 10_000;
 
 function trimCheckpoints(checkpoints: ReplayCheckpoint[]): ReplayCheckpoint[] {
   if (checkpoints.length <= MAX_CHECKPOINTS) return checkpoints;
@@ -78,12 +79,19 @@ export function createEventLog(vfs?: Store<VFSState>) {
         };
       }
 
-      set((state) => ({
-        entries: [...state.entries, entry],
+      set((state) => {
+        const next = [...state.entries, entry];
+        // Cap entries to prevent OOM in long autonomous missions
+        const trimmedEntries = next.length > MAX_ENTRIES
+          ? next.slice(next.length - MAX_ENTRIES)
+          : next;
+        return {
+        entries: trimmedEntries,
         checkpoints: checkpoint
           ? trimCheckpoints([...state.checkpoints, checkpoint])
           : state.checkpoints,
-      }));
+        };
+      });
     },
 
     filterByAgent(agentId: string): EventLogEntry[] {

@@ -51,6 +51,7 @@ export interface AutonomousRunnerDeps {
   pubSubStore?: Store<PubSubState>;
   blackboardStore?: Store<BlackboardState>;
   apiKey: string;
+  providerApiKeys?: Record<string, string>;
   providerType: ProviderType;
   globalMcpServers?: MCPServerConfig[];
 }
@@ -431,6 +432,7 @@ export class AutonomousRunner {
       vectorStore: vectorAdapter,
       mcpManager,
       apiKey,
+      providerApiKeys: this.deps.providerApiKeys,
       onSessionUpdate: () => {
         this._totalTokensAllCycles = this._baseTokensBeforeCycle + kernel.totalTokens;
         this.emit();

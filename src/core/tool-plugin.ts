@@ -32,6 +32,7 @@ export interface ToolContext {
   onRunSessionAndReturn?: (activation: Omit<Activation, 'id' | 'createdAt'>) => Promise<string>;
   incrementSpawnCount: () => void;
   apiKey?: string;
+  providerApiKeys?: Record<string, string>;
   preferredModel?: string;
   memoryStore?: Store<MemoryStoreState>;
   taskQueueStore?: Store<TaskQueueState>;

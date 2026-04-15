@@ -495,8 +495,8 @@ describe('Summarizer', () => {
 
 describe('Multi-provider dispatchers', () => {
   describe('getDefaultSummarizeModel', () => {
-    it('returns gemini-2.0-flash for gemini', () => {
-      expect(getDefaultSummarizeModel('gemini')).toBe('gemini-2.0-flash');
+    it('returns gemini-2.5-flash for gemini', () => {
+      expect(getDefaultSummarizeModel('gemini')).toBe('gemini-2.5-flash');
     });
 
     it('returns gpt-4o-mini for openai', () => {

@@ -108,7 +108,7 @@ class RunController {
   }
 
   private async createKernel(config: KernelConfig): Promise<Kernel> {
-    const { apiKey, provider: providerType } = uiStore.getState();
+    const { apiKey, provider: providerType, providerApiKeys } = uiStore.getState();
     const provider = this.hasUsableApiKey(apiKey)
       ? createProvider(providerType, apiKey)
       : new ScriptedAIProvider(DEMO_SCRIPT);
@@ -130,6 +130,7 @@ class RunController {
       memoryManager: config.memoryEnabled !== false ? this.memoryManager : undefined,
       mcpManager,
       apiKey,
+      providerApiKeys,
       pubSubStore,
       blackboardStore,
       vectorStore: config.memoryEnabled !== false ? this.memoryManager.vectorStoreAdapter : undefined,
@@ -272,6 +273,7 @@ class RunController {
         sessionStore,
         memoryStore,
         apiKey: uiStore.getState().apiKey,
+        providerApiKeys: uiStore.getState().providerApiKeys,
         providerType: uiStore.getState().provider,
         globalMcpServers: uiStore.getState().globalMcpServers,
         pubSubStore,
