@@ -76,8 +76,8 @@ export interface UIState {
 }
 
 const persistedApiKey = (() => {
-  try { return localStorage.getItem('mas-api-key') ?? import.meta.env.VITE_GEMINI_API_KEY ?? ''; }
-  catch { return import.meta.env.VITE_GEMINI_API_KEY ?? ''; }
+  try { return localStorage.getItem('mas-api-key') ?? ''; }
+  catch { return ''; }
 })();
 
 const persistedProvider = (() => {
