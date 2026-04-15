@@ -31,5 +31,9 @@ docs/
 # Worktrees
 .worktrees/
 
+# Runtime artifacts
+lancedb/
+models/
+
 # Codebase Intent
 .codebase-intent/
