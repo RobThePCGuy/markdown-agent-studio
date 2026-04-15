@@ -402,85 +402,10 @@ export class Summarizer {
 // Factory helpers for creating LLM-backed summarize/consolidate functions
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Provider type (re-exported for convenience)
-// ---------------------------------------------------------------------------
-
 type ProviderType = 'gemini' | 'anthropic' | 'openai';
 
-// ---------------------------------------------------------------------------
-// Gemini factories
-// ---------------------------------------------------------------------------
-
-export function createGeminiSummarizeFn(apiKey: string, model: string): SummarizeFn {
-  return async (context: string) => {
-    const client = new GoogleGenAI({ apiKey });
-    const result = await client.models.generateContent({
-      model,
-      contents: SUMMARIZER_SYSTEM_PROMPT + '\n\n---\n\n' + context,
-    });
-    const text = result.text ?? '';
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-    try { return JSON.parse(jsonMatch[0]); } catch { return []; }
-  };
-}
-
-export function createGeminiConsolidateFn(apiKey: string, model: string): ConsolidateFn {
-  return async (context: string) => {
-    const client = new GoogleGenAI({ apiKey });
-    const result = await client.models.generateContent({
-      model,
-      contents: CONSOLIDATION_SYSTEM_PROMPT + '\n\n---\n\n' + context,
-    });
-    const text = result.text ?? '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { operations: [] };
-    try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
-  };
-}
-
-// ---------------------------------------------------------------------------
-// OpenAI factories
-// ---------------------------------------------------------------------------
-
-export function createOpenAISummarizeFn(apiKey: string, model: string): SummarizeFn {
-  return async (context: string) => {
-    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: SUMMARIZER_SYSTEM_PROMPT },
-        { role: 'user', content: context },
-      ],
-    });
-    const text = response.choices[0]?.message?.content ?? '';
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-    try { return JSON.parse(jsonMatch[0]); } catch { return []; }
-  };
-}
-
-export function createOpenAIConsolidateFn(apiKey: string, model: string): ConsolidateFn {
-  return async (context: string) => {
-    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: CONSOLIDATION_SYSTEM_PROMPT },
-        { role: 'user', content: context },
-      ],
-    });
-    const text = response.choices[0]?.message?.content ?? '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { operations: [] };
-    try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Anthropic factories
-// ---------------------------------------------------------------------------
+/** A function that sends a system prompt + user content to an LLM and returns the text response. */
+type LLMCallFn = (systemPrompt: string, userContent: string) => Promise<string>;
 
 /** Extract text from an Anthropic response content array. */
 function extractAnthropicText(content: Array<{ type: string; [key: string]: unknown }>): string {
@@ -490,32 +415,56 @@ function extractAnthropicText(content: Array<{ type: string; [key: string]: unkn
     .join('');
 }
 
-export function createAnthropicSummarizeFn(apiKey: string, model: string): SummarizeFn {
+/** Create a provider-specific LLM call function. */
+function createLLMCallFn(providerType: ProviderType, apiKey: string, model: string): LLMCallFn {
+  switch (providerType) {
+    case 'gemini':
+      return async (systemPrompt, userContent) => {
+        const client = new GoogleGenAI({ apiKey });
+        const result = await client.models.generateContent({
+          model,
+          contents: systemPrompt + '\n\n---\n\n' + userContent,
+        });
+        return result.text ?? '';
+      };
+    case 'openai':
+      return async (systemPrompt, userContent) => {
+        const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+        const response = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userContent },
+          ],
+        });
+        return response.choices[0]?.message?.content ?? '';
+      };
+    case 'anthropic':
+      return async (systemPrompt, userContent) => {
+        const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+        const response = await client.messages.create({
+          model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+        });
+        return extractAnthropicText(response.content as Array<{ type: string }>);
+      };
+  }
+}
+
+function makeSummarizeFn(callLLM: LLMCallFn): SummarizeFn {
   return async (context: string) => {
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const response = await client.messages.create({
-      model,
-      max_tokens: 4096,
-      system: SUMMARIZER_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: context }],
-    });
-    const text = extractAnthropicText(response.content as Array<{ type: string }>);
+    const text = await callLLM(SUMMARIZER_SYSTEM_PROMPT, context);
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
     try { return JSON.parse(jsonMatch[0]); } catch { return []; }
   };
 }
 
-export function createAnthropicConsolidateFn(apiKey: string, model: string): ConsolidateFn {
+function makeConsolidateFn(callLLM: LLMCallFn): ConsolidateFn {
   return async (context: string) => {
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    const response = await client.messages.create({
-      model,
-      max_tokens: 4096,
-      system: CONSOLIDATION_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: context }],
-    });
-    const text = extractAnthropicText(response.content as Array<{ type: string }>);
+    const text = await callLLM(CONSOLIDATION_SYSTEM_PROMPT, context);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return { operations: [] };
     try { return JSON.parse(jsonMatch[0]); } catch { return { operations: [] }; }
@@ -540,27 +489,11 @@ export function getDefaultSummarizeModel(providerType: ProviderType): string {
 /** Create a SummarizeFn backed by the user's selected provider. */
 export function createSummarizeFn(providerType: ProviderType, apiKey: string, model?: string): SummarizeFn {
   const resolvedModel = model || getDefaultSummarizeModel(providerType);
-  switch (providerType) {
-    case 'openai':
-      return createOpenAISummarizeFn(apiKey, resolvedModel);
-    case 'anthropic':
-      return createAnthropicSummarizeFn(apiKey, resolvedModel);
-    case 'gemini':
-    default:
-      return createGeminiSummarizeFn(apiKey, resolvedModel);
-  }
+  return makeSummarizeFn(createLLMCallFn(providerType, apiKey, resolvedModel));
 }
 
 /** Create a ConsolidateFn backed by the user's selected provider. */
 export function createConsolidateFn(providerType: ProviderType, apiKey: string, model?: string): ConsolidateFn {
   const resolvedModel = model || getDefaultSummarizeModel(providerType);
-  switch (providerType) {
-    case 'openai':
-      return createOpenAIConsolidateFn(apiKey, resolvedModel);
-    case 'anthropic':
-      return createAnthropicConsolidateFn(apiKey, resolvedModel);
-    case 'gemini':
-    default:
-      return createGeminiConsolidateFn(apiKey, resolvedModel);
-  }
+  return makeConsolidateFn(createLLMCallFn(providerType, apiKey, resolvedModel));
 }
