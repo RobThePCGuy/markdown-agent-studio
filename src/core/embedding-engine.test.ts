@@ -28,7 +28,7 @@ function fakeEmbedding(text: string): Float32Array {
 }
 
 // ---------------------------------------------------------------------------
-// Module-level mock for @xenova/transformers
+// Module-level mock for @huggingface/transformers
 // vi.mock is hoisted to the top of the file so all references must be
 // available at the module scope.
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ const mockPipe = vi.fn(async (text: string) => ({
   data: fakeEmbedding(text),
 }));
 
-vi.mock('@xenova/transformers', () => ({
+vi.mock('@huggingface/transformers', () => ({
   pipeline: vi.fn(async () => mockPipe),
   env: { allowLocalModels: true },
 }));
@@ -101,7 +101,7 @@ describe('EmbeddingEngine (mocked)', () => {
   });
 
   it('lazy-loads the model only on first use', async () => {
-    const { pipeline } = await import('@xenova/transformers');
+    const { pipeline } = await import('@huggingface/transformers');
     const pipelineFn = vi.mocked(pipeline);
     pipelineFn.mockClear();
 

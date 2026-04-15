@@ -1,8 +1,4 @@
-import { pipeline, env } from '@xenova/transformers';
-
-// Don't attempt to load models from the local server – fetch from Hugging Face CDN
-// and let the browser Cache API handle persistence across sessions.
-env.allowLocalModels = false;
+import { pipeline } from '@huggingface/transformers';
 
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
@@ -14,8 +10,11 @@ const EMBEDDING_DIM = 384;
  * The model is lazy-loaded on the first call to embed() or embedBatch()
  * so construction is synchronous and free of side-effects.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- v3 pipeline() returns a complex union too deep for ReturnType
+type FeatureExtractionPipeline = (text: string, options?: any) => Promise<{ data: Float32Array }>;
+
 export class EmbeddingEngine {
-  private _pipe: ReturnType<typeof pipeline> | null = null;
+  private _pipe: Promise<FeatureExtractionPipeline> | null = null;
   private _ready = false;
 
   /** Returns true once the model has been loaded and at least one embedding produced. */
@@ -29,8 +28,7 @@ export class EmbeddingEngine {
    */
   async embed(text: string): Promise<number[]> {
     const pipe = await this._getPipeline();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Transformers.js pipeline types don't expose pooling/normalize options
-    const output = await pipe(text, { pooling: 'mean', normalize: true } as any);
+    const output = await pipe(text, { pooling: 'mean', normalize: true });
     this._ready = true;
     return Array.from((output as { data: Float32Array }).data).slice(0, EMBEDDING_DIM);
   }
@@ -50,10 +48,11 @@ export class EmbeddingEngine {
   }
 
   /** Lazy-load the pipeline on first use. */
-  private async _getPipeline() {
+  private async _getPipeline(): Promise<FeatureExtractionPipeline> {
     if (this._pipe === null) {
+      // @ts-expect-error -- v3 pipeline() return type union is too complex for TS to represent
       this._pipe = pipeline('feature-extraction', MODEL_NAME);
     }
-    return this._pipe;
+    return this._pipe!;
   }
 }
