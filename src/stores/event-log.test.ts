@@ -85,6 +85,16 @@ describe('Event Log', () => {
     expect(cps[0].files['artifacts/a.md']).toBe('A');
     expect(cps[1].files['artifacts/b.md']).toBe('B');
   });
+
+  it('does not create checkpoints for non-checkpoint event types', () => {
+    vfs.getState().write('artifacts/a.md', 'A', {});
+    log.getState().append({ type: 'tool_call', agentId: 'a', activationId: 'x', data: {} });
+    log.getState().append({ type: 'warning', agentId: 'a', activationId: 'x', data: {} });
+    log.getState().append({ type: 'signal', agentId: 'a', activationId: 'x', data: {} });
+
+    expect(log.getState().entries).toHaveLength(3);
+    expect(log.getState().checkpoints).toHaveLength(0);
+  });
 });
 
 describe('Checkpoint Trimming', () => {

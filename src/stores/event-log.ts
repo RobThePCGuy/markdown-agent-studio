@@ -29,6 +29,17 @@ export interface EventLogState {
 const MAX_CHECKPOINTS = 200;
 const MAX_ENTRIES = 10_000;
 
+/** Event types that capture VFS snapshots for replay checkpoints. */
+const CHECKPOINT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'activation',
+  'complete',
+  'abort',
+  'file_change',
+  'workflow_start',
+  'workflow_step',
+  'workflow_complete',
+]);
+
 function trimCheckpoints(checkpoints: ReplayCheckpoint[]): ReplayCheckpoint[] {
   if (checkpoints.length <= MAX_CHECKPOINTS) return checkpoints;
 
@@ -67,7 +78,7 @@ export function createEventLog(vfs?: Store<VFSState>) {
       };
 
       let checkpoint: ReplayCheckpoint | undefined;
-      if (vfs) {
+      if (vfs && CHECKPOINT_EVENT_TYPES.has(entry.type)) {
         checkpoint = {
           id: `cp-${++checkpointCounter}`,
           eventId: entry.id,
