@@ -37,6 +37,10 @@ describe('isRetryableError', () => {
     }
   });
 
+  it('treats "Failed to fetch" (browser TypeError) as retryable', () => {
+    expect(isRetryableError(new TypeError('Failed to fetch'))).toBe(true);
+  });
+
   it('returns false for non-retryable messages', () => {
     expect(isRetryableError(new Error('invalid api key'))).toBe(false);
     expect(isRetryableError(new Error('model not found'))).toBe(false);

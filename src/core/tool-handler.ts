@@ -9,6 +9,7 @@ import type { TaskQueueState } from '../stores/task-queue-store';
 import type { PubSubState } from '../stores/pub-sub-store';
 import type { BlackboardState } from '../stores/blackboard-store';
 import { type ToolResult, successResult, errorResult } from './tool-result';
+import { retryWithBackoff } from './retry';
 
 type Store<T> = { getState(): T };
 
@@ -128,7 +129,17 @@ export class ToolHandler {
         vectorStore: this.config.vectorStore,
       };
       try {
-        result = await plugin.handler(args, ctx);
+        if (plugin.retryable) {
+          const maxAttempts = typeof plugin.retryable === 'object'
+            ? plugin.retryable.maxAttempts
+            : 3;
+          result = await retryWithBackoff(
+            () => plugin.handler(args, ctx),
+            maxAttempts,
+          );
+        } else {
+          result = await plugin.handler(args, ctx);
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         result = `Error: ${msg}`;

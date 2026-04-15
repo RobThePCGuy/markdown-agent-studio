@@ -64,12 +64,16 @@ describe('web_fetch plugin', () => {
     expect(result).toContain('404');
   });
 
-  it('returns error for network failures', async () => {
+  it('propagates network failures (no internal catch)', async () => {
     vi.mocked(fetch).mockRejectedValue(new Error('Network error'));
 
-    const result = await webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx);
-    expect(result).toContain('Error');
-    expect(result).toContain('Network error');
+    await expect(
+      webFetchPlugin.handler({ url: 'https://example.com' }, mockCtx),
+    ).rejects.toThrow('Network error');
+  });
+
+  it('has retryable flag set', () => {
+    expect(webFetchPlugin.retryable).toBe(true);
   });
 
   it('has correct plugin metadata', () => {

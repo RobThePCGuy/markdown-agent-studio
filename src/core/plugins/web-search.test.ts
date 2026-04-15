@@ -72,4 +72,8 @@ describe('web_search plugin', () => {
     expect(webSearchPlugin.name).toBe('web_search');
     expect(webSearchPlugin.parameters.query.required).toBe(true);
   });
+
+  it('has retryable flag set', () => {
+    expect(webSearchPlugin.retryable).toBe(true);
+  });
 });

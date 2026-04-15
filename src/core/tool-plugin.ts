@@ -49,6 +49,8 @@ export interface ToolPlugin {
   name: string;
   description: string;
   parameters: Record<string, ToolParameter>;
+  /** Enable retry on transient errors. `true` uses default (3 attempts), or pass `{ maxAttempts }`. */
+  retryable?: boolean | { maxAttempts: number };
   handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<string>;
 }
 

@@ -11,6 +11,7 @@ const RETRYABLE_PATTERNS = [
   /ECONNRESET/,
   /ETIMEDOUT/,
   /fetch failed/i,
+  /failed to fetch/i,
 ];
 
 /**

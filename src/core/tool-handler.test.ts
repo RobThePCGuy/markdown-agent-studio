@@ -5,6 +5,7 @@ import { createAgentRegistry } from '../stores/agent-registry';
 import { createEventLog } from '../stores/event-log';
 import { createBuiltinRegistry } from './plugins';
 import type { AgentPolicy, Activation } from '../types';
+import type { ToolPlugin } from './tool-plugin';
 
 describe('ToolHandler', () => {
   let handler: ToolHandler;
@@ -581,6 +582,98 @@ describe('ToolHandler', () => {
       expect(result.ok).toBe(false);
       expect(result.errorType).toBe('transient');
       expect(result.value).toContain('boom');
+    });
+  });
+
+  describe('transient tool retry', () => {
+    it('retries a retryable tool on transient throw', async () => {
+      let callCount = 0;
+      const flakyPlugin: ToolPlugin = {
+        name: 'flaky_tool',
+        description: 'A flaky tool',
+        parameters: { input: { type: 'string', description: 'input', required: true } },
+        retryable: true,
+        async handler() {
+          callCount++;
+          if (callCount < 3) throw new Error('fetch failed');
+          return 'success on attempt 3';
+        },
+      };
+      const reg = createBuiltinRegistry();
+      reg.register(flakyPlugin);
+
+      const h = new ToolHandler({
+        pluginRegistry: reg,
+        vfs, agentRegistry: registry, eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/writer.md',
+        currentActivationId: 'act-1',
+        spawnDepth: 1, maxDepth: 5, maxFanout: 5, childCount: 0,
+      });
+
+      const result = await h.handle('flaky_tool', { input: 'test' });
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe('success on attempt 3');
+      expect(callCount).toBe(3);
+    });
+
+    it('respects custom maxAttempts on retryable config', async () => {
+      let callCount = 0;
+      const flakyPlugin: ToolPlugin = {
+        name: 'custom_retry_tool',
+        description: 'Custom retry count',
+        parameters: {},
+        retryable: { maxAttempts: 5 },
+        async handler() {
+          callCount++;
+          if (callCount < 5) throw new Error('fetch failed');
+          return 'success on attempt 5';
+        },
+      };
+      const reg = createBuiltinRegistry();
+      reg.register(flakyPlugin);
+
+      const h = new ToolHandler({
+        pluginRegistry: reg,
+        vfs, agentRegistry: registry, eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/writer.md',
+        currentActivationId: 'act-1',
+        spawnDepth: 1, maxDepth: 5, maxFanout: 5, childCount: 0,
+      });
+
+      const result = await h.handle('custom_retry_tool', {});
+      expect(result.ok).toBe(true);
+      expect(callCount).toBe(5);
+    }, 30_000);
+
+    it('does not retry non-retryable tools', async () => {
+      let callCount = 0;
+      const fragilePlugin: ToolPlugin = {
+        name: 'fragile_tool',
+        description: 'A fragile tool',
+        parameters: {},
+        async handler() {
+          callCount++;
+          throw new Error('boom');
+        },
+      };
+      const reg = createBuiltinRegistry();
+      reg.register(fragilePlugin);
+
+      const h = new ToolHandler({
+        pluginRegistry: reg,
+        vfs, agentRegistry: registry, eventLog,
+        onSpawnActivation: (a) => spawnedActivations.push(a),
+        currentAgentId: 'agents/writer.md',
+        currentActivationId: 'act-1',
+        spawnDepth: 1, maxDepth: 5, maxFanout: 5, childCount: 0,
+      });
+
+      const result = await h.handle('fragile_tool', {});
+      expect(result.ok).toBe(false);
+      expect(result.errorType).toBe('transient');
+      expect(callCount).toBe(1);
     });
   });
 });
