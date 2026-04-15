@@ -73,14 +73,19 @@ export function createCustomToolPlugin(def: CustomToolDef): ToolPlugin {
       const newDepth = ctx.spawnDepth + 1;
 
       if (ctx.onRunSessionAndReturn) {
-        const result = await ctx.onRunSessionAndReturn({
-          agentId: path,
-          input: prompt,
-          parentId: ctx.currentAgentId,
-          spawnDepth: newDepth,
-          priority: newDepth,
-        });
-        return result;
+        try {
+          const result = await ctx.onRunSessionAndReturn({
+            agentId: path,
+            input: prompt,
+            parentId: ctx.currentAgentId,
+            spawnDepth: newDepth,
+            priority: newDepth,
+          });
+          return result;
+        } finally {
+          ctx.vfs.getState().deleteFile(path);
+          ctx.registry.getState().unregister(path);
+        }
       }
 
       // Fallback to fire-and-forget
