@@ -85,7 +85,7 @@
     "@google/genai": "^1.50.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@monaco-editor/react": "^4.7.0",
-    "@huggingface/transformers": "^3.5.1",
+    "@huggingface/transformers": "^4.2.0",
     "@xyflow/react": "^12.10.0",
     "allotment": "^1.20.5",
     "buffer": "^6.0.3",
