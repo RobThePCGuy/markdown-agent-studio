@@ -37,3 +37,7 @@ models/
 
 # Codebase Intent
 .codebase-intent/
+
+# Single lockfile: this project uses npm (see CI: npm ci)
+pnpm-lock.yaml
+yarn.lock
