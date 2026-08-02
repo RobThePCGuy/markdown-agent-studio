@@ -77,7 +77,9 @@
     },
     "eslint": {
       "minimatch": "^10.2.1"
-    }
+    },
+    "sharp": "^0.35.0",
+    "adm-zip": "^0.6.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
